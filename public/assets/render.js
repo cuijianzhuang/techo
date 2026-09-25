@@ -22,6 +22,35 @@
     s.setAttribute('width',size);s.setAttribute('height',size);s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+kind);s.appendChild(u);return s;
   }
 
+  /* hand-drawn doodles a page can carry (max 2). Inline, not <use>, so the reveal draws them stroke by stroke.
+     Keep the names in sync with STICKERS in src/index.ts. */
+  const INK='#2a2724',RED='#d9573b',TEAL='#6a98a3',TEALD='#3f6f7c',CREAM='#f2e3b0',KRAFT='#e4d2a3',OLIVE='#8a9a2b',LIME='#b3c01c',PINK='#f3a08a',GREY='#9aa7aa';
+  const STICKERS={
+    sun:['晴天',`<circle cx="32" cy="32" r="12" fill="${CREAM}"/><path d="M32 8v8M32 48v8M8 32h8M48 32h8M15 15l6 6M43 43l6 6M15 49l6-6M43 21l6-6" stroke="${RED}"/><circle cx="28" cy="31" r="1.6" fill="${INK}" stroke="none"/><circle cx="36" cy="31" r="1.6" fill="${INK}" stroke="none"/><path d="M28.5 36q3.5 3 7 0"/>`],
+    cloud:['多云',`<path d="M16 46h31a10 10 0 0 0 0-20a14 14 0 0 0-27-3a12 12 0 0 0-4 23z" fill="#fff"/><path d="M26 38q3 2 6 0" stroke="${GREY}"/>`],
+    rain:['下雨',`<path d="M16 38h31a10 10 0 0 0 0-20a14 14 0 0 0-27-3a12 12 0 0 0-4 23z" fill="#dbe8ea"/><path d="M22 45l-3 7M33 45l-3 7M44 45l-3 7" stroke="${TEALD}"/><path d="M27.5 55l-2 4M38.5 55l-2 4" stroke="${TEAL}"/>`],
+    moon:['月亮',`<path d="M38 8a22 22 0 1 0 14 37A18 18 0 0 1 38 8z" fill="${CREAM}"/><path d="M27 34q3 2.4 6 0"/><path d="M50 12v8M46 16h8M55 30v5M52.5 32.5h5" stroke="${OLIVE}"/>`],
+    cat:['猫',`<path d="M14 28l2-15 11 8h10l11-8 2 15c3 5 3 11 0 15-4 7-11 10-18 10s-14-3-18-10c-3-4-3-10 0-15z" fill="${KRAFT}"/><circle cx="25" cy="35" r="2.2" fill="${INK}" stroke="none"/><circle cx="39" cy="35" r="2.2" fill="${INK}" stroke="none"/><path d="M30 40h4l-2 2.4z" fill="${PINK}" stroke="none"/><path d="M32 42.5q-2 3-5 1.5M32 42.5q2 3 5 1.5"/><path d="M6 38l10 2M7 45l9-2M58 38l-10 2M57 45l-9-2" stroke="${GREY}" stroke-width="1.6"/>`],
+    book:['书',`<path d="M32 18c-6-4-14-5-22-4v34c8-1 16 0 22 4c6-4 14-5 22-4V14c-8-1-16 0-22 4z" fill="#fff"/><path d="M32 18v34"/><path d="M15 23c5 0 9 1 12 2M15 30c5 0 9 1 12 2M15 37c5 0 9 1 12 2M37 30c3-1 7-2 12-2M37 37c3-1 7-2 12-2" stroke="${GREY}" stroke-width="1.8"/><path d="M40 16v10l3-2.4 3 2.4V15" fill="${RED}"/>`],
+    laptop:['电脑',`<rect x="13" y="14" width="38" height="26" rx="2.5" fill="#1f292d"/><path d="M7 44h50l-4 7H11z" fill="${KRAFT}"/><path d="M19 22h9M19 28h16M23 34h8" stroke="#c9d77a" stroke-width="2"/><path d="M36 34h4" stroke="${PINK}" stroke-width="2"/>`],
+    bug:['bug',`<path d="M29 13l-4-6M35 13l4-6M21 29l-9-4M20 37h-10M21 45l-8 5M43 29l9-4M44 37h10M43 45l8 5"/><circle cx="32" cy="18" r="6" fill="${INK}"/><ellipse cx="32" cy="37" rx="12" ry="15" fill="${RED}"/><path d="M32 23v29"/><circle cx="26" cy="33" r="2" fill="${INK}" stroke="none"/><circle cx="38" cy="41" r="2" fill="${INK}" stroke="none"/><circle cx="37" cy="30" r="1.6" fill="${INK}" stroke="none"/>`],
+    plant:['植物',`<path d="M32 38V20" stroke="${OLIVE}"/><path d="M32 29c-10 0-14-7-14-14c8 0 14 4 14 14z" fill="${OLIVE}"/><path d="M32 23c1-9 8-14 16-13c0 8-6 13-16 13z" fill="${LIME}"/><path d="M17 37h30v6H17z" fill="${KRAFT}"/><path d="M20 43h24l-3 14H23z" fill="${RED}"/>`],
+    noodles:['吃面',`<path d="M36 6l16 24M43 5l12 23" stroke="#b98a4a" stroke-width="3"/><path d="M21 34c0-6 4-7 4-13M29 34c0-6 4-7 4-13M37 34c0-6 4-7 4-13" stroke="#e2b75a" stroke-width="2.6"/><path d="M9 34h46c0 12-10 20-23 20S9 46 9 34z" fill="#fff"/><path d="M15 42h34" stroke="${RED}" stroke-dasharray="0.1 5" stroke-width="3"/>`],
+    bus:['公交',`<rect x="12" y="10" width="40" height="40" rx="7" fill="${TEAL}"/><rect x="17" y="16" width="30" height="14" rx="2" fill="#fff"/><path d="M12 35h40"/><circle cx="20" cy="42" r="3" fill="${CREAM}"/><circle cx="44" cy="42" r="3" fill="${CREAM}"/><path d="M18 51v4M46 51v4" stroke-width="5"/>`],
+    bike:['骑车',`<circle cx="17" cy="42" r="10" fill="#fff"/><circle cx="47" cy="42" r="10" fill="#fff"/><path d="M17 42l9-16h15l6 16M26 26l7 16h14M22 20h9M41 26l-2-7h6" stroke="${RED}"/><circle cx="33" cy="42" r="2" fill="${INK}" stroke="none"/>`],
+    music:['音乐',`<path d="M24 46V17l24-6v30"/><path d="M24 24l24-6" stroke-width="3"/><ellipse cx="19" cy="46" rx="6" ry="4.5" fill="${INK}" transform="rotate(-18 19 46)"/><ellipse cx="43" cy="41" rx="6" ry="4.5" fill="${INK}" transform="rotate(-18 43 41)"/><path d="M8 20q3-3 6 0M52 52q3-3 6 0" stroke="${TEAL}"/>`],
+    heart:['心',`<path d="M32 53C14 41 9 31 11 23c2-9 13-11 21-3c8-8 19-6 21 3c2 8-3 18-21 30z" fill="${PINK}"/><path d="M19 24q2-5 7-5" stroke="#fff" stroke-width="2.4"/>`],
+    star:['星星',`<path d="M30 7c2 12 6 16 18 18c-12 2-16 6-18 18c-2-12-6-16-18-18c12-2 16-6 18-18z" fill="${CREAM}"/><path d="M50 40c1 5 2 6 6 7c-4 1-5 2-6 7c-1-5-2-6-6-7c4-1 5-2 6-7z" fill="${LIME}"/><path d="M13 49v5M10.5 51.5h5" stroke="${OLIVE}"/>`],
+    letter:['来信',`<rect x="9" y="17" width="46" height="32" rx="2.5" fill="#fff"/><path d="M10 19l22 17 22-17"/><path d="M10 48l16-13M54 48L38 35" stroke="${GREY}" stroke-width="1.6"/><rect x="42" y="21" width="8" height="9" fill="${RED}" stroke="none"/>`],
+    camera:['拍照',`<path d="M22 19l4-6h12l4 6"/><rect x="9" y="19" width="46" height="31" rx="4" fill="${KRAFT}"/><circle cx="32" cy="35" r="10" fill="#fff"/><circle cx="32" cy="35" r="4.5" fill="${TEAL}"/><rect x="45" y="23" width="6" height="3.5" fill="${RED}" stroke="none"/>`],
+  };
+  function stickerSvg(name,size){
+    const s=STICKERS[name];if(!s)return null;
+    const w=document.createElement('div');
+    w.innerHTML=`<svg class="stk" data-stk="${name}" viewBox="0 0 64 64" width="${size}" height="${size}" fill="none" stroke="${INK}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${s[1]}</svg>`;
+    return w.firstChild;
+  }
+
   /* one journal page written from the admin */
   function entryPage(en,side){
     const dt=parseDate(en.date)||parseDate(todayStr());
@@ -48,6 +77,12 @@
     String(en.body||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(par=>tx.appendChild(el('p',null,par)));
     if(en.note){const n=el('div','label jnote',en.note);n.appendChild(el('div','tape'));tx.appendChild(n);}
     b.appendChild(tx);
+    const stk=(Array.isArray(en.stickers)?en.stickers:String(en.stickers||'').split(',')).filter(k=>STICKERS[k]).slice(0,2);
+    if(stk.length){
+      const row=el('div','jstk'+(en.mood&&en.mood!=='none'?' by-mug':''));
+      stk.forEach(k=>row.appendChild(stickerSvg(k,62)));
+      b.appendChild(row);
+    }
     if(en.mood&&en.mood!=='none'){const g=mugSvg(en.mood==='sleep'?'mug-sleep':'mug',64);g.setAttribute('class','jmug');b.appendChild(g);}
     p.append(h,b);
     const f=el('footer','foot');
@@ -122,6 +157,8 @@
     // texts in reading order, then drawing — pen goes title first like the video's captions
     const order=texts.slice(0,2).concat(strokes).concat(texts.slice(2));
     const drawDur=Math.min(1600,300+strokes.length*18);
+    // doodles give a little hop once the pen has finished with them
+    if(page.querySelector('.jstk'))setTimeout(()=>page.classList.add('inked'),drawDur+900);
     order.forEach((i,idx)=>{
       const el=i.el;
       if(i.kind==='stroke'){
@@ -145,5 +182,6 @@
     });
   }
 
-  window.Techo={el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
+  const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
+  window.Techo={stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
 })();

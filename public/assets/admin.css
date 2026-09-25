@@ -57,3 +57,18 @@ body.admin{padding:0;min-height:100%;background:var(--desk);color:var(--ink)}
   .admin .pvbox{width:318px;height:444px}
   .admin .pvbox>.page{transform:scale(.6)}
 }
+/* drafts */
+.admin .item.draft b{color:var(--ink-soft)}
+.admin .item .tag{font:normal 500 10px/1 var(--print);color:var(--red-deep);border:1px solid var(--red);border-radius:3px;padding:2px 4px;margin-left:6px;vertical-align:3px}
+/* doodle picker */
+.admin .stkpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px}
+.admin .stkpick button{appearance:none;display:grid;justify-items:center;gap:2px;padding:6px 2px 5px;border:1.5px solid transparent;border-radius:8px;background:#fffdf8;cursor:pointer;color:var(--ink-soft);font:400 11px/1.2 var(--print)}
+.admin .stkpick button:hover{border-color:#cfc8b3}
+.admin .stkpick button[aria-pressed="true"]{border-color:var(--ink);background:var(--paper);color:var(--ink)}
+/* jots */
+.admin .jots{display:grid;gap:8px;margin-top:6px}
+.admin .jot{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;background:#fffdf8;border:1px solid #e3dcc6;border-radius:8px;padding:9px 12px}
+.admin .jot p{margin:0;font:400 18px/1.4 var(--hand);white-space:pre-wrap;overflow-wrap:anywhere}
+.admin .jot .when{grid-column:1;font:400 11px/1.2 var(--print);color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.admin .jot .b{grid-column:2;grid-row:1 / span 2}
+.admin .jot.used p{color:var(--ink-soft)}

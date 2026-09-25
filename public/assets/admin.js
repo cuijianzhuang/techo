@@ -4,8 +4,8 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={};
-  let sel=null;            // entry id | 'new' | 'settings' | null
+  let entries=[],settings={},jots=[];
+  let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
   let busy=false;
@@ -26,18 +26,23 @@
   /* ---------- list ---------- */
   function drawList(){
     list.textContent='';
-    $('countLabel').textContent='已写的页 · '+entries.length;
+    const nd=entries.filter(e=>e.status==='draft').length;
+    $('countLabel').textContent='已写的页 · '+entries.length+(nd?'（草稿 '+nd+'）':'');
     T.sortEntries(entries).reverse().forEach(en=>{
-      const it=el('button','item');it.type='button';it.dataset.id=en.id;
+      const it=el('button','item'+(en.status==='draft'?' draft':''));it.type='button';it.dataset.id=en.id;
       it.setAttribute('aria-current',sel===en.id?'true':'false');
-      it.append(el('b',null,en.title||'（无题）'),el('span',null,en.date+(en.photoKey?' · 有照片':'')));
+      const t=el('b',null,en.title||'（无题）');
+      if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
+      it.append(t,el('span',null,en.date+(en.photoKey?' · 有照片':'')));
       it.onclick=()=>select(en.id);
       list.appendChild(it);
     });
     $('newBtn').setAttribute('aria-current',sel==='new'?'true':'false');
     $('settingsBtn').setAttribute('aria-current',sel==='settings'?'true':'false');
+    $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
   }
   $('newBtn').onclick=()=>select('new');
+  $('jotsBtn').onclick=()=>select('jots');
   $('settingsBtn').onclick=()=>select('settings');
 
   const dirty=()=>draft&&JSON.stringify(stripLocal(draft))!==base;
@@ -58,7 +63,8 @@
     }
     sel=id;
     if(id==='settings'){draft=Object.assign({email:'',github:'',githubText:''},settings);}
-    else if(id==='new'){draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:''};}
+    else if(id==='jots'){draft=null;}
+    else if(id==='new'){draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
     drawList();drawForm();
@@ -95,6 +101,7 @@
   }
   function drawForm(){
     main.textContent='';pvbox=null;statusEl=el('div','status');
+    if(sel==='jots'){drawJots();return;}
     if(!sel||!draft){
       const d=el('div','form');
       d.append(el('h2',null,'今天写点什么？'),el('div','hand','点左边「新写一页」开始写，或者选一页已经写过的来改。保存后主页马上就能看到。'));
@@ -110,17 +117,24 @@
       const b=el('div','bar');const s=el('button','b pri','保存');s.type='submit';b.appendChild(s);
       f.append(b,statusEl);main.appendChild(f);return;
     }
-    f.appendChild(el('h2',null,sel==='new'?'新的一页':'编辑这一页'));
+    f.appendChild(el('h2',null,sel==='new'?'新的一页':draft.status==='draft'?'草稿':'编辑这一页'));
+    if(draft.status==='draft')f.appendChild(el('div','hintx','这一页还是草稿，主页上看不到。看过没问题就点「发布这一页」。'));
     const r1=el('div','row');r1.append(field('日期','date','date'),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
     const r2=el('div','row');r2.append(field('标题（手写大字）','title','text',{ph:'今天的标题',max:30,hint:'8 个字以内最好看'}),field('英文小注','latin','text',{ph:'a small note in English',max:60}));
     f.append(r1,r2,field('正文','body','textarea',{rows:10,max:4000,hint:'空一行分段。没有照片时大约 250 字写满一页，再多字会自动缩小。'}));
     f.appendChild(photoField());
+    f.appendChild(stickerField());
     const r3=el('div','row');r3.append(field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60}),
       field('小咖','mood','select',{options:[['mug','醒着'],['sleep','睡着'],['none','不出场']]}));
     const r4=el('div','row');r4.append(field('印章（一个字）','stamp','text',{ph:'记',max:2}),field('页脚引文','quote','text',{ph:'一句喜欢的话',max:120}));
     f.append(r3,r4,field('引文出处','quoteSrc','text',{ph:'作者《书名》',max:60}));
     const b=el('div','bar');
-    const s=el('button','b pri',sel==='new'?'保存这一页':'保存修改');s.type='submit';b.appendChild(s);
+    const isDraft=draft.status==='draft';
+    const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
+    s.onclick=()=>{draft.status='published';save();};
+    const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';
+    s2.onclick=()=>{draft.status='draft';save();};
+    b.append(s,s2);
     if(sel!=='new'){
       const del=el('button','b warn','删除这一页');del.type='button';
       del.onclick=()=>{
@@ -138,6 +152,64 @@
     pv.append(pvbox,el('div','pvcap','预览 · 保存后会按日期排进手帐'));
     main.append(f,pv);drawPreview();
     if(sel==='new')setTimeout(()=>{const t=$('f-title');if(t)t.focus();},0);
+  }
+
+  /* ---------- doodles ---------- */
+  function stickerField(){
+    const wrap=el('div');
+    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';
+    l.textContent='小插画（最多两个，翻到这页时会一笔一笔画出来）';
+    const grid=el('div','stkpick');grid.setAttribute('role','group');grid.setAttribute('aria-label','小插画');
+    const cur=()=>Array.isArray(draft.stickers)?draft.stickers:[];
+    const paint=()=>grid.querySelectorAll('button').forEach(bt=>bt.setAttribute('aria-pressed',cur().includes(bt.dataset.k)?'true':'false'));
+    T.stickerList.forEach(({key,label})=>{
+      const bt=el('button');bt.type='button';bt.dataset.k=key;bt.title=label;
+      bt.append(T.stickerSvg(key,34),el('span',null,label));
+      bt.onclick=()=>{
+        let a=cur().slice();
+        if(a.includes(key))a=a.filter(k=>k!==key);
+        else{a.push(key);if(a.length>2)a.shift();}
+        draft.stickers=a;paint();changed();
+      };
+      grid.appendChild(bt);
+    });
+    paint();wrap.append(l,grid);return wrap;
+  }
+
+  /* ---------- jots: loose lines for tonight's page ---------- */
+  function drawJots(){
+    const f=el('form','form');f.noValidate=true;
+    f.append(el('h2',null,'随手记'),el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿。'));
+    const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
+    const l=el('label');l.append('新的一句',ta);
+    const b=el('div','bar');const s=el('button','b pri','记下');s.type='submit';b.appendChild(s);
+    const ul=el('div','jots');
+    const paint=()=>{
+      ul.textContent='';
+      if(!jots.length){ul.appendChild(el('div','hintx','还没有记过。'));return;}
+      jots.forEach(j=>{
+        const d=new Date(j.createdAt);
+        const row=el('div','jot'+(j.usedIn?' used':''));
+        const meta=el('span','when',(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+(j.usedIn?' · 已写进手帐':''));
+        const x=el('button','b small','删掉');x.type='button';
+        x.onclick=async()=>{
+          try{await api('/api/admin/jots/'+encodeURIComponent(j.id),{method:'DELETE'});jots=jots.filter(k=>k.id!==j.id);paint();}
+          catch(e){status(e.message||'删除失败','err');}
+        };
+        row.append(el('p',null,j.text),meta,x);ul.appendChild(row);
+      });
+    };
+    f.addEventListener('submit',async e=>{
+      e.preventDefault();
+      const text=ta.value.trim();if(!text){ta.focus();return;}
+      if(busy)return;busy=true;status('正在记……');
+      try{const r=await sendJson('POST','/api/admin/jots',{text});jots.unshift(r.jot);ta.value='';paint();status('记下了。','ok');}
+      catch(err){status(err.message||'没记上，稍后再试。','err');}
+      finally{busy=false;}
+    });
+    f.append(l,b,statusEl,ul);main.appendChild(f);paint();
+    (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];paint();}catch(e){status(e.message||'加载失败','err');}})();
+    setTimeout(()=>ta.focus(),0);
   }
 
   /* ---------- photo ---------- */
@@ -202,10 +274,14 @@
         const keepUrl=draft.photoUrl;
         sel=en.id;draft=Object.assign({},en);if(keepUrl&&draft.photoKey)draft.photoUrl=keepUrl;
         base=JSON.stringify(stripLocal(draft));
-        drawList();drawForm();status('已保存，主页刷新就能看到。','ok');
+        drawList();drawForm();status(en.status==='draft'?'已存为草稿，主页上还看不到。':'已发布，主页刷新就能看到。','ok');
       }
       return true;
-    }catch(e){status(e.message||'保存失败，稍后再试。','err');return false;}
+    }catch(e){
+      // a failed publish/unpublish shouldn't leave the button label lying about the state
+      if(sel!=='settings'&&sel!=='new'){const en=entries.find(x=>x.id===sel);if(en)draft.status=en.status;}
+      status(e.message||'保存失败，稍后再试。','err');return false;
+    }
     finally{busy=false;}
   }
   async function remove(){
@@ -225,7 +301,7 @@
     try{
       const me=await api('/api/admin/me');
       $('who').textContent=me.email?('已登录：'+me.email):'';
-      const [e,s]=await Promise.all([api('/api/entries'),api('/api/settings')]);
+      const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
       entries=e.entries||[];settings=s.settings||{};
       drawList();drawForm();
     }catch(err){

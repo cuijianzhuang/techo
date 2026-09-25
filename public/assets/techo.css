@@ -90,6 +90,15 @@ a.ln{color:var(--teal-deep);text-decoration:underline;text-decoration-style:wavy
 .jp .jnote{align-self:flex-start;transform:rotate(-1.5deg);max-width:78%;white-space:pre-wrap;position:relative;margin:4px 0 0 6px}
 .jp .jnote .tape{left:40%;top:-11px;transform:rotate(-4deg);width:50px}
 .jp .jmug{position:absolute;right:6px;bottom:0}
+.jp .jstk{flex:none;display:flex;align-items:flex-end;gap:14px;height:66px;margin-top:8px;padding-left:4px}
+.jp .jstk.by-mug{padding-right:76px}
+.jp .jstk .stk{flex:none;overflow:visible;transform:rotate(-6deg)}
+.jp .jstk .stk:nth-child(2){transform:rotate(5deg) translateY(-6px)}
+.jp.inked .jstk .stk{animation:stkHop .7s cubic-bezier(.3,1.5,.5,1) both}
+.jp.inked .jstk .stk:nth-child(2){animation-name:stkHop2;animation-delay:.12s}
+@keyframes stkHop{0%{transform:rotate(-6deg)}35%{transform:rotate(-12deg) translateY(-7px) scale(1.06)}100%{transform:rotate(-6deg)}}
+@keyframes stkHop2{0%{transform:rotate(5deg) translateY(-6px)}35%{transform:rotate(11deg) translateY(-13px) scale(1.06)}100%{transform:rotate(5deg) translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.jp.inked .jstk .stk{animation:none}}
 .jp.empty .body{align-items:center;justify-content:center;text-align:center}
 .jp.empty .hand{color:var(--ink-soft)}
 

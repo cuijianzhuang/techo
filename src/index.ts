@@ -23,8 +23,16 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 type Entry = {
   id: string; date: string; title: string; latin: string; stamp: string; aside: string;
   body: string; note: string; mood: "mug" | "sleep" | "none"; quote: string; quoteSrc: string;
-  photoKey: string; photoCap: string; createdAt: number; updatedAt: number;
+  photoKey: string; photoCap: string; stickers: string[]; status: "draft" | "published";
+  createdAt: number; updatedAt: number;
 };
+
+/* doodles a page can carry; the drawings live in public/assets/render.js */
+const STICKERS = new Set([
+  "sun", "cloud", "rain", "moon", "cat", "book", "laptop", "bug", "plant",
+  "noodles", "bus", "bike", "music", "heart", "star", "letter", "camera",
+]);
+const MAX_STICKERS = 2;
 
 const LIMITS: Record<string, number> = {
   title: 30, latin: 60, stamp: 2, aside: 30, body: 4000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30,
@@ -37,11 +45,15 @@ function rowToEntry(r: Record<string, unknown>): Entry {
     stamp: String(r.stamp), aside: String(r.aside), body: String(r.body), note: String(r.note),
     mood: (r.mood as Entry["mood"]) || "mug", quote: String(r.quote), quoteSrc: String(r.quote_src),
     photoKey: String(r.photo_key), photoCap: String(r.photo_cap),
+    stickers: String(r.stickers || "").split(",").filter((k) => STICKERS.has(k)),
+    status: r.status === "draft" ? "draft" : "published",
     createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
   };
 }
 
-function cleanEntry(input: unknown): { ok: true; value: Omit<Entry, "id" | "createdAt" | "updatedAt"> } | { ok: false; error: string } {
+type EntryInput = Omit<Entry, "id" | "createdAt" | "updatedAt" | "status"> & { status?: Entry["status"] };
+
+function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: false; error: string } {
   if (!input || typeof input !== "object") return { ok: false, error: "请求体必须是 JSON 对象" };
   const o = input as Record<string, unknown>;
   const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "").replace(/\r\n/g, "\n");
@@ -59,11 +71,18 @@ function cleanEntry(input: unknown): { ok: true; value: Omit<Entry, "id" | "crea
   if (!["mug", "sleep", "none"].includes(mood)) return { ok: false, error: "mood 只能是 mug / sleep / none" };
   const photoKey = str("photoKey");
   if (photoKey && !PHOTO_KEY.test(photoKey)) return { ok: false, error: "photoKey 无效" };
+  const rawStk: unknown[] = Array.isArray(o.stickers) ? o.stickers : typeof o.stickers === "string" ? o.stickers.split(",") : [];
+  const stickers = [...new Set(rawStk.map((k) => String(k).trim()).filter(Boolean))];
+  if (stickers.some((k) => !STICKERS.has(k))) return { ok: false, error: "有不认识的插画" };
+  if (stickers.length > MAX_STICKERS) return { ok: false, error: `插画最多 ${MAX_STICKERS} 个` };
+  const status = str("status");
+  if (status && status !== "draft" && status !== "published") return { ok: false, error: "status 只能是 draft / published" };
   return {
     ok: true,
     value: {
       date, title: v.title, latin: v.latin, stamp: v.stamp, aside: v.aside, body: v.body, note: v.note,
       mood: mood as Entry["mood"], quote: v.quote, quoteSrc: v.quoteSrc, photoKey, photoCap: v.photoCap,
+      stickers, status: (status || undefined) as Entry["status"] | undefined,
     },
   };
 }
@@ -73,7 +92,9 @@ const bad = (c: C, status: 400 | 401 | 403 | 404 | 413 | 415 | 500, error: strin
 /* ---------------- public API ---------------- */
 
 app.get("/api/entries", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM entries ORDER BY date ASC, created_at ASC").all();
+  const { results } = await c.env.DB.prepare(
+    "SELECT * FROM entries WHERE status='published' ORDER BY date ASC, created_at ASC",
+  ).all();
   c.header("Cache-Control", "no-store");
   return c.json({ entries: results.map(rowToEntry) });
 });
@@ -133,28 +154,37 @@ app.use("/api/admin/*", requireAccess);
 
 app.get("/api/admin/me", (c) => c.json({ email: c.get("email") }));
 
+/* drafts included */
+app.get("/api/admin/entries", async (c) => {
+  const { results } = await c.env.DB.prepare("SELECT * FROM entries ORDER BY date ASC, created_at ASC").all();
+  c.header("Cache-Control", "no-store");
+  return c.json({ entries: results.map(rowToEntry) });
+});
+
 app.post("/api/admin/entries", async (c) => {
   const parsed = cleanEntry(await c.req.json().catch(() => null));
   if (!parsed.ok) return bad(c, 400, parsed.error);
   const e = parsed.value, now = Date.now(), id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO entries (id,date,title,latin,stamp,aside,body,note,mood,quote,quote_src,photo_key,photo_cap,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap, now, now).run();
+    `INSERT INTO entries (id,date,title,latin,stamp,aside,body,note,mood,quote,quote_src,photo_key,photo_cap,stickers,status,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap,
+    e.stickers.join(","), e.status || "published", now, now).run();
   const row = await c.env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
   return c.json({ entry: rowToEntry(row!) }, 201);
 });
 
 app.put("/api/admin/entries/:id", async (c) => {
   const id = c.req.param("id");
-  const old = await c.env.DB.prepare("SELECT photo_key FROM entries WHERE id=?").bind(id).first<{ photo_key: string }>();
+  const old = await c.env.DB.prepare("SELECT photo_key, status FROM entries WHERE id=?").bind(id).first<{ photo_key: string; status: string }>();
   if (!old) return bad(c, 404, "这一页不存在");
   const parsed = cleanEntry(await c.req.json().catch(() => null));
   if (!parsed.ok) return bad(c, 400, parsed.error);
   const e = parsed.value;
   await c.env.DB.prepare(
-    `UPDATE entries SET date=?,title=?,latin=?,stamp=?,aside=?,body=?,note=?,mood=?,quote=?,quote_src=?,photo_key=?,photo_cap=?,updated_at=? WHERE id=?`,
-  ).bind(e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap, Date.now(), id).run();
+    `UPDATE entries SET date=?,title=?,latin=?,stamp=?,aside=?,body=?,note=?,mood=?,quote=?,quote_src=?,photo_key=?,photo_cap=?,stickers=?,status=?,updated_at=? WHERE id=?`,
+  ).bind(e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap,
+    e.stickers.join(","), e.status || old.status, Date.now(), id).run();
   if (old.photo_key && old.photo_key !== e.photoKey) c.executionCtx.waitUntil(c.env.PHOTOS.delete(old.photo_key));
   const row = await c.env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
   return c.json({ entry: rowToEntry(row!) });
@@ -182,6 +212,31 @@ app.put("/api/admin/settings", async (c) => {
   const up = c.env.DB.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
   await c.env.DB.batch([up.bind("email", email), up.bind("github", github), up.bind("githubText", githubText)]);
   return c.json({ settings: { email, github, githubText } });
+});
+
+/* jots: loose lines written during the day, picked up by the nightly summary */
+app.get("/api/admin/jots", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    "SELECT id, text, created_at, used_in FROM jots ORDER BY created_at DESC LIMIT 100",
+  ).all<{ id: string; text: string; created_at: number; used_in: string }>();
+  c.header("Cache-Control", "no-store");
+  return c.json({ jots: results.map((r) => ({ id: r.id, text: r.text, createdAt: r.created_at, usedIn: r.used_in })) });
+});
+
+app.post("/api/admin/jots", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const text = typeof o?.text === "string" ? o.text.replace(/\r\n/g, "\n").trim() : "";
+  if (!text) return bad(c, 400, "写点什么再记");
+  if ([...text].length > 1000) return bad(c, 400, "一条最多 1000 字");
+  const id = crypto.randomUUID(), now = Date.now();
+  await c.env.DB.prepare("INSERT INTO jots (id, text, created_at) VALUES (?,?,?)").bind(id, text, now).run();
+  return c.json({ jot: { id, text, createdAt: now, usedIn: "" } }, 201);
+});
+
+app.delete("/api/admin/jots/:id", async (c) => {
+  const r = await c.env.DB.prepare("DELETE FROM jots WHERE id=?").bind(c.req.param("id")).run();
+  if (!r.meta.changes) return bad(c, 404, "这条不存在");
+  return c.json({ ok: true });
 });
 
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
