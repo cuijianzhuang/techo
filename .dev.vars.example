@@ -1,1 +1,3 @@
 DEV_BYPASS_AUTH=1
+# optional: turns on "write today's page with Claude" locally
+# ANTHROPIC_API_KEY=sk-ant-...

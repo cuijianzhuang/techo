@@ -179,10 +179,11 @@
   /* ---------- jots: loose lines for tonight's page ---------- */
   function drawJots(){
     const f=el('form','form');f.noValidate=true;
-    f.append(el('h2',null,'随手记'),el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿。'));
+    f.append(el('h2',null,'随手记'),el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。'));
     const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
     const l=el('label');l.append('新的一句',ta);
     const b=el('div','bar');const s=el('button','b pri','记下');s.type='submit';b.appendChild(s);
+    const cw=el('button','b','现在就用今天的随手记写一页');cw.type='button';cw.onclick=compose;b.appendChild(cw);
     const ul=el('div','jots');
     const paint=()=>{
       ul.textContent='';
@@ -207,6 +208,15 @@
       catch(err){status(err.message||'没记上，稍后再试。','err');}
       finally{busy=false;}
     });
+    async function compose(){
+      if(busy)return;busy=true;cw.disabled=true;status('Claude 正在写，大约要半分钟……');
+      try{
+        const r=await api('/api/admin/compose',{method:'POST'});
+        entries.push(r.entry);
+        busy=false;select(r.entry.id,true);status('写好了，这是草稿。看过没问题就点「发布这一页」。','ok');
+      }catch(e){status(e.message||'没写成，稍后再试。','err');}
+      finally{busy=false;cw.disabled=false;}
+    }
     f.append(l,b,statusEl,ul);main.appendChild(f);paint();
     (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];paint();}catch(e){status(e.message||'加载失败','err');}})();
     setTimeout(()=>ta.focus(),0);

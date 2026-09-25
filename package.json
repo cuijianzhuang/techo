@@ -12,6 +12,7 @@
     "build:pages": "python3 src-build/build.py"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "hono": "^4.13.9",
     "jose": "^6.2.12"
   },

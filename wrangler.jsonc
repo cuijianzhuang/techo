@@ -19,7 +19,11 @@
   "vars": {
     // fill these after creating the Access application (see README)
     "TEAM_DOMAIN": "https://YOUR-TEAM.cloudflareaccess.com",
-    "POLICY_AUD": ""
+    "POLICY_AUD": "",
+    // the journal's days follow this zone (nightly draft, "today")
+    "TIMEZONE": "Asia/Shanghai"
   },
+  // 23:30 Asia/Shanghai: write today's draft from the jots if the desktop task (22:00) didn't
+  "triggers": { "crons": ["30 15 * * *"] },
   "observability": { "enabled": true }
 }

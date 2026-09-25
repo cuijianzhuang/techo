@@ -13,13 +13,15 @@
 | 数据 | D1：`techo-db`（日记页、随手记、联系方式） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取 |
 | 后台登录 | Cloudflare Access（只放行你的邮箱），Worker 里再用 `jose` 校验 Access JWT |
-| 部署 | GitHub + Workers Builds，push 即部署 |
+| 部署 | GitHub Actions（`.github/workflows/deploy.yml`）：push 到 main → 类型检查 → `wrangler deploy` |
+| 写草稿 | Claude API（`@anthropic-ai/sdk`，`src/compose.ts`），模型 `claude-opus-5` |
 
 ```
 public/              静态页面：/ 手帐、/admin/ 后台
   assets/            techo.css（生成）、render.js、book.js、admin.js、admin.css
   vendor/            page-flip.browser.js
-src/index.ts         Worker：/api/*、/img/*
+src/index.ts         Worker：/api/*、/img/*、每晚的定时任务
+src/compose.ts       调 Claude 把随手记写成一页
 schema.sql           D1 表结构（可重复执行）
 migrations/          旧库升级用的 SQL
 src-build/           页面源文件与生成脚本（python3 src-build/build.py）
@@ -42,15 +44,16 @@ wrangler.jsonc       Worker 配置（D1 / R2 已填好 ID）
 
 已推到 [cuijianzhuang/techo](https://github.com/cuijianzhuang/techo)，之后直接 `git push`。
 
-### 2. 在 Cloudflare 连接仓库（Workers Builds）
+### 2. 用 GitHub Actions 部署
 
-控制台 → **Workers & Pages** → **Create** → **Import a repository** → 选 `techo` 仓库。
+仓库 → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**，加两个：
 
-- Project name：`techo`（要和 `wrangler.jsonc` 里的 `name` 一致）
-- Build command：留空
-- Deploy command：`npx wrangler deploy`
+- `CLOUDFLARE_API_TOKEN`：Cloudflare 控制台 → 右上角头像 → **My Profile** → **API Tokens** → **Create Token** → 模板 **Edit Cloudflare Workers**（账户选你自己的）
+- `CLOUDFLARE_ACCOUNT_ID`：Cloudflare 控制台首页右侧的 **Account ID**
 
-保存后会自动部署一次。之后每次 push 到 `main` 都会自动部署。
+之后每次 push 到 `main`：装依赖 → 类型检查 → 检查 `public/` 和 `src-build/` 一致 → `wrangler deploy`。PR 只跑检查不部署。也可以在 Actions 页手动 **Run workflow**。
+
+> 不要再在 Cloudflare 里连接 Workers Builds，否则每次 push 会部署两遍。
 
 ### 3. 绑定域名
 
@@ -97,6 +100,12 @@ commit 并 push，等自动部署完成。
   - 应用没开着时不会运行，下次打开时补跑。
   - 读不到 claude.ai 网页上的聊天。
   - 任务说明在 `~/.claude/scheduled-tasks/techo-nightly-page/SKILL.md`，改口吻或素材就改这里。
+- 网站自己也会写（需要 Claude API Key）：
+  - 后台「随手记」里的「现在就用今天的随手记写一页」随时生成一页草稿。
+  - 每天 23:30（Asia/Shanghai，`wrangler.jsonc` 的 `triggers`）Worker 检查今天还没有页、又有随手记，就自动写一页草稿——电脑没开的日子靠它兜底。
+  - 只读随手记，读不到 Claude 聊天；当天已经有一页就不写。
+  - 开启：在 [console.anthropic.com](https://console.anthropic.com) 建一个 API Key，首次部署后运行 `npx wrangler secret put ANTHROPIC_API_KEY` 粘贴进去。按量计费，一页大约 $0.03。
+  - 日期按 `wrangler.jsonc` 里的 `TIMEZONE` 算。
 
 ## 安全说明
 
@@ -135,4 +144,5 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | GET | `/api/admin/jots` | 最近 100 条随手记 |
 | POST | `/api/admin/jots` | 记一句（`{"text": "..."}`，≤1000 字） |
 | DELETE | `/api/admin/jots/:id` | 删一条随手记 |
+| POST | `/api/admin/compose` | 用今天的随手记让 Claude 写一页草稿（今天已有页或没有随手记时返回 409） |
 | POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB；后台会先压到 1600px） |

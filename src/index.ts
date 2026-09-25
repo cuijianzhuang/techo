@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { ComposeError, composePage } from "./compose";
 
 type Env = {
   DB: D1Database;
@@ -12,6 +13,10 @@ type Env = {
   POLICY_AUD: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
+  /** secret: `wrangler secret put ANTHROPIC_API_KEY`; without it the Claude features are off */
+  ANTHROPIC_API_KEY?: string;
+  /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
+  TIMEZONE: string;
 };
 type Vars = { email: string };
 type C = Context<{ Bindings: Env; Variables: Vars }>;
@@ -28,10 +33,12 @@ type Entry = {
 };
 
 /* doodles a page can carry; the drawings live in public/assets/render.js */
-const STICKERS = new Set([
-  "sun", "cloud", "rain", "moon", "cat", "book", "laptop", "bug", "plant",
-  "noodles", "bus", "bike", "music", "heart", "star", "letter", "camera",
-]);
+const STICKER_LABELS: Record<string, string> = {
+  sun: "晴天", cloud: "多云", rain: "下雨", moon: "月亮/夜里", cat: "猫", book: "书/读书", laptop: "电脑/写代码",
+  bug: "修 bug", plant: "植物", noodles: "吃饭", bus: "通勤/出门", bike: "骑车/运动", music: "音乐",
+  heart: "开心/温暖", star: "好事/小成就", letter: "来信/消息", camera: "拍照",
+};
+const STICKERS = new Set(Object.keys(STICKER_LABELS));
 const MAX_STICKERS = 2;
 
 const LIMITS: Record<string, number> = {
@@ -87,7 +94,7 @@ function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: fal
   };
 }
 
-const bad = (c: C, status: 400 | 401 | 403 | 404 | 413 | 415 | 500, error: string) => c.json({ error }, status);
+const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 500, error: string) => c.json({ error }, status);
 
 /* ---------------- public API ---------------- */
 
@@ -239,6 +246,71 @@ app.delete("/api/admin/jots/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/* ---------------- Claude: jots -> draft page ---------------- */
+
+/** the journal's current day in env.TIMEZONE, with its [start, end) in epoch ms */
+function localDay(timeZone: string, now = Date.now()) {
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  });
+  const p = Object.fromEntries(f.formatToParts(new Date(now)).map((x) => [x.type, x.value]));
+  const offset = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - Math.floor(now / 1000) * 1000;
+  const start = Date.UTC(+p.year, +p.month - 1, +p.day) - offset;
+  return { date: `${p.year}-${p.month}-${p.day}`, start, end: start + 86_400_000 };
+}
+
+class ComposeSkip extends Error {}
+
+/** Writes today's unused jots into a draft page. Throws ComposeSkip when there is nothing to do. */
+async function composeToday(env: Env): Promise<Entry> {
+  if (!env.ANTHROPIC_API_KEY) throw new ComposeError("Worker 未配置 ANTHROPIC_API_KEY");
+  const day = localDay(env.TIMEZONE || "Asia/Shanghai");
+  const has = await env.DB.prepare("SELECT id FROM entries WHERE date=? LIMIT 1").bind(day.date).first();
+  if (has) throw new ComposeSkip("今天已经有一页了");
+  const { results: jots } = await env.DB.prepare(
+    "SELECT id, text, created_at FROM jots WHERE used_in='' AND created_at>=? AND created_at<? ORDER BY created_at",
+  ).bind(day.start, day.end).all<{ id: string; text: string; created_at: number }>();
+  if (!jots.length) throw new ComposeSkip("今天还没有随手记");
+
+  const page = await composePage(
+    env.ANTHROPIC_API_KEY, day.date,
+    jots.map((j) => ({ text: j.text, createdAt: j.created_at })),
+    STICKER_LABELS, env.TIMEZONE || "Asia/Shanghai",
+  );
+  // Claude's lengths are a request, not a guarantee: trim to what the page holds before the usual validation
+  const cut = (v: unknown, k: string) => [...(typeof v === "string" ? v.trim() : "")].slice(0, LIMITS[k]).join("");
+  const parsed = cleanEntry({
+    date: day.date, title: cut(page.title, "title"), latin: cut(page.latin, "latin"), aside: cut(page.aside, "aside"),
+    body: cut(page.body, "body"), note: cut(page.note, "note"), stamp: [...(page.stamp || "")].slice(0, 1).join(""),
+    mood: page.mood === "sleep" ? "sleep" : "mug",
+    stickers: (Array.isArray(page.stickers) ? page.stickers : []).filter((k) => STICKERS.has(k)).slice(0, MAX_STICKERS),
+    status: "draft",
+  });
+  if (!parsed.ok) throw new ComposeError("Claude 写的内容不合格式：" + parsed.error);
+  const e = parsed.value, now = Date.now(), id = crypto.randomUUID();
+  const used = env.DB.prepare("UPDATE jots SET used_in=? WHERE id=? AND used_in=''");
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO entries (id,date,title,latin,stamp,aside,body,note,mood,quote,quote_src,photo_key,photo_cap,stickers,status,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,'','','','',?,'draft',?,?)`,
+    ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.stickers.join(","), now, now),
+    ...jots.map((j) => used.bind(id, j.id)),
+  ]);
+  const row = await env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
+  return rowToEntry(row!);
+}
+
+app.post("/api/admin/compose", async (c) => {
+  try {
+    return c.json({ entry: await composeToday(c.env) }, 201);
+  } catch (err) {
+    if (err instanceof ComposeSkip) return bad(c, 409, err.message);
+    console.error(err);
+    return bad(c, 500, err instanceof ComposeError ? err.message : "Claude 没写成，稍后再试");
+  }
+});
+
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
 const MAX_PHOTO = 10 * 1024 * 1024;
 
@@ -265,4 +337,15 @@ app.onError((err, c) => {
 // Anything else falls through to static assets.
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // nightly fallback (wrangler.jsonc triggers): if the desktop task hasn't written today's page, write it from the jots
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(
+      composeToday(env).then(
+        (e) => console.log("nightly draft written:", e.date, e.title),
+        (err) => (err instanceof ComposeSkip ? console.log("nightly skipped:", err.message) : console.error("nightly failed:", err)),
+      ),
+    );
+  },
+} satisfies ExportedHandler<Env>;
