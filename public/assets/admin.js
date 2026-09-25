@@ -20,17 +20,14 @@
     if(!r.ok)throw new Error((body&&body.error)||('请求失败（'+r.status+'）'));
     return body;
   }
-  function gate(){$('gate').hidden=false;$('logout').hidden=true;setTimeout(()=>$('pw').focus(),0);}
-  $('loginForm').addEventListener('submit',async e=>{
-    e.preventDefault();
-    const btn=e.target.querySelector('button');btn.disabled=true;$('gateMsg').textContent='正在登录……';
-    try{
-      const r=await fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({password:$('pw').value})});
-      let b=null;try{b=await r.json();}catch(_){}
-      if(!r.ok)throw new Error((b&&b.error)||'登录失败（'+r.status+'）');
-      location.reload();
-    }catch(err){$('gateMsg').textContent=err.message;$('pw').select();btn.disabled=false;}
-  });
+  const LOGIN_MSG={denied:'这个 GitHub 账号没有权限。',cancelled:'登录取消了。',expired:'登录超时了，再点一次。',failed:'GitHub 登录没成功，稍后再试。'};
+  // read ?login=… (set by the GitHub callback) once, then drop it so a reload doesn't repeat the message
+  const loginWhy=new URLSearchParams(location.search).get('login');
+  if(location.search)history.replaceState(null,'',location.pathname);
+  function gate(){
+    $('gate').hidden=false;$('logout').hidden=true;
+    if(loginWhy&&LOGIN_MSG[loginWhy])$('gateMsg').textContent=LOGIN_MSG[loginWhy];
+  }
   $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
 
@@ -394,8 +391,8 @@
   /* ---------- boot ---------- */
   (async()=>{
     try{
-      await api('/api/admin/me');
-      $('who').textContent='已登录';$('logout').hidden=false;
+      const me=await api('/api/admin/me');
+      $('who').textContent='已登录 @'+me.login;$('logout').hidden=false;
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
       entries=e.entries||[];settings=s.settings||{};
       drawList();drawForm();

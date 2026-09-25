@@ -23,6 +23,8 @@ body{
 /* while a cover is closed the half it swung away from is empty desk */
 .bookwrap.closed-front:not(.portrait) #book{clip-path:inset(-40px -40px -40px 50%)}
 .bookwrap.closed-back:not(.portrait) #book{clip-path:inset(-40px 50% -40px -40px)}
+/* a closed book shows only its board: the paper under it would peek out round the board's corners and edge */
+.bookwrap.shut #book{visibility:hidden}
 
 /* ---------- hard covers: a 3D board with thickness ---------- */
 .leaf{position:absolute;top:0;left:50%;width:50%;height:100%;transform-origin:0 50%;transform-style:preserve-3d;

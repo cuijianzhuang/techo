@@ -12,7 +12,7 @@
 | API | Worker + [Hono](https://hono.dev)（`src/index.ts`） |
 | 数据 | D1：`techo-db`（日记页、随手记、联系方式） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取 |
-| 后台登录 | 密码（Worker 密钥 `ADMIN_PASSWORD`）→ 签名的 HttpOnly Cookie，30 天有效；登录限流每 IP 每分钟 5 次 |
+| 后台登录 | GitHub 登录（OAuth App），只放行 `ADMIN_GITHUB_LOGIN` 这一个账号 → 签名的 HttpOnly Cookie，30 天有效 |
 | 部署 | GitHub Actions（`.github/workflows/deploy.yml`）：push 到 main → 类型检查 → `wrangler deploy` |
 | 写草稿 | Claude API（`@anthropic-ai/sdk`，`src/compose.ts`），模型 `claude-opus-5` |
 
@@ -55,15 +55,22 @@ wrangler.jsonc       Worker 配置（D1 / R2 已填好 ID）
 
 > 不要再在 Cloudflare 里连接 Workers Builds，否则每次 push 会部署两遍。
 
-### 3. 设置后台密码
+### 3. 设置 GitHub 登录
 
-至少 12 位，只存在 Cloudflare 上，不进仓库：
+1. GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**：
+   - Application name：`cui.log 后台`（随意）
+   - Homepage URL：`https://techo.cuijianzhuang.workers.dev`（绑了域名就填域名）
+   - Authorization callback URL：`https://techo.cuijianzhuang.workers.dev/api/auth/github/callback`
+2. 创建后复制 **Client ID**，填进 `wrangler.jsonc` 的 `GITHUB_CLIENT_ID`（公开的，可以进仓库）。
+3. 点 **Generate a new client secret**，存成 Worker 密钥（不进仓库）：
 
-```bash
-npx wrangler secret put ADMIN_PASSWORD
-```
+   ```bash
+   npx wrangler secret put GITHUB_CLIENT_SECRET
+   ```
 
-改密码也是这条命令，改完所有已登录的设备都会退出。
+4. `ADMIN_GITHUB_LOGIN` 是唯一能进后台的 GitHub 用户名，默认 `cuijianzhuang`。
+
+换 client secret 会让所有已登录的设备退出。换域名时记得同时改 OAuth App 的两个地址。
 
 ### 4. 绑定域名（可选）
 
@@ -71,7 +78,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 ### 5. 开始写
 
-主页底部点「✎ 写一页」（或直接打开 `/admin/`），输入密码，点「新写一页」。保存后刷新主页就能看到。
+主页底部点「✎ 写一页」（或直接打开 `/admin/`），用 GitHub 登录，点「新写一页」。保存后刷新主页就能看到。
 
 ## 小插画
 
@@ -96,8 +103,8 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 ## 安全说明
 
 - 主页、`/api/entries`、`/api/settings`、`/img/*` 是公开只读的。
-- 所有写操作都在 `/api/admin/*`，要带登录后的 Cookie。Cookie 是 `过期时间.HMAC`，用 `ADMIN_PASSWORD` 签名，HttpOnly + Secure + SameSite=Strict；没有或被改过都只会得到 401。
-- `/api/login` 按 IP 限流（每分钟 5 次），密码比较不泄露时间差。密码请用长一点的随机串，交给密码管理器记。
+- 所有写操作都在 `/api/admin/*`，要带登录后的 Cookie。Cookie 是 `过期时间.GitHub用户名.HMAC`，用从 client secret 派生的密钥签名，HttpOnly + Secure + SameSite=Strict；没有、被改过、或用户名不是 `ADMIN_GITHUB_LOGIN` 都只会得到 401。
+- GitHub 登录带 `state` 防 CSRF（10 分钟有效的 HttpOnly Cookie），只申请最小权限（读公开资料），不保存 GitHub token。
 - 想彻底关掉 workers.dev 地址：在 `wrangler.jsonc` 加 `"workers_dev": false`。
 
 ## 本地开发
@@ -122,8 +129,9 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | GET | `/api/entries` | 已发布的日记页（按日期） |
 | GET | `/api/settings` | 联系方式 |
 | GET | `/img/p/<uuid>.<ext>` | 照片 |
-| POST | `/api/login` | 用密码登录（`{"password": "..."}`），成功后下发 Cookie |
-| GET | `/api/admin/me` | 是否已登录 |
+| GET | `/api/auth/github` | 跳到 GitHub 登录 |
+| GET | `/api/auth/github/callback` | GitHub 登录回调，成功后下发 Cookie 并回到 `/admin/` |
+| GET | `/api/admin/me` | 当前登录的 GitHub 用户名 |
 | POST | `/api/admin/logout` | 退出 |
 | GET | `/api/admin/entries` | 所有页，含草稿 |
 | POST | `/api/admin/entries` | 新建一页（JSON；`stickers` 数组、`status` 默认 `published`） |

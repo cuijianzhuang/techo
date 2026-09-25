@@ -124,14 +124,15 @@
   function settle(which,p){
     const L=which==='front'?FL:BL;
     under.r.style.opacity=under.l.style.opacity='0';
-    wrap.classList.remove('closed-front','closed-back');
+    wrap.classList.remove('closed-front','closed-back','shut');
     if(p===1){
       FL.leaf.hidden=BL.leaf.hidden=true;
       mode='open';shiftEl.style.transform='translateX(0%)';
       reveal(idx());
     }else{
       mode=which;L.leaf.hidden=false;
-      wrap.classList.add(which==='front'?'closed-front':'closed-back');
+      // 'shut': the board lies flat on the pages, so hide them; otherwise the paper peeks out round its corners
+      wrap.classList.add(which==='front'?'closed-front':'closed-back','shut');
       paint(which,0);
     }
     chrome();
@@ -141,7 +142,7 @@
     (which==='front'?BL:FL).leaf.hidden=true;
     L.leaf.hidden=false;mode='anim';
     // keep the half the board swings away from hidden until the board has landed
-    wrap.classList.remove('closed-front','closed-back');
+    wrap.classList.remove('closed-front','closed-back','shut');
     wrap.classList.add(which==='front'?'closed-front':'closed-back');
     dragnote.hidden=true;
     return L;

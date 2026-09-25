@@ -74,7 +74,8 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .jot .b{grid-column:2;grid-row:1 / span 2}
 .admin .jot.used p{color:var(--ink-soft)}
 /* login */
-.admin .gatebox{display:grid;gap:12px}
+.admin .gatebox{display:grid;gap:14px;justify-items:start}
+.admin .ghbtn{display:inline-flex;align-items:center;gap:8px;text-decoration:none}
 .admin .gatebox p{margin:0}
 .admin .logout{margin-left:4px}
 /* date: paper calendar */

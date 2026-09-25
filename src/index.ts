@@ -7,10 +7,12 @@ type Env = {
   DB: D1Database;
   PHOTOS: R2Bucket;
   ASSETS: Fetcher;
-  /** secret: `wrangler secret put ADMIN_PASSWORD`; also signs the session cookie, so changing it logs everyone out */
-  ADMIN_PASSWORD?: string;
-  /** wrangler.jsonc ratelimits: login attempts per IP */
-  LOGIN_LIMITER?: RateLimit;
+  /** GitHub OAuth App (see README). The client id is public; the secret also keys the session cookie. */
+  GITHUB_CLIENT_ID: string;
+  /** secret: `wrangler secret put GITHUB_CLIENT_SECRET` */
+  GITHUB_CLIENT_SECRET?: string;
+  /** the one GitHub account let into the admin */
+  ADMIN_GITHUB_LOGIN: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
   /** secret: `wrangler secret put ANTHROPIC_API_KEY`; without it the Claude features are off */
@@ -18,9 +20,11 @@ type Env = {
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
 };
-type C = Context<{ Bindings: Env }>;
+/** login: the GitHub account behind the admin session */
+type HonoEnv = { Bindings: Env; Variables: { login: string } };
+type C = Context<HonoEnv>;
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<HonoEnv>();
 
 /* ---------------- entries: validation & mapping ---------------- */
 
@@ -93,7 +97,7 @@ function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: fal
   };
 }
 
-const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 429 | 500, error: string) => c.json({ error }, status);
+const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 500, error: string) => c.json({ error }, status);
 
 /* ---------------- public API ---------------- */
 
@@ -126,11 +130,11 @@ app.get("/img/:dir/:name", async (c) => {
   return new Response(obj.body, { headers: h });
 });
 
-/* ---------------- admin: password login ---------------- */
+/* ---------------- admin: GitHub login ---------------- */
 
 const SESSION_COOKIE = "techo_session";
+const STATE_COOKIE = "techo_oauth";
 const SESSION_DAYS = 30;
-const MIN_PASSWORD = 12;
 const enc = new TextEncoder();
 
 async function hmac(secret: string, msg: string): Promise<ArrayBuffer> {
@@ -138,56 +142,94 @@ async function hmac(secret: string, msg: string): Promise<ArrayBuffer> {
   return crypto.subtle.sign("HMAC", key, enc.encode(msg));
 }
 const b64url = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const sameBytes = (a: ArrayBuffer, b: ArrayBuffer) => a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
-
-function passwordProblem(env: Env): string | null {
-  if (!env.ADMIN_PASSWORD) return "Worker 未配置 ADMIN_PASSWORD（运行 npx wrangler secret put ADMIN_PASSWORD）";
-  if ([...env.ADMIN_PASSWORD].length < MIN_PASSWORD) return `ADMIN_PASSWORD 太短，至少 ${MIN_PASSWORD} 位`;
-  return null;
-}
-
-/** "<expiry ms>.<hmac>" — no server-side state to keep */
-async function makeSession(pw: string): Promise<string> {
-  const exp = String(Date.now() + SESSION_DAYS * 86_400_000);
-  return `${exp}.${b64url(await hmac(pw, "session:" + exp))}`;
-}
-async function validSession(pw: string, token: string | undefined): Promise<boolean> {
-  const m = /^(\d{13,})\.([\w-]+)$/.exec(token || "");
-  if (!m || Number(m[1]) < Date.now()) return false;
-  const want = b64url(await hmac(pw, "session:" + m[1]));
-  return sameBytes(enc.encode(want).buffer as ArrayBuffer, enc.encode(m[2]).buffer as ArrayBuffer);
-}
+const sameText = (a: string, b: string) => {
+  const x = enc.encode(a), y = enc.encode(b);
+  return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y);
+};
 const isLocal = (c: C) => ["localhost", "127.0.0.1"].includes(new URL(c.req.url).hostname);
 
+function authProblem(env: Env): string | null {
+  if (!env.GITHUB_CLIENT_ID || !env.ADMIN_GITHUB_LOGIN) return "Worker 未配置 GITHUB_CLIENT_ID / ADMIN_GITHUB_LOGIN（见 wrangler.jsonc）";
+  if (!env.GITHUB_CLIENT_SECRET) return "Worker 未配置 GITHUB_CLIENT_SECRET（运行 npx wrangler secret put GITHUB_CLIENT_SECRET）";
+  return null;
+}
+/** its own key, derived from the client secret: rotating the secret logs everyone out */
+const sessionKey = (env: Env) => "session:" + env.GITHUB_CLIENT_SECRET;
+
+/** "<expiry ms>.<github login>.<hmac>" — no server-side state to keep */
+async function makeSession(env: Env, login: string): Promise<string> {
+  const body = `${Date.now() + SESSION_DAYS * 86_400_000}.${login}`;
+  return `${body}.${b64url(await hmac(sessionKey(env), body))}`;
+}
+async function sessionLogin(env: Env, token: string | undefined): Promise<string | null> {
+  const m = /^((\d{13,})\.([A-Za-z0-9-]{1,39}))\.([\w-]+)$/.exec(token || "");
+  if (!m || Number(m[2]) < Date.now()) return null;
+  // the account must still be the allowed one, so changing ADMIN_GITHUB_LOGIN takes effect at once
+  if (m[3].toLowerCase() !== env.ADMIN_GITHUB_LOGIN.toLowerCase()) return null;
+  return sameText(b64url(await hmac(sessionKey(env), m[1])), m[4]) ? m[3] : null;
+}
+
 async function requireLogin(c: C, next: Next) {
-  if (c.env.DEV_BYPASS_AUTH === "1" && isLocal(c)) return next();
-  const problem = passwordProblem(c.env);
+  if (c.env.DEV_BYPASS_AUTH === "1" && isLocal(c)) {
+    c.set("login", "dev");
+    return next();
+  }
+  const problem = authProblem(c.env);
   if (problem) return bad(c, 500, problem);
-  if (!(await validSession(c.env.ADMIN_PASSWORD!, getCookie(c, SESSION_COOKIE)))) return bad(c, 401, "请先登录");
+  const login = await sessionLogin(c.env, getCookie(c, SESSION_COOKIE));
+  if (!login) return bad(c, 401, "请先登录");
+  c.set("login", login);
   return next();
 }
 
-app.post("/api/login", async (c) => {
-  const problem = passwordProblem(c.env);
+const callbackUrl = (c: C) => new URL("/api/auth/github/callback", c.req.url).toString();
+const backToAdmin = (c: C, err?: string) => c.redirect("/admin/" + (err ? "?login=" + err : ""), 302);
+
+app.get("/api/auth/github", (c) => {
+  const problem = authProblem(c.env);
   if (problem) return bad(c, 500, problem);
-  if (c.env.LOGIN_LIMITER) {
-    const { success } = await c.env.LOGIN_LIMITER.limit({ key: c.req.header("cf-connecting-ip") || "unknown" });
-    if (!success) return bad(c, 429, "试得太频繁了，一分钟后再试");
-  }
-  const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
-  const given = typeof o?.password === "string" ? o.password : "";
-  const pw = c.env.ADMIN_PASSWORD!;
-  // compare MACs, not the strings, so timing says nothing about the password
-  if (!sameBytes(await hmac(pw, "pw:" + given), await hmac(pw, "pw:" + pw))) return bad(c, 401, "密码不对");
-  setCookie(c, SESSION_COOKIE, await makeSession(pw), {
+  const state = b64url(crypto.getRandomValues(new Uint8Array(24)).buffer as ArrayBuffer);
+  // Lax, not Strict: it has to come back on GitHub's redirect to the callback
+  setCookie(c, STATE_COOKIE, state, { httpOnly: true, secure: !isLocal(c), sameSite: "Lax", path: "/api/auth", maxAge: 600 });
+  const u = new URL("https://github.com/login/oauth/authorize");
+  u.search = new URLSearchParams({
+    client_id: c.env.GITHUB_CLIENT_ID, redirect_uri: callbackUrl(c), state, scope: "", allow_signup: "false",
+  }).toString();
+  return c.redirect(u.toString(), 302);
+});
+
+app.get("/api/auth/github/callback", async (c) => {
+  const problem = authProblem(c.env);
+  if (problem) return bad(c, 500, problem);
+  const state = getCookie(c, STATE_COOKIE);
+  deleteCookie(c, STATE_COOKIE, { path: "/api/auth", secure: !isLocal(c) });
+  const code = c.req.query("code"), got = c.req.query("state");
+  if (c.req.query("error")) return backToAdmin(c, "cancelled");
+  if (!code || !state || !got || !sameText(state, got)) return backToAdmin(c, "expired");
+
+  const tok = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify({
+      client_id: c.env.GITHUB_CLIENT_ID, client_secret: c.env.GITHUB_CLIENT_SECRET, code, redirect_uri: callbackUrl(c),
+    }),
+  }).then((r) => r.json() as Promise<{ access_token?: string }>).catch(() => ({} as { access_token?: string }));
+  if (!tok.access_token) return backToAdmin(c, "failed");
+  const user = await fetch("https://api.github.com/user", {
+    headers: { authorization: `Bearer ${tok.access_token}`, accept: "application/vnd.github+json", "user-agent": "techo-admin" },
+  }).then((r) => (r.ok ? (r.json() as Promise<{ login?: string }>) : null)).catch(() => null);
+  if (!user?.login) return backToAdmin(c, "failed");
+  if (user.login.toLowerCase() !== c.env.ADMIN_GITHUB_LOGIN.toLowerCase()) return backToAdmin(c, "denied");
+
+  setCookie(c, SESSION_COOKIE, await makeSession(c.env, user.login), {
     httpOnly: true, secure: !isLocal(c), sameSite: "Strict", path: "/", maxAge: SESSION_DAYS * 86_400,
   });
-  return c.json({ ok: true });
+  return backToAdmin(c);
 });
 
 app.use("/api/admin/*", requireLogin);
 
-app.get("/api/admin/me", (c) => c.json({ ok: true }));
+app.get("/api/admin/me", (c) => c.json({ login: c.get("login") }));
 
 app.post("/api/admin/logout", (c) => {
   deleteCookie(c, SESSION_COOKIE, { path: "/", secure: !isLocal(c) });
