@@ -12,11 +12,15 @@ body{
 .stage{margin:0 auto;position:relative;width:min(100%,calc((100vh - 150px) * 1060 / 740),1180px)}
 .shift{transition:transform .9s cubic-bezier(.4,0,.2,1)}
 #book{margin:0 auto}
-.stf__parent{filter:drop-shadow(0 16px 22px rgba(40,34,20,.16)) drop-shadow(0 2px 3px rgba(40,34,20,.14))}
+/* no filter on the flipping book: filters force a full repaint every frame and make the turn stutter.
+   A static soft shadow sits under the book instead. */
+#shift{position:relative}
+#shift::before{content:"";position:absolute;left:4%;right:4%;bottom:-10px;height:26px;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(40,34,20,.22),rgba(40,34,20,0));pointer-events:none;z-index:-1}
 
 /* every page the flip library handles */
 .pf{overflow:hidden;background:var(--paper)}
-.pf>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--k,1))}
+.pf>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--k,1));will-change:transform;backface-visibility:hidden}
 .pf.hard{background:transparent}
 
 /* ================= cover: slate-teal cloth hardcover, his own stickers ================= */

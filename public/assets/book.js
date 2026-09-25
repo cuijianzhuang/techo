@@ -75,7 +75,7 @@
 
   function scale(){
     const r=pf.getBoundsRect&&pf.getBoundsRect();
-    if(r&&r.pageWidth)bookEl.style.setProperty('--k',(r.pageWidth/530).toFixed(5));
+    if(r&&r.pageWidth){const k=(r.pageWidth/530).toFixed(4);if(bookEl.style.getPropertyValue('--k')!==k)bookEl.style.setProperty('--k',k);}
   }
   const landscape=()=>pf.getOrientation()==='landscape';
   function shiftFor(i){
@@ -84,7 +84,7 @@
     if(i>=last)return 25;
     return 0;
   }
-  function setShift(i){shiftEl.style.transform='translateX('+shiftFor(i)+'%)';}
+  function setShift(i){const v='translateX('+shiftFor(i)+'%)';if(shiftEl.style.transform!==v)shiftEl.style.transform=v;}
   function visible(i){
     if(!landscape())return[i];
     if(i===0)return[0];
@@ -106,10 +106,15 @@
   if(!chips.length)dots.remove();
 
   pf.on('flip',e=>{setShift(e.data);chrome(e.data);reveal(e.data);});
+  // Only re-centre the book once a real turn starts. Hovering a corner ('fold_corner')
+  // must not move it, or the whole book jumps under the pointer.
   pf.on('changeState',e=>{
     const i=pf.getCurrentPageIndex();
     if(e.data==='read'){setShift(i);}
-    else if(i===0||i>=last){shiftEl.style.transform='translateX(0%)';dragnote.hidden=true;}
+    // start writing the pages about to be uncovered while the paper is still turning,
+    // so they never show up blank and then pop in
+    if(e.data==='flipping'||e.data==='user_fold'){for(let k=i-2;k<=i+3;k++){const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);}}
+    if((e.data==='flipping'||e.data==='user_fold')&&(i===0||i>=last)){shiftEl.style.transform='translateX(0%)';dragnote.hidden=true;}
   });
   pf.on('changeOrientation',()=>{scale();setShift(pf.getCurrentPageIndex());});
   pf.on('update',scale);
