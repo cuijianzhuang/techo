@@ -25,7 +25,45 @@
   const gh=src.querySelector('#gh');
   if(gh){const ok=/^https:\/\//i.test(settings.github||'');gh.href=ok?settings.github:'https://github.com/';
     gh.textContent=settings.githubText||(ok?settings.github.replace(/^https:\/\//i,''):'github.com/你的用户名');}
+  applySettings(settings);
   if(document.fonts&&document.fonts.ready)await Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,2500))]);
+
+  /* the book's own words and pictures, from the admin's 手帐设置. Missing keys keep the built-in page. */
+  function applySettings(S){
+    const has=k=>typeof S[k]==='string',one=s=>src.querySelector(s),list=v=>v.split(',').filter(Boolean);
+    if(has('siteTitle')&&S.siteTitle)document.title=S.siteTitle;
+    const deb=one('.cover .deboss');
+    if(deb&&has('coverTitle')){
+      // the first "." is the lime dot of cui.log
+      const t=S.coverTitle,i=t.indexOf('.');deb.textContent='';
+      if(i<0)deb.textContent=t;else deb.append(t.slice(0,i),el('span',null,'.'),t.slice(i+1));
+    }
+    const sub=one('.cover .sub');
+    if(sub&&has('coverSub')){sub.textContent=S.coverSub;sub.appendChild(el('span','cursor'));}
+    if(has('coverHide'))list(S.coverHide).forEach(k=>{const n=one('.cover .s-'+k);if(n)n.remove();});
+    if(has('coverPhotos')){
+      const cover=one('.page.cover');
+      list(S.coverPhotos).slice(0,4).forEach((key,i)=>{
+        const st=el('div','sticker s-photo s-photo'+i),img=el('img');
+        img.src='/img/'+key;img.alt='';img.decoding='async';
+        st.appendChild(img);cover.appendChild(st);
+      });
+    }
+    const pre=one('.flyleaf pre');
+    if(pre&&has('readmeName')){
+      const $p=()=>el('span','p','$'),line=(...xs)=>{pre.append(...xs,'\n');};
+      pre.textContent='';
+      line($p(),' whoami');line(el('span','h',S.readmeName));
+      line($p(),' cat role');line(S.readmeRole);
+      line($p(),' ls ~/life');line(S.readmeLife);
+      pre.append($p(),' git log --since='+S.readmeSince+' ',el('span','c','# 从这里开始记'));
+    }
+    const sig=one('.flyleaf .sig');
+    if(sig&&has('readmeSign')){[...sig.childNodes].forEach(n=>{if(n.nodeType===3)n.remove();});sig.append(S.readmeSign);}
+    const eof=one('.backcover .eof');if(eof&&has('backTitle'))eof.textContent=S.backTitle;
+    const imp=one('.backcover .imprint');
+    if(imp&&has('backImprint')){imp.textContent='';S.backImprint.split('\n').forEach((l,i)=>{if(i)imp.appendChild(el('br'));imp.append(l);});}
+  }
 
   /* ---------- interior pages (inside covers are glued to the boards, they never turn) ---------- */
   const q=s=>src.querySelector(s);
@@ -34,12 +72,19 @@
   const pages=[];
   const push=(node,label)=>pages.push({node,label:label||null});
   push(insideFront);push(q('.page.flyleaf'));
-  [...src.querySelectorAll('.day')].forEach((p,i)=>push(p,i%2===0?p.dataset.label:null));
+  // the hand-made sample pages can be hidden; their last page (写信给我, the contact details) then moves to the end
+  const days=[...src.querySelectorAll('.day')],showSamples=settings.samples!=='hide';
+  const contact=days.find(p=>p.querySelector('#mail'));
+  if(showSamples)days.forEach((p,i)=>push(p,i%2===0?p.dataset.label:null));
   T.sortEntries(entries).forEach(en=>{
     const side=pages.length%2===0?'l':'r';
     const d=T.parseDate(en.date);
     push(T.fitText(T.entryPage(en,side)),side==='l'&&d?(d.mo+'/'+d.d):null);
   });
+  if(!showSamples&&contact){
+    if(pages.length%2===0)push(T.blankPage('l','下一页，还空着。'));   // contact is a right-hand page
+    push(contact);
+  }
   if(pages.length%2===0)push(T.blankPage('l','下一页，还空着。'));
   push(insideBack);
   const N=pages.length;
@@ -132,7 +177,7 @@
     under.r.style.opacity=under.l.style.opacity='0';
     const us=land&&which==='back'?under.l:under.r;
     // darkest while the board is still close over the page, gone once it lies open
-    us.style.opacity=(0.9*(1-p)*(land?1:0.6)).toFixed(3);
+    us.style.opacity=(0.7*(1-p)*(land?1:0.6)).toFixed(3);
     // slide the whole book so whatever lies on the desk stays centred
     const shift=land?(which==='front'?-25*(1-p):25*(1-p)):0;
     shiftEl.style.transform='translateX('+shift.toFixed(3)+'%)';
