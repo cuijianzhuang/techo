@@ -116,3 +116,18 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .dlink{appearance:none;border:0;background:transparent;cursor:pointer;padding:6px 6px;border-radius:6px;font:400 17px/1 var(--hand);color:var(--red-deep)}
 .admin .dlink.quiet{color:var(--ink-soft)}
 .admin .dlink:hover{background:rgba(138,154,43,.12)}
+/* list: search, filter, months */
+.admin .lfind{display:grid;gap:6px;padding:0 4px 6px}
+.admin .lfind input{font-size:13px;padding:6px 10px;border-radius:999px}
+.admin .lfilter{display:flex;gap:4px;flex-wrap:wrap}
+.admin .lfilter button{appearance:none;border:1px solid transparent;background:transparent;border-radius:999px;padding:4px 9px;cursor:pointer;
+  font:500 11.5px/1 var(--print);color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.admin .lfilter button:hover{border-color:rgba(120,110,90,.35)}
+.admin .lfilter button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.admin .lmonth{font:500 11px/1 var(--print);color:var(--olive);letter-spacing:.5px;padding:10px 10px 4px}
+.admin .lempty{font:400 13px/1.5 var(--print);color:var(--ink-soft);padding:10px}
+.admin .item{position:relative}
+.admin .item .gist{font:normal 400 11.5px/1.35 var(--print);color:var(--ink-soft);opacity:.85;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-right:44px}
+.admin .item .lstk{position:absolute;right:8px;top:10px;overflow:visible}
+.admin .item .lstk+.lstk{right:28px}
+.admin .item b{padding-right:44px}

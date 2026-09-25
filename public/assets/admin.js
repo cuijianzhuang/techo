@@ -31,17 +31,40 @@
   $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
 
-  /* ---------- list ---------- */
+  /* ---------- list: search, filter by status, grouped by month ---------- */
+  let listQuery='',listFilter='all';
+  const FILTERS=[['all','全部'],['draft','草稿'],['published','已发布']];
+  const plain=en=>[en.title,en.latin,en.aside,en.body,en.note,en.quote,en.date,en.date.replace(/-0?/g,'/')].join('\n').toLowerCase();
   function drawList(){
     list.textContent='';
     const nd=entries.filter(e=>e.status==='draft').length;
-    $('countLabel').textContent='已写的页 · '+entries.length+(nd?'（草稿 '+nd+'）':'');
-    T.sortEntries(entries).reverse().forEach(en=>{
+    $('countLabel').textContent='已写的页 · '+entries.length;
+    const fl=$('lfilter');fl.textContent='';
+    FILTERS.forEach(([k,label])=>{
+      const n=k==='all'?entries.length:k==='draft'?nd:entries.length-nd;
+      const b=el('button',null,label+' '+n);b.type='button';b.setAttribute('aria-pressed',listFilter===k?'true':'false');
+      b.onclick=()=>{listFilter=k;drawList();};
+      fl.appendChild(b);
+    });
+    const q=listQuery.trim().toLowerCase();
+    const shown=T.sortEntries(entries).reverse().filter(en=>
+      (listFilter==='all'||(listFilter==='draft')===(en.status==='draft'))&&(!q||plain(en).includes(q)));
+    if(!shown.length){
+      list.appendChild(el('div','lempty',entries.length?'没有找到。':'还没有写过。点上面「新写一页」开始。'));
+    }
+    let month='';
+    shown.forEach(en=>{
+      const d=T.parseDate(en.date),m=d?d.y+' 年 '+d.mo+' 月':'';
+      if(m!==month){month=m;list.appendChild(el('div','lmonth',m));}
       const it=el('button','item'+(en.status==='draft'?' draft':''));it.type='button';it.dataset.id=en.id;
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      it.append(t,el('span',null,en.date+(en.photoKey?' · 有照片':'')));
+      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':''));
+      const gist=String(en.body||'').replace(/\s+/g,' ').trim();
+      it.append(t,meta);
+      if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
+      (en.stickers||[]).slice(0,2).forEach(k=>{const g=T.stickerSvg(k,18);if(g){g.classList.add('lstk');it.appendChild(g);}});
       it.onclick=()=>select(en.id);
       list.appendChild(it);
     });
@@ -49,6 +72,7 @@
     $('settingsBtn').setAttribute('aria-current',sel==='settings'?'true':'false');
     $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
   }
+  $('q').addEventListener('input',e=>{listQuery=e.target.value;drawList();});
   $('newBtn').onclick=()=>select('new');
   $('jotsBtn').onclick=()=>select('jots');
   $('settingsBtn').onclick=()=>select('settings');
@@ -392,7 +416,7 @@
   (async()=>{
     try{
       const me=await api('/api/admin/me');
-      $('who').textContent='已登录 @'+me.login;$('logout').hidden=false;
+      $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
       entries=e.entries||[];settings=s.settings||{};
       drawList();drawForm();
