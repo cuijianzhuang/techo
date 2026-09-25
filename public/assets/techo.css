@@ -129,21 +129,22 @@ body{
 .bookwrap.closed-back:not(.portrait) #book{clip-path:inset(-40px 50% -40px -40px)}
 /* a closed book shows only its board: the paper under it would peek out round the board's corners and edge */
 .bookwrap.shut #book{visibility:hidden}
+/* only an open book's pages take clicks and drags (see pagesLive in book.js) */
+.bookwrap:not(.open) #book{pointer-events:none}
 
 /* ---------- hard covers: a 3D board with thickness ---------- */
 .leaf{position:absolute;top:0;left:50%;width:50%;height:100%;transform-origin:0 50%;transform-style:preserve-3d;
   z-index:30;cursor:grab;touch-action:pan-y;-webkit-user-select:none;user-select:none}
 .bookwrap.portrait .leaf{left:0;width:100%}
 .leaf:active{cursor:grabbing}
-/* Like a real hardcover the board overhangs the pages: 4px at the head, tail and fore-edge, 1px over the hinge.
-   Flush with the pages, the paper peeked out round the rounded corners (and as an antialiased line at the hinge)
-   whenever the board lay flat or nearly so. The overhang shows as cloth turned over the board's edge. */
+/* Like a real hardcover the board overhangs the pages: 4px at the head, tail and fore-edge, 1px over the hinge
+   (BOARD_X / BOARD_Y in book.js). Flush with the pages, the paper peeked out round the rounded corners (and as an
+   antialiased line at the hinge) whenever the board lay flat or nearly so. The artwork is stretched to the board
+   (--kx/--ky), so its own edge, corners and page-edge stripe sit on the board's real edge. */
 .leaf .face{position:absolute;inset:-4px -4px -4px -1px;background:#2b454b;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
 .leaf .face.front{transform:translateZ(3px);border-radius:3px 12px 12px 3px}
 .leaf .face.back{transform:rotateY(180deg) translateZ(3px);border-radius:12px 3px 3px 12px}
-.leaf .face>.page{position:absolute;left:1px;top:4px;transform-origin:0 0;transform:scale(var(--k,1))}
-/* the back face is mirrored: its local left is the fore-edge */
-.leaf .face.back>.page{left:4px}
+.leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
 .leaf .shade{position:absolute;inset:0;background:#0b0f10;opacity:0;pointer-events:none}
 .leaf .edge{position:absolute;top:0;height:100%;width:6px;left:calc(100% + 1px);transform:rotateY(90deg);
   background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 3px),linear-gradient(#2a4247,#1d3035);border-radius:2px}

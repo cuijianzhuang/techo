@@ -89,9 +89,24 @@
     if(!r||!r.pageWidth)return;
     const k=(r.pageWidth/530).toFixed(4);
     if(wrap.style.getPropertyValue('--k')!==k)wrap.style.setProperty('--k',k);
+    // the boards overhang the pages (see .leaf .face): their artwork is stretched a hair to fill them
+    wrap.style.setProperty('--kx',((r.pageWidth+BOARD_X)/530).toFixed(4));
+    wrap.style.setProperty('--ky',((r.height+BOARD_Y)/740).toFixed(4));
     // gentle perspective: the lifting board should not balloon over the page
     wrap.style.setProperty('--persp',Math.round(r.pageWidth*(landscape()?16:10))+'px');
     wrap.classList.toggle('portrait',!landscape());
+  }
+
+  // must match the insets on .leaf .face in book-extra.css
+  const BOARD_X=5,BOARD_Y=8;
+
+  /* the pages under a board must not react: StPageFlip listens on window, so its corner fold
+     showed through a closed or turning cover. Only the open book gets corners and drags. */
+  function pagesLive(on){
+    const s=pf.getSettings();
+    if(!on&&s.showPageCorners)pf.userMove({x:-1e5,y:-1e5},false);   // drop a corner that is already folded
+    s.showPageCorners=on;
+    wrap.classList.toggle('open',on);
   }
 
   /* ---------- cover state machine ---------- */
@@ -128,7 +143,7 @@
     wrap.classList.remove('closed-front','closed-back','shut');
     if(p===1){
       FL.leaf.hidden=BL.leaf.hidden=true;
-      mode='open';shiftEl.style.transform='translateX(0%)';
+      mode='open';pagesLive(true);shiftEl.style.transform='translateX(0%)';
       reveal(idx());
     }else{
       mode=which;L.leaf.hidden=false;
@@ -141,7 +156,7 @@
   function begin(which){
     const L=boardFor(which);
     (which==='front'?BL:FL).leaf.hidden=true;
-    L.leaf.hidden=false;mode='anim';
+    L.leaf.hidden=false;mode='anim';pagesLive(false);
     // keep the half the board swings away from hidden until the board has landed
     wrap.classList.remove('closed-front','closed-back','shut');
     wrap.classList.add(which==='front'?'closed-front':'closed-back');
