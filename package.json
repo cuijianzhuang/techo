@@ -1,0 +1,23 @@
+{
+  "name": "techo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init:local": "wrangler d1 execute techo-db --local --file=schema.sql",
+    "db:init:remote": "wrangler d1 execute techo-db --remote --file=schema.sql",
+    "typecheck": "tsc --noEmit",
+    "build:pages": "python3 src-build/build.py"
+  },
+  "dependencies": {
+    "hono": "^4.13.9",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.140.0"
+  }
+}

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuijianzhuang 手帐</title>
+<meta name="description" content="Cuijianzhuang 的手帐：写代码的人，也记日记。">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<link rel="stylesheet" href="/assets/techo.css">
+</head>
+<body>
+<!--SYMBOLS-->
+
+<main class="stage" id="stage" aria-label="手帐">
+  <div id="shift" class="shift">
+    <div id="book"></div>
+  </div>
+  <div class="loading" id="loading">正在翻开手帐……</div>
+  <div class="dragnote" id="dragnote" style="left:calc(75% + 8px);bottom:-4px">
+    <svg width="46" height="30" viewBox="0 0 46 30" aria-hidden="true"><path d="M44 26C30 26 14 20 4 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 16L3 5 13 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>// 拖动右下角翻开</span>
+  </div>
+</main>
+<button class="restart" id="restart" type="button" hidden>↺ 从头再看</button>
+
+<nav class="nav" id="nav" aria-label="翻页" hidden>
+  <button class="arrow" id="prev" type="button" aria-label="上一页">←</button>
+  <span id="dots" style="display:flex;gap:4px"></span>
+  <button class="arrow" id="next" type="button" aria-label="下一页">→</button>
+</nav>
+<div class="hint">拖动页角、点页面或按 ← → 翻页</div>
+
+<div id="static" aria-hidden="true">
+  <!-- front cover -->
+  <div class="page cover">
+    <div class="spine"></div>
+    <div class="pages-edge"></div>
+    <div class="deboss">cui<span>.</span>log</div>
+    <div class="sub">手帐 · <b>2026.09</b> → ∞<span class="cursor"></span></div>
+    <div class="sticker s-cloud"><svg width="96" height="60" viewBox="0 0 96 60" aria-hidden="true"><path d="M22 52C9 52 6 36 18 32 16 18 34 12 42 22 48 6 76 8 76 28 90 28 92 52 76 52Z" fill="#f38020"/><text x="48" y="44" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700" fill="#fff">edge</text></svg></div>
+    <div class="sticker s-nas"><svg width="70" height="82" viewBox="0 0 70 82" aria-hidden="true"><rect x="4" y="4" width="62" height="74" rx="8" fill="#3a3f42"/><rect x="12" y="14" width="21" height="50" rx="3" fill="#4d5458"/><rect x="37" y="14" width="21" height="50" rx="3" fill="#4d5458"/><g stroke="#2a2d2f" stroke-width="1.6"><path d="M16 22h13M16 27h13M16 32h13M41 22h13M41 27h13M41 32h13"/></g><circle cx="17" cy="70" r="2.4" fill="#b3c01c"/><circle cx="25" cy="70" r="2.4" fill="#b3c01c"/><circle cx="33" cy="70" r="2.4" fill="#f3a08a"/></svg></div>
+    <div class="sticker s-film"><div class="film"><i style="background:linear-gradient(180deg,#26324a,#e7a96b 80%)"></i><i style="background:linear-gradient(180deg,#a9cbd3 50%,#3f6f7c 51%)"></i><small>那年今日</small></div></div>
+    <div class="sticker s-ticket"><div class="ticket"><div class="tk">BOARDING · 2027.02<b>VIE → FCO</b>维也纳 · 罗马</div><div class="stub">SEAT 9A</div></div></div>
+    <div class="sticker s-mug"><svg width="112" height="112" aria-hidden="true"><use href="#mug"/></svg></div>
+  </div>
+  <!-- inside front cover (endpaper) -->
+  <div class="page inside l"></div>
+  <!-- flyleaf: README -->
+  <div class="page r flyleaf">
+    <div class="body">
+      <div class="readme">README.md</div>
+<pre><span class="p">$</span> whoami
+<span class="h">Cuijianzhuang</span>
+<span class="p">$</span> cat role
+Java 后端 · 保险业务系统
+<span class="p">$</span> ls ~/life
+nas/  photos/  trips/  notes/
+<span class="p">$</span> git log --since=2026-09 <span class="c"># 从这里开始记</span></pre>
+      <div class="sig"><svg width="52" height="52" aria-hidden="true"><use href="#mug"/></svg>小咖在旁边看着</div>
+    </div>
+  </div>
+<!--STATIC_PAGES-->
+  <!-- inside back cover -->
+  <div class="page inside r"></div>
+  <!-- back cover -->
+  <div class="page backcover">
+    <div class="spine"></div>
+    <div class="eof">EOF</div>
+    <div class="imprint">cui.log · build 2026.09.25<br>deployed on the edge</div>
+  </div>
+</div>
+
+<script src="/vendor/page-flip.browser.js"></script>
+<script src="/assets/render.js"></script>
+<!--INLINE_DATA-->
+<script src="/assets/book.js"></script>
+</body>
+</html>

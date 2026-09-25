@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "techo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    // only API and photos hit the Worker first; pages & scripts are served straight from the edge
+    "run_worker_first": ["/api/*", "/img/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "techo-db", "database_id": "09d467c6-98de-46e4-8eb3-db07c06c6f45" }
+  ],
+  "r2_buckets": [
+    { "binding": "PHOTOS", "bucket_name": "techo-photos" }
+  ],
+  "vars": {
+    // fill these after creating the Access application (see README)
+    "TEAM_DOMAIN": "https://YOUR-TEAM.cloudflareaccess.com",
+    "POLICY_AUD": ""
+  },
+  "observability": { "enabled": true }
+}

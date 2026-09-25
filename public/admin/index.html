@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手帐后台</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<link rel="stylesheet" href="/assets/techo.css">
+<link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body class="admin">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 小咖：original mascot, a little coffee mug -->
+    <symbol id="mug" viewBox="0 0 64 64">
+      <path d="M22 13c-3 -3 3 -5 0 -9M32 13c-3 -3 3 -5 0 -9" fill="none" stroke="#9aa7aa" stroke-width="2" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#2a2724" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#d9573b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M11 18h38v29c0 6-4 10-10 10H21c-6 0-10-4-10-10z" fill="#d9573b" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M11 18h38" stroke="#2a2724" stroke-width="2.2"/>
+      <ellipse cx="30" cy="18.5" rx="17" ry="2.4" fill="#5b3522"/>
+      <circle cx="23" cy="34" r="2.4" fill="#2a2724"/><circle cx="37" cy="34" r="2.4" fill="#2a2724"/>
+      <circle cx="23.8" cy="33.2" r=".8" fill="#fff"/><circle cx="37.8" cy="33.2" r=".8" fill="#fff"/>
+      <path d="M27.5 39q2.5 2.4 5 0" fill="none" stroke="#2a2724" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="18.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/><ellipse cx="41.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/>
+      <path d="M15 22v20" stroke="#ee8a70" stroke-width="2.4" stroke-linecap="round" opacity=".7"/>
+    </symbol>
+    <symbol id="mug-sleep" viewBox="0 0 64 64">
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#2a2724" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#d9573b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M11 18h38v29c0 6-4 10-10 10H21c-6 0-10-4-10-10z" fill="#d9573b" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+      <ellipse cx="30" cy="18.5" rx="17" ry="2.4" fill="#5b3522"/>
+      <path d="M20 34q3 2 6 0M34 34q3 2 6 0" fill="none" stroke="#2a2724" stroke-width="1.8" stroke-linecap="round"/>
+      <ellipse cx="18.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/><ellipse cx="41.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/>
+      <text x="44" y="12" font-family="Caveat,cursive" font-size="12" fill="#6a98a3">z z</text>
+    </symbol>
+  </defs>
+</svg>
+<header class="top">
+  <h1>手帐后台</h1>
+  <span class="who" id="who"></span>
+  <a class="home" href="/" target="_blank" rel="noopener">查看主页 ↗</a>
+</header>
+<div class="wrap" id="app">
+  <aside class="side">
+    <button class="item new" id="newBtn" type="button"><b>＋ 新写一页</b><span id="today"></span></button>
+    <div class="sect" id="countLabel">已写的页</div>
+    <div class="list" id="list"></div>
+    <div class="sect">设置</div>
+    <button class="item" id="settingsBtn" type="button"><b>联系方式</b><span>邮箱 · GitHub</span></button>
+  </aside>
+  <main class="main" id="main">
+    <div class="empty-state hand">正在加载……</div>
+  </main>
+</div>
+<div class="gate" id="gate" hidden>
+  <div class="gatebox">
+    <h2>需要登录</h2>
+    <p id="gateMsg">这个后台只对手帐主人开放，请先通过 Cloudflare Access 登录。</p>
+    <button class="b pri" type="button" onclick="location.reload()">重新登录</button>
+  </div>
+</div>
+<script src="/assets/render.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>

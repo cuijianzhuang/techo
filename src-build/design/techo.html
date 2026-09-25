@@ -1,0 +1,495 @@
+<title>Cuijianzhuang 手帐</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<style>
+:root{
+  --desk:#e8e6e1; --desk-ink:#6d6a63;
+  --paper:#fbf8ee; --paper-edge:#efe9d8; --grid:rgba(128,140,112,.17); --grid-strong:rgba(128,140,112,.3);
+  --ink:#2a2724; --ink-soft:#5a544c; --olive:#8a9a2b; --tab:#b3c01c;
+  --red:#d9573b; --red-deep:#b8432b; --teal:#6a98a3; --teal-deep:#3f6f7c; --kraft:#e4d2a3; --tape:rgba(236,214,150,.72);
+  --hand:"Long Cang","Ma Shan Zheng","Kaiti SC","STKaiti","KaiTi",cursive;
+  --title:"Ma Shan Zheng","Long Cang","Kaiti SC","STKaiti","KaiTi",cursive;
+  --latin:"Caveat","Segoe Print","Comic Sans MS",cursive;
+  --print:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--desk:#1e1f22;--desk-ink:#9c988f;color-scheme:dark}}
+:root[data-theme="dark"]{--desk:#1e1f22;--desk-ink:#9c988f;color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--desk);color:var(--ink);font-family:var(--print);padding-inline:16px;padding-block:20px 28px;box-sizing:border-box;overflow-x:hidden}
+.stage{margin:0 auto;position:relative}
+.book{transform-origin:0 0;position:absolute;left:0;top:0;width:1060px}
+
+/* ---------- spread & page ---------- */
+.spread{display:none;width:1060px;height:740px;position:relative;filter:drop-shadow(0 18px 28px rgba(40,34,20,.18)) drop-shadow(0 2px 3px rgba(40,34,20,.15))}
+.spread.on{display:flex;animation:turn .55s cubic-bezier(.2,.7,.2,1)}
+.spread.on.back{animation-name:turnback}
+@keyframes turn{from{transform:perspective(2000px) rotateY(-7deg) translateX(14px)}to{transform:none}}
+@keyframes turnback{from{transform:perspective(2000px) rotateY(7deg) translateX(-14px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.spread.on{animation:none}}
+
+.page{width:530px;height:740px;position:relative;background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:14px 14px;background-position:-1px 6px;overflow:hidden;box-sizing:border-box}
+.page.l{border-radius:6px 2px 2px 6px;box-shadow:inset -22px 0 26px -18px rgba(90,70,30,.22)}
+.page.r{border-radius:2px 6px 6px 2px;box-shadow:inset 22px 0 26px -18px rgba(90,70,30,.22)}
+.page::before{content:"";position:absolute;inset:0 0 auto 0;height:64px;background:var(--paper)}
+.page::after{content:"";position:absolute;inset:auto 0 0 0;height:78px;background:var(--paper);border-top:1px solid var(--grid-strong)}
+
+.head{position:absolute;top:18px;left:28px;right:28px;height:40px;display:flex;align-items:flex-end;gap:10px;z-index:2;border-bottom:1px solid var(--grid-strong);padding-bottom:6px}
+.head .m{font:500 11px/1 var(--print);color:var(--olive)}
+.head .d{font:400 30px/0.9 var(--print);color:var(--olive);letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.head .wd{display:grid;grid-template-rows:auto auto;border:1px solid var(--olive);border-radius:3px;text-align:center;overflow:hidden;margin-bottom:2px}
+.head .wd b{font:500 11px/1 var(--print);color:#fff;background:var(--olive);padding:2px 5px}
+.head .wd i{font:normal 500 8px/1 var(--print);color:var(--olive);padding:2px 4px;letter-spacing:.6px}
+.head .wd.we b{background:var(--red)} .head .wd.we{border-color:var(--red)} .head .wd.we i{color:var(--red)}
+.head .note{margin-left:auto;font:400 9px/1.3 var(--print);color:var(--desk-ink);opacity:.7;text-align:right;color:#a3a08f}
+
+.foot{position:absolute;left:28px;right:28px;bottom:14px;height:50px;z-index:2;font:400 11.5px/1.55 var(--print);color:var(--olive)}
+.foot small{display:block;font-size:9.5px;opacity:.85;margin-top:2px}
+.tab{position:absolute;right:0;top:330px;width:18px;height:36px;background:var(--tab);border-radius:3px 0 0 3px;z-index:3;color:#fff;font:500 12px/36px var(--print);text-align:center}
+.cal{position:absolute;right:28px;bottom:16px;z-index:3;display:grid;grid-template-columns:repeat(7,12px);gap:1px 2px;font:400 7px/10px var(--print);color:#a8a592;text-align:center;font-variant-numeric:tabular-nums}
+.cal .t{color:#fff;background:var(--red);border-radius:2px}
+.cal .h{color:var(--olive)}
+
+.body{position:absolute;top:70px;left:28px;right:28px;bottom:84px;z-index:1}
+
+/* ---------- handwriting ---------- */
+h2{font:400 46px/1.02 var(--title);margin:0;color:var(--ink);letter-spacing:1px;text-wrap:balance;text-shadow:1px 1px 0 rgba(255,255,255,.7)}
+.latin{font:600 21px/1.1 var(--latin);color:var(--ink-soft)}
+.hand{font:400 19px/1.45 var(--hand);color:var(--ink)}
+.hand.s{font-size:16.5px;line-height:1.4}
+.stamp{position:absolute;width:38px;height:38px;border:2px solid var(--red);border-radius:50%;color:var(--red);font:400 22px/34px var(--title);text-align:center;transform:rotate(-8deg);opacity:.85;box-shadow:inset 0 0 0 2px var(--paper),inset 0 0 0 3px rgba(217,87,59,.5)}
+.label{display:inline-block;background:var(--paper);border:1.5px solid var(--ink);padding:3px 8px 2px;font:400 16px/1.3 var(--hand);box-shadow:2px 2px 0 rgba(42,39,36,.12)}
+.tape{position:absolute;width:62px;height:18px;background:var(--tape);z-index:4;box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.photo{position:absolute;background:#fff;padding:7px 7px 24px;box-shadow:0 2px 5px rgba(40,30,10,.22)}
+.photo .img{width:100%;height:100%;display:block}
+.photo .cap{position:absolute;left:8px;right:8px;bottom:3px;font:400 13px/18px var(--hand);color:var(--ink-soft)}
+.check{list-style:none;padding:0;margin:0;display:grid;gap:2px}
+.check li{font:400 16.5px/1.45 var(--hand);display:flex;gap:7px;align-items:center}
+.check li::before{content:"";width:11px;height:11px;border:1.5px solid var(--red);flex:none;border-radius:1px}
+.check li.done::before{background:linear-gradient(45deg,transparent 42%,var(--red) 42% 58%,transparent 58%),linear-gradient(-45deg,transparent 42%,var(--red) 42% 58%,transparent 58%)}
+.wash{position:absolute;border-radius:50%;filter:blur(14px);opacity:.42;z-index:0}
+
+/* ---------- comic ---------- */
+.comic{position:absolute;top:66px;left:0;right:0;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:122px;gap:7px}
+.panel{border:2px solid var(--ink);background:var(--paper);position:relative;overflow:hidden;border-radius:1px}
+.panel .time{position:absolute;left:0;top:0;background:#f2e3b0;font:500 10px/1 var(--print);padding:4px 7px;border-right:1.5px solid var(--ink);border-bottom:1.5px solid var(--ink);letter-spacing:.4px}
+.bub{position:absolute;background:#fff;border:1.5px solid var(--ink);border-radius:14px;padding:3px 9px;font:400 14.5px/1.3 var(--hand);white-space:nowrap}
+.panel svg{position:absolute}
+
+/* ---------- controls ---------- */
+.nav{display:flex;align-items:center;justify-content:center;gap:6px;margin:14px auto 0;flex-wrap:wrap}
+.nav button{appearance:none;border:1px solid transparent;background:transparent;color:var(--desk-ink);font:500 13px/1 var(--print);padding:8px 12px;border-radius:999px;cursor:pointer;font-variant-numeric:tabular-nums}
+.nav button:hover{border-color:var(--desk-ink)}
+.nav button[aria-current="true"]{background:var(--tab);color:#2a2a10}
+.nav button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.nav .arrow{font-size:16px}
+.hint{text-align:center;color:var(--desk-ink);font:400 12px/1.5 var(--print);margin-top:6px;opacity:.8}
+
+.copy{appearance:none;border:1.5px solid var(--ink);background:var(--paper);font:400 15px/1 var(--hand);padding:5px 10px;cursor:pointer;border-radius:12px;color:var(--ink)}
+.copy:hover{background:#f2e3b0}
+.copy:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+a.ln{color:var(--teal-deep);text-decoration:underline;text-decoration-style:wavy;text-decoration-thickness:1px;text-underline-offset:4px}
+
+/* stack mode (phones) */
+.stack .spread{display:flex;flex-direction:column;height:auto;gap:18px;margin-bottom:18px;animation:none}
+.stack .page{border-radius:6px;box-shadow:0 10px 20px rgba(40,34,20,.14)}
+.stack .nav,.stack .hint{display:none}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 小咖：original mascot, a little coffee mug -->
+    <symbol id="mug" viewBox="0 0 64 64">
+      <path d="M22 13c-3 -3 3 -5 0 -9M32 13c-3 -3 3 -5 0 -9" fill="none" stroke="#9aa7aa" stroke-width="2" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#2a2724" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#d9573b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M11 18h38v29c0 6-4 10-10 10H21c-6 0-10-4-10-10z" fill="#d9573b" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M11 18h38" stroke="#2a2724" stroke-width="2.2"/>
+      <ellipse cx="30" cy="18.5" rx="17" ry="2.4" fill="#5b3522"/>
+      <circle cx="23" cy="34" r="2.4" fill="#2a2724"/><circle cx="37" cy="34" r="2.4" fill="#2a2724"/>
+      <circle cx="23.8" cy="33.2" r=".8" fill="#fff"/><circle cx="37.8" cy="33.2" r=".8" fill="#fff"/>
+      <path d="M27.5 39q2.5 2.4 5 0" fill="none" stroke="#2a2724" stroke-width="1.6" stroke-linecap="round"/>
+      <ellipse cx="18.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/><ellipse cx="41.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/>
+      <path d="M15 22v20" stroke="#ee8a70" stroke-width="2.4" stroke-linecap="round" opacity=".7"/>
+    </symbol>
+    <symbol id="mug-sleep" viewBox="0 0 64 64">
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#2a2724" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#d9573b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M11 18h38v29c0 6-4 10-10 10H21c-6 0-10-4-10-10z" fill="#d9573b" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+      <ellipse cx="30" cy="18.5" rx="17" ry="2.4" fill="#5b3522"/>
+      <path d="M20 34q3 2 6 0M34 34q3 2 6 0" fill="none" stroke="#2a2724" stroke-width="1.8" stroke-linecap="round"/>
+      <ellipse cx="18.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/><ellipse cx="41.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/>
+      <text x="44" y="12" font-family="Caveat,cursive" font-size="12" fill="#6a98a3">z z</text>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="stage" id="stage">
+<div class="book" id="book">
+
+<!-- ================= SPREAD 1 ================= -->
+<section class="spread on" data-label="9/25 – 26" aria-label="第一页：关于我 / 一天的工作">
+  <div class="page l">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">25</span><span class="wd"><b>五</b><i>FRI</i></span><span class="note">秋分后第二天<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">在代码和日子<br>之间</h2>
+      <div class="latin" style="position:absolute;top:60px;left:118px;transform:rotate(-3deg)">hello, I'm<br>Cuijianzhuang.</div>
+      <div class="stamp" style="top:0;right:4px">我</div>
+
+      <!-- desk illustration -->
+      <div style="position:absolute;top:128px;left:0;width:474px;height:250px">
+        <div class="wash" style="left:40px;top:40px;width:380px;height:190px;background:var(--teal)"></div>
+        <svg viewBox="0 0 474 250" width="474" height="250" style="position:absolute;inset:0">
+          <!-- lamp -->
+          <path d="M388 214V120l-34-36" fill="none" stroke="#2a2724" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M330 92l38-28 16 22-38 28z" fill="#f2e3b0" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+          <path d="M346 114L300 214h110z" fill="#f7d98a" opacity=".35"/>
+          <rect x="370" y="212" width="36" height="6" rx="2" fill="#2a2724"/>
+          <!-- monitor -->
+          <rect x="60" y="40" width="230" height="146" rx="6" fill="#2d3a3f" stroke="#2a2724" stroke-width="2.4"/>
+          <rect x="70" y="50" width="210" height="126" rx="2" fill="#1f292d"/>
+          <g font-family="ui-monospace,Menlo,monospace" font-size="10.5">
+            <text x="80" y="70" fill="#c9d77a">@Service</text>
+            <text x="80" y="86" fill="#e8e3d2">public class <tspan fill="#8fc3cf">PolicyService</tspan> {</text>
+            <text x="92" y="102" fill="#9aa7aa">// 承保前先查缓存</text>
+            <text x="92" y="118" fill="#e8e3d2">var r = <tspan fill="#8fc3cf">redis</tspan>.get(key);</text>
+            <text x="92" y="134" fill="#e8e3d2">if (r != null) return r;</text>
+            <text x="92" y="150" fill="#e8e3d2">…</text>
+            <text x="80" y="166" fill="#e8e3d2">}</text>
+          </g>
+          <path d="M160 186h30l6 24h-42z" fill="#8a8578" stroke="#2a2724" stroke-width="2"/>
+          <path d="M20 216h440" stroke="#2a2724" stroke-width="2.4" stroke-linecap="round"/>
+          <!-- keyboard -->
+          <rect x="110" y="204" width="140" height="10" rx="2" fill="#e8e3d2" stroke="#2a2724" stroke-width="1.8"/>
+          <!-- plant -->
+          <path d="M28 214h30l-4-26H32z" fill="#c98f5d" stroke="#2a2724" stroke-width="2"/>
+          <path d="M43 188c-2-20-14-26-18-30M43 188c0-18 8-30 16-34M43 188c-6-10-16-12-22-12" fill="none" stroke="#3f6f7c" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <svg width="74" height="74" style="position:absolute;left:292px;top:142px"><use href="#mug"/></svg>
+        <div class="tape" style="left:196px;top:-8px;transform:rotate(4deg)"></div>
+      </div>
+
+      <div class="label" style="position:absolute;top:118px;left:300px;transform:rotate(3deg)">这是小咖。它负责提神。</div>
+
+      <div class="hand" style="position:absolute;top:392px;left:0;right:0">
+        Java 后端工程师，做保险业务系统：承保规则、缓存、消息队列、报表导出，还有和外部平台的一堆接口。<br>
+        <span class="hand s" style="color:var(--ink-soft)">喜欢把复杂的事拆小，拆到能写进一页纸。所以有了这本手帐。</span>
+      </div>
+    </div>
+    <footer class="foot">吾生也有涯，而知也无涯。<small>—— 《庄子·养生主》</small></footer>
+  </div>
+
+  <div class="page r">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">26</span><span class="wd we"><b>六</b><i>SAT</i></span><span class="note">周末也会看一眼告警<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">一天的工作</h2>
+      <div class="latin" style="position:absolute;top:10px;left:250px;transform:rotate(-2deg);font-size:18px">one day,<br>start to finish.</div>
+      <div class="stamp" style="top:0;right:4px">工</div>
+
+      <div class="comic">
+        <div class="panel"><span class="time">09:10 · 站会</span>
+          <svg width="60" height="60" style="left:14px;bottom:4px"><use href="#mug"/></svg>
+          <div class="bub" style="left:84px;top:32px">今天修什么？</div>
+          <div class="bub" style="left:104px;top:72px;font-size:13px">先看昨天的单子。</div>
+        </div>
+        <div class="panel"><span class="time">10:30 · 承保规则</span>
+          <svg width="130" height="80" viewBox="0 0 130 80" style="left:12px;top:32px">
+            <rect x="4" y="4" width="84" height="70" fill="#fff" stroke="#2a2724" stroke-width="1.8"/>
+            <path d="M14 20h60M14 32h52M14 44h60M14 56h40" stroke="#9aa7aa" stroke-width="2"/>
+            <path d="M14 66h30" stroke="#d9573b" stroke-width="2.4"/>
+          </svg>
+          <svg width="54" height="54" style="right:12px;bottom:4px"><use href="#mug"/></svg>
+          <div class="bub" style="right:10px;top:26px;font-size:13.5px">又加了一条？</div>
+        </div>
+        <div class="panel"><span class="time">14:00 · Redis 集群</span>
+          <svg width="120" height="70" viewBox="0 0 120 70" style="left:14px;top:36px">
+            <path d="M6 64V6M6 64h108" stroke="#2a2724" stroke-width="1.6"/>
+            <path d="M8 50l18-6 18 4 18-20 18 2 18-18 14-4" fill="none" stroke="#3f6f7c" stroke-width="2.4" stroke-linejoin="round"/>
+            <circle cx="112" cy="8" r="3.4" fill="#d9573b"/>
+          </svg>
+          <div class="bub" style="right:10px;top:30px">命中率 98%</div>
+          <svg width="52" height="52" style="right:14px;bottom:2px"><use href="#mug"/></svg>
+        </div>
+        <div class="panel"><span class="time">16:20 · Kafka</span>
+          <div class="bub" style="left:12px;top:30px">消费延迟？</div>
+          <svg width="56" height="56" style="left:26px;bottom:2px"><use href="#mug"/></svg>
+          <svg width="90" height="80" viewBox="0 0 90 80" style="right:10px;top:34px">
+            <rect x="4" y="6" width="80" height="62" rx="3" fill="#1f292d" stroke="#2a2724" stroke-width="1.8"/>
+            <g font-family="ui-monospace,monospace" font-size="7.5" fill="#c9d77a"><text x="10" y="22">lag=0</text><text x="10" y="34">lag=0</text><text x="10" y="46" fill="#f3a08a">lag=1203</text><text x="10" y="58">…</text></g>
+          </svg>
+          <div class="bub" style="left:92px;top:74px;font-size:13px">……先看日志</div>
+        </div>
+        <div class="panel"><span class="time">19:00 · 发布</span>
+          <div class="bub" style="left:12px;top:30px">中间件重启中</div>
+          <svg width="150" height="20" viewBox="0 0 150 20" style="left:14px;top:70px">
+            <rect x="1" y="3" width="146" height="14" rx="7" fill="#fff" stroke="#2a2724" stroke-width="1.6"/>
+            <rect x="4" y="6" width="104" height="8" rx="4" fill="var(--tab)"/>
+          </svg>
+          <svg width="54" height="54" style="right:12px;bottom:4px"><use href="#mug"/></svg>
+        </div>
+        <div class="panel" style="background:#2d3a3f"><span class="time">23:40 · 收工</span>
+          <svg width="30" height="30" viewBox="0 0 30 30" style="right:18px;top:12px"><path d="M20 4a11 11 0 1 0 6 18A9 9 0 0 1 20 4z" fill="#f2e3b0"/></svg>
+          <svg width="4" height="4" style="left:120px;top:30px"><circle cx="2" cy="2" r="1.5" fill="#f2e3b0"/></svg>
+          <svg width="4" height="4" style="left:150px;top:52px"><circle cx="2" cy="2" r="1.2" fill="#f2e3b0"/></svg>
+          <svg width="56" height="56" style="left:16px;bottom:4px"><use href="#mug-sleep"/></svg>
+          <div class="bub" style="left:84px;top:66px">今天没有告警。</div>
+        </div>
+      </div>
+
+      <div style="position:absolute;left:0;right:0;top:474px">
+        <div style="font:400 30px/1 var(--title)">以及，每天都在学</div>
+        <div class="hand s" style="color:var(--ink-soft);margin-top:4px">这页纸是认真写的，就像那些没人会看到的代码注释。</div>
+      </div>
+    </div>
+    <div class="tab">9</div>
+    <footer class="foot">业精于勤，荒于嬉。<small>—— 韩愈《进学解》</small></footer>
+  </div>
+</section>
+
+<!-- ================= SPREAD 2 ================= -->
+<section class="spread" data-label="9/27 – 28" aria-label="第二页：那年今日 / 家里的机房">
+  <div class="page l">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">27</span><span class="wd we"><b>日</b><i>SUN</i></span><span class="note">翻旧照片的一天<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">那年今日</h2>
+      <div class="latin" style="position:absolute;top:12px;left:210px;transform:rotate(-3deg)">on this day,<br>some years ago.</div>
+      <div class="stamp" style="top:0;right:4px">忆</div>
+
+      <div class="hand" style="position:absolute;top:66px;left:0;width:250px">
+        自己写的一个小应用。<br>每天打开，看看往年的今天拍了什么。
+      </div>
+      <div class="hand s" style="position:absolute;top:150px;left:0;width:230px;color:var(--ink-soft)">
+        照片放在家里的 NAS 上，按日期建索引，按年份叠起来。有的一年一张都没有，那也是一种记录。
+      </div>
+
+      <div class="photo" style="left:262px;top:60px;width:186px;height:150px;transform:rotate(4deg)">
+        <div class="img" style="background:linear-gradient(180deg,#26324a 0%,#3b4a6b 45%,#e7a96b 78%,#f4d59a 100%);position:relative">
+          <div style="position:absolute;left:0;right:0;bottom:0;height:34%;background:linear-gradient(180deg,#34403f,#1f2826)"></div>
+          <div style="position:absolute;left:58%;top:30%;width:14px;height:14px;border-radius:50%;background:#fbe7b5;box-shadow:0 0 14px #fbe7b5"></div>
+        </div>
+        <span class="cap">2021 · 回家路上</span>
+      </div>
+      <div class="tape" style="left:320px;top:52px;transform:rotate(-6deg)"></div>
+
+      <div class="photo" style="left:40px;top:250px;width:210px;height:140px;transform:rotate(-3deg)">
+        <div class="img" style="background:linear-gradient(180deg,#a9cbd3 0%,#cfe2e2 50%,#6a98a3 51%,#3f6f7c 100%);position:relative">
+          <svg viewBox="0 0 200 110" style="position:absolute;inset:0;width:100%;height:100%"><path d="M120 56l10-30 14 30z" fill="#fff" stroke="#2a2724" stroke-width="1.2"/><path d="M114 58h36l-6 6h-26z" fill="#d9573b"/></svg>
+        </div>
+        <span class="cap">2023 · 海边，风很大</span>
+      </div>
+      <div class="tape" style="left:118px;top:240px;transform:rotate(5deg)"></div>
+      <svg width="58" height="58" style="position:absolute;left:224px;top:342px"><use href="#mug"/></svg>
+
+      <div style="position:absolute;left:290px;top:262px;width:190px">
+        <div style="font:500 12px/1.4 var(--print);letter-spacing:1px;margin-bottom:4px">还在做的：</div>
+        <ul class="check">
+          <li class="done">照片按日期索引</li>
+          <li class="done">同一天按年份叠放</li>
+          <li>更好看的时间轴</li>
+          <li>给每张照片写一句话</li>
+        </ul>
+      </div>
+      <div class="hand s" style="position:absolute;left:0;top:436px;right:0;color:var(--ink-soft)">也许哪天会开源。先让它每天都能打开。</div>
+    </div>
+    <footer class="foot">人生到处知何似，应似飞鸿踏雪泥。<small>—— 苏轼《和子由渑池怀旧》</small></footer>
+  </div>
+
+  <div class="page r">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">28</span><span class="wd"><b>一</b><i>MON</i></span><span class="note">风扇一直在转<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">家里的机房</h2>
+      <div class="latin" style="position:absolute;top:12px;left:240px;transform:rotate(-2deg)">a tiny server<br>under the desk.</div>
+      <div class="stamp" style="top:0;right:4px">家</div>
+
+      <div style="position:absolute;top:80px;left:0;width:474px;height:290px">
+        <div class="wash" style="left:60px;top:80px;width:320px;height:180px;background:var(--teal)"></div>
+        <svg viewBox="0 0 474 290" width="474" height="290" style="position:absolute;inset:0">
+          <!-- cloud -->
+          <path d="M318 70c-4-26 30-36 42-16 8-20 44-16 44 8 22-2 28 30 6 34H322c-20 0-22-26-4-26z" fill="#fff" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+          <text x="340" y="88" font-family="Caveat,cursive" font-size="17" fill="#3f6f7c">tunnel</text>
+          <!-- dashed link -->
+          <path d="M250 150C290 140 320 120 350 100" fill="none" stroke="#3f6f7c" stroke-width="2" stroke-dasharray="5 6" stroke-linecap="round"/>
+          <!-- NAS -->
+          <rect x="110" y="110" width="140" height="160" rx="10" fill="#3a3f42" stroke="#2a2724" stroke-width="2.4"/>
+          <rect x="126" y="130" width="50" height="118" rx="4" fill="#4a5054" stroke="#2a2724" stroke-width="1.6"/>
+          <rect x="184" y="130" width="50" height="118" rx="4" fill="#4a5054" stroke="#2a2724" stroke-width="1.6"/>
+          <path d="M136 146h30M136 154h30M136 162h30M194 146h30M194 154h30M194 162h30" stroke="#2a2724" stroke-width="1.4"/>
+          <circle cx="140" cy="236" r="3" fill="#b3c01c"/><circle cx="198" cy="236" r="3" fill="#b3c01c"/><circle cx="220" cy="236" r="3" fill="#f3a08a"/>
+          <path d="M60 272h320" stroke="#2a2724" stroke-width="2.4" stroke-linecap="round"/>
+          <!-- router -->
+          <rect x="280" y="236" width="80" height="30" rx="5" fill="#e8e3d2" stroke="#2a2724" stroke-width="2"/>
+          <path d="M296 236l-6-26M344 236l6-26" stroke="#2a2724" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="296" cy="252" r="2.4" fill="#b3c01c"/><circle cx="308" cy="252" r="2.4" fill="#b3c01c"/>
+          <path d="M250 250h30" stroke="#2a2724" stroke-width="1.8"/>
+        </svg>
+        <svg width="72" height="72" style="position:absolute;left:144px;top:46px"><use href="#mug"/></svg>
+        <div class="bub" style="left:14px;top:40px;font-size:15px">我坐这儿，暖和。</div>
+      </div>
+
+      <div style="position:absolute;top:392px;left:0;right:0;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="hand s">一台 NAS：照片、备份，还有几个自己跑的小服务。</div>
+        <div class="hand s">外面接一层 Cloudflare，出门在外也能打开。</div>
+        <div class="hand s" style="grid-column:1/-1;color:var(--ink-soft)">最常做的事：半夜排查它为什么又连不上。<br>最满足的事：排查完，它又亮起三盏绿灯。</div>
+      </div>
+    </div>
+    <div class="tab">9</div>
+    <footer class="foot">行到水穷处，坐看云起时。<small>—— 王维《终南别业》</small></footer>
+  </div>
+</section>
+
+<!-- ================= SPREAD 3 ================= -->
+<section class="spread" data-label="9/29 – 30" aria-label="第三页：下一站 / 写信给我">
+  <div class="page l">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">29</span><span class="wd"><b>二</b><i>TUE</i></span><span class="note">还有四个多月<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">下一站</h2>
+      <div class="latin" style="position:absolute;top:12px;left:180px;transform:rotate(-2deg)">Vienna → Rome,<br>by land, in winter.</div>
+      <div class="stamp" style="top:0;right:4px">旅</div>
+
+      <div style="position:absolute;top:70px;left:0;width:474px;height:330px">
+        <div class="wash" style="left:20px;top:30px;width:200px;height:120px;background:#9fbfa0"></div>
+        <div class="wash" style="left:210px;top:150px;width:240px;height:160px;background:var(--teal)"></div>
+        <svg viewBox="0 0 474 330" width="474" height="330" style="position:absolute;inset:0">
+          <path d="M340 52C300 90 230 96 214 150S150 214 176 250 250 280 300 300" fill="none" stroke="#d9573b" stroke-width="2.4" stroke-dasharray="2 7" stroke-linecap="round"/>
+          <g font-family="Caveat,cursive" font-size="21" fill="#2a2724">
+            <circle cx="340" cy="52" r="6" fill="#d9573b" stroke="#2a2724" stroke-width="1.6"/><text x="354" y="58">Vienna</text>
+            <circle cx="216" cy="146" r="6" fill="#fbf8ee" stroke="#2a2724" stroke-width="1.6"/><text x="232" y="152">Ljubljana</text>
+            <circle cx="176" cy="248" r="6" fill="#fbf8ee" stroke="#2a2724" stroke-width="1.6"/><text x="70" y="254">Venice</text>
+            <circle cx="300" cy="300" r="6" fill="#d9573b" stroke="#2a2724" stroke-width="1.6"/><text x="314" y="306">Rome</text>
+          </g>
+          <!-- gondola-ish boat near venice -->
+          <path d="M92 280q30 10 60 0" fill="none" stroke="#2a2724" stroke-width="2" stroke-linecap="round"/>
+          <!-- snowflakes -->
+          <g stroke="#6a98a3" stroke-width="1.4" stroke-linecap="round"><path d="M420 120v12M414 126h12M416 122l8 8M424 122l-8 8"/><path d="M60 110v10M55 115h10"/></g>
+        </svg>
+        <svg width="62" height="62" style="position:absolute;left:296px;top:190px;transform:rotate(-6deg)"><use href="#mug"/></svg>
+      </div>
+
+      <!-- ticket -->
+      <div style="position:absolute;left:0;top:404px;width:180px;height:66px;background:#f2e3b0;border:1.5px solid var(--ink);transform:rotate(-2deg);display:flex">
+        <div style="flex:1;padding:6px 10px;font:500 10px/1.5 var(--print);letter-spacing:.5px">ADMIT ONE · 2027<br><span style="font:400 22px/1.1 var(--title)">二月 · 冬天</span></div>
+        <div style="width:30px;border-left:1.5px dashed var(--ink);writing-mode:vertical-rl;font:500 9px/30px var(--print);text-align:center;letter-spacing:2px">NO.0226</div>
+      </div>
+      <div class="hand s" style="position:absolute;left:204px;top:398px;right:0">维也纳 → 卢布尔雅那 → 威尼斯 → 罗马。<br><span style="color:var(--ink-soft)">一路往南，看冬天慢慢变暖。</span></div>
+    </div>
+    <footer class="foot">长风破浪会有时，直挂云帆济沧海。<small>—— 李白《行路难·其一》</small></footer>
+  </div>
+
+  <div class="page r">
+    <header class="head"><span class="m">9月<br>Sept.</span><span class="d">30</span><span class="wd"><b>三</b><i>WED</i></span><span class="note">月末<br>2026</span></header>
+    <div class="body">
+      <h2 style="margin-top:6px">写信给我</h2>
+      <div class="latin" style="position:absolute;top:12px;left:230px;transform:rotate(-2deg)">say hi,<br>I read everything.</div>
+      <div class="stamp" style="top:0;right:4px">信</div>
+
+      <!-- envelope -->
+      <div style="position:absolute;top:84px;left:20px;width:420px;height:210px;transform:rotate(-1.5deg)">
+        <svg viewBox="0 0 420 210" width="420" height="210" style="position:absolute;inset:0">
+          <rect x="2" y="2" width="416" height="206" rx="4" fill="#fffdf6" stroke="#2a2724" stroke-width="2"/>
+          <path d="M2 2l208 110L418 2" fill="none" stroke="#2a2724" stroke-width="1.6" opacity=".35"/>
+          <g stroke-width="5"><path d="M2 2h416" stroke="#d9573b" stroke-dasharray="14 10"/><path d="M2 208h416" stroke="#3f6f7c" stroke-dasharray="14 10"/></g>
+          <rect x="336" y="18" width="60" height="70" fill="#f2e3b0" stroke="#2a2724" stroke-width="1.6" stroke-dasharray="3 3"/>
+        </svg>
+        <svg width="52" height="52" style="position:absolute;left:340px;top:24px"><use href="#mug"/></svg>
+        <div style="position:absolute;left:28px;top:112px;right:28px">
+          <div style="font:500 11px/1 var(--print);letter-spacing:1.4px;color:var(--ink-soft);margin-bottom:6px">EMAIL</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span id="mail" style="font:600 25px/1.2 var(--latin);user-select:all">hello@example.com</span>
+            <button class="copy" id="copyBtn" type="button">复制</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="position:absolute;top:320px;left:0;right:0;display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:baseline">
+        <span style="font:500 11px/1.4 var(--print);letter-spacing:1.2px;color:var(--ink-soft)">GITHUB</span>
+        <a class="ln hand s" href="https://github.com/" target="_blank" rel="noopener">github.com/你的用户名</a>
+        <span style="font:500 11px/1.4 var(--print);letter-spacing:1.2px;color:var(--ink-soft)">常聊的</span>
+        <span class="hand s">Java 后端 · 缓存与消息队列 · 家用服务器 · 旅行路线</span>
+      </div>
+
+      <div style="position:absolute;left:0;right:0;top:420px">
+        <div style="font:400 30px/1 var(--title)">这本手帐会一直写下去</div>
+        <div class="hand s" style="color:var(--ink-soft);margin-top:4px">下个月的页面，还空着。</div>
+      </div>
+    </div>
+    <div class="tab">9</div>
+    <footer class="foot" style="right:130px">此中有真意，欲辨已忘言。<small>—— 陶渊明《饮酒·其五》</small></footer>
+    <div class="cal" id="cal" aria-hidden="true"></div>
+  </div>
+</section>
+
+</div>
+</div>
+
+<nav class="nav" id="nav" aria-label="翻页">
+  <button class="arrow" id="prev" type="button" aria-label="上一页">←</button>
+  <span id="dots" style="display:flex;gap:4px"></span>
+  <button class="arrow" id="next" type="button" aria-label="下一页">→</button>
+</nav>
+<div class="hint" id="hint">点页角或用 ← → 翻页</div>
+
+<script>
+(function(){
+  const book=document.getElementById('book'),stage=document.getElementById('stage');
+  const spreads=[...book.querySelectorAll('.spread')];
+  const dots=document.getElementById('dots');
+  let cur=0;
+  spreads.forEach((s,i)=>{const b=document.createElement('button');b.type='button';b.textContent=s.dataset.label;b.onclick=()=>go(i);dots.appendChild(b);});
+  function go(i){
+    if(i<0||i>=spreads.length||i===cur)return;
+    const back=i<cur;
+    spreads[cur].classList.remove('on','back');
+    cur=i;
+    const s=spreads[cur];void s.offsetWidth;
+    s.classList.toggle('back',back);s.classList.add('on');
+    sync();
+  }
+  function sync(){[...dots.children].forEach((b,i)=>b.setAttribute('aria-current',i===cur?'true':'false'));
+    document.getElementById('prev').disabled=cur===0;document.getElementById('next').disabled=cur===spreads.length-1;}
+  document.getElementById('prev').onclick=()=>go(cur-1);
+  document.getElementById('next').onclick=()=>go(cur+1);
+  document.addEventListener('keydown',e=>{if(document.body.classList.contains('stack'))return;if(e.key==='ArrowRight')go(cur+1);if(e.key==='ArrowLeft')go(cur-1);});
+  book.addEventListener('click',e=>{
+    if(document.body.classList.contains('stack')||e.target.closest('button,a,#mail'))return;
+    const r=book.getBoundingClientRect(),x=(e.clientX-r.left)/r.width;
+    if(x>0.8)go(cur+1);else if(x<0.2)go(cur-1);
+  });
+
+  function fit(){
+    const W=Math.min(document.documentElement.clientWidth-32,1200);
+    const stack=W<700;
+    document.body.classList.toggle('stack',stack);
+    if(stack){
+      book.style.width='530px';
+      const s=W/530;book.style.transform=`scale(${s})`;
+      stage.style.width=W+'px';stage.style.height=(book.offsetHeight*s)+'px';
+    }else{
+      book.style.width='1060px';
+      const H=window.innerHeight-130;
+      const s=Math.min(W/1060,H/740,1.15);
+      book.style.transform=`scale(${s})`;
+      stage.style.width=(1060*s)+'px';stage.style.height=(740*s)+'px';
+    }
+  }
+  window.addEventListener('resize',fit);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);
+  fit();sync();
+
+  // mini calendar, September 2026 (1st is a Tuesday)
+  const cal=document.getElementById('cal');
+  '一二三四五六日'.split('').forEach(d=>{const e=document.createElement('span');e.className='h';e.textContent=d;cal.appendChild(e);});
+  for(let i=0;i<1;i++)cal.appendChild(document.createElement('span'));
+  for(let d=1;d<=30;d++){const e=document.createElement('span');e.textContent=d;if(d===25)e.className='t';cal.appendChild(e);}
+
+  const btn=document.getElementById('copyBtn'),mail=document.getElementById('mail');
+  btn.addEventListener('click',()=>{
+    const t=mail.textContent.trim();
+    const done=()=>{btn.textContent='已复制';setTimeout(()=>btn.textContent='复制',1600);};
+    try{navigator.clipboard.writeText(t).then(done,()=>{sel();});}catch(e){sel();}
+    function sel(){const r=document.createRange();r.selectNodeContents(mail);const s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='已选中，按 Ctrl+C';}
+  });
+})();
+</script>

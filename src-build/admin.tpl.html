@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手帐后台</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<link rel="stylesheet" href="/assets/techo.css">
+<link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body class="admin">
+<!--SYMBOLS-->
+<header class="top">
+  <h1>手帐后台</h1>
+  <span class="who" id="who"></span>
+  <a class="home" href="/" target="_blank" rel="noopener">查看主页 ↗</a>
+</header>
+<div class="wrap" id="app">
+  <aside class="side">
+    <button class="item new" id="newBtn" type="button"><b>＋ 新写一页</b><span id="today"></span></button>
+    <div class="sect" id="countLabel">已写的页</div>
+    <div class="list" id="list"></div>
+    <div class="sect">设置</div>
+    <button class="item" id="settingsBtn" type="button"><b>联系方式</b><span>邮箱 · GitHub</span></button>
+  </aside>
+  <main class="main" id="main">
+    <div class="empty-state hand">正在加载……</div>
+  </main>
+</div>
+<div class="gate" id="gate" hidden>
+  <div class="gatebox">
+    <h2>需要登录</h2>
+    <p id="gateMsg">这个后台只对手帐主人开放，请先通过 Cloudflare Access 登录。</p>
+    <button class="b pri" type="button" onclick="location.reload()">重新登录</button>
+  </div>
+</div>
+<script src="/assets/render.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>
