@@ -130,7 +130,7 @@
     }
     f.appendChild(el('h2',null,sel==='new'?'新的一页':draft.status==='draft'?'草稿':'编辑这一页'));
     if(draft.status==='draft')f.appendChild(el('div','hintx','这一页还是草稿，主页上看不到。看过没问题就点「发布这一页」。'));
-    const r1=el('div','row');r1.append(field('日期','date','date'),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
+    const r1=el('div','row');r1.append(dateField(),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
     const r2=el('div','row');r2.append(field('标题（手写大字）','title','text',{ph:'今天的标题',max:30,hint:'8 个字以内最好看'}),field('英文小注','latin','text',{ph:'a small note in English',max:60}));
     f.append(r1,r2,field('正文','body','textarea',{rows:10,max:4000,hint:'空一行分段。没有照片时大约 250 字写满一页，再多字会自动缩小。'}));
     f.appendChild(photoField());
@@ -163,6 +163,80 @@
     pv.append(pvbox,el('div','pvcap','预览 · 保存后会按日期排进手帐'));
     main.append(f,pv);drawPreview();
     if(sel==='new')setTimeout(()=>{const t=$('f-title');if(t)t.focus();},0);
+  }
+
+  /* ---------- date: a paper calendar instead of the browser's picker ---------- */
+  const WD='日一二三四五六',MOE=['Jan.','Feb.','Mar.','Apr.','May','Jun.','Jul.','Aug.','Sept.','Oct.','Nov.','Dec.'];
+  const iso=d=>d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+  const utc=s=>{const d=T.parseDate(s);return d?new Date(Date.UTC(d.y,d.mo-1,d.d)):null;};
+  function dateField(){
+    const wrap=el('div','datef');
+    const lab=el('label');lab.append('日期');
+    const btn=el('button','dbtn');btn.type='button';btn.id='f-date';
+    btn.setAttribute('aria-haspopup','dialog');btn.setAttribute('aria-expanded','false');
+    lab.appendChild(btn);wrap.appendChild(lab);
+    const show=()=>{
+      const d=T.parseDate(draft.date);btn.textContent='';
+      if(!d){btn.appendChild(el('b',null,'选一天'));}
+      else btn.append(el('b',null,draft.date.replace(/-/g,'.')),el('span','dwd'+(d.wd===0||d.wd===6?' we':''),'周'+WD[d.wd]));
+      btn.appendChild(el('i','dico'));
+    };
+    show();
+    let pop=null,focus=null;   // focus: the UTC date the keyboard is on
+    const outside=e=>{if(!wrap.contains(e.target))close();};
+    function close(back){
+      if(!pop)return;pop.remove();pop=null;btn.setAttribute('aria-expanded','false');
+      document.removeEventListener('pointerdown',outside,true);
+      if(back)btn.focus();
+    }
+    function pick(d){draft.date=iso(d);show();changed();close(true);}
+    function render(){
+      pop.textContent='';
+      const y=focus.getUTCFullYear(),mo=focus.getUTCMonth();
+      const head=el('div','dhead');
+      const t=el('div','dtitle');t.append(el('b',null,String(mo+1)),el('span',null,'月'),el('i',null,MOE[mo]+' '+y));
+      t.id='dtitle';
+      const nav=(txt,label,dm)=>{const b=el('button','dnav',txt);b.type='button';b.setAttribute('aria-label',label);b.onclick=()=>{focus=new Date(Date.UTC(y,mo+dm,1));render();};return b;};
+      head.append(nav('‹','上个月',-1),t,nav('›','下个月',1));
+      const grid=el('div','dgrid');grid.setAttribute('role','grid');grid.setAttribute('aria-labelledby','dtitle');
+      '一二三四五六日'.split('').forEach((c,i)=>grid.appendChild(el('span','h'+(i>4?' we':''),c)));
+      const first=new Date(Date.UTC(y,mo,1)),start=new Date(first-((first.getUTCDay()+6)%7)*864e5);
+      const sel=draft.date,today=T.todayStr(),fk=iso(focus);
+      for(let i=0;i<42;i++){
+        const d=new Date(+start+i*864e5),k=iso(d),wd=d.getUTCDay();
+        const b=el('button','dday'+(d.getUTCMonth()!==mo?' out':'')+(wd===0||wd===6?' we':'')+(k===today?' today':''),String(d.getUTCDate()));
+        b.type='button';b.tabIndex=k===fk?0:-1;b.dataset.k=k;
+        b.setAttribute('aria-label',d.getUTCFullYear()+'年'+(d.getUTCMonth()+1)+'月'+d.getUTCDate()+'日 周'+WD[wd]+(k===today?'（今天）':''));
+        b.setAttribute('aria-pressed',k===sel?'true':'false');
+        b.onclick=()=>pick(d);
+        grid.appendChild(b);
+      }
+      grid.addEventListener('keydown',e=>{
+        const step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[e.key];
+        if(step){e.preventDefault();focus=new Date(+focus+step*864e5);}
+        else if(e.key==='PageUp'||e.key==='PageDown'){e.preventDefault();focus=new Date(Date.UTC(focus.getUTCFullYear(),focus.getUTCMonth()+(e.key==='PageUp'?-1:1),Math.min(focus.getUTCDate(),28)));}
+        else if(e.key==='Home'||e.key==='End'){e.preventDefault();focus=new Date(+focus+((e.key==='Home'?0:6)-(focus.getUTCDay()+6)%7)*864e5);}
+        else return;
+        if(focus.getUTCMonth()!==mo||focus.getUTCFullYear()!==y)render();
+        else grid.querySelectorAll('.dday').forEach(b=>b.tabIndex=b.dataset.k===iso(focus)?0:-1);
+        const f=pop.querySelector('.dday[tabindex="0"]');if(f)f.focus();
+      });
+      const foot=el('div','dfoot');
+      const tb=el('button','dlink','回到今天');tb.type='button';tb.onclick=()=>pick(utc(today));
+      const cb=el('button','dlink quiet','关闭');cb.type='button';cb.onclick=()=>close(true);
+      foot.append(tb,cb);
+      pop.append(head,grid,foot);
+    }
+    function open(){
+      focus=utc(draft.date)||utc(T.todayStr());
+      pop=el('div','dpop');pop.setAttribute('role','dialog');pop.setAttribute('aria-label','选择日期');
+      pop.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(true);}});
+      wrap.appendChild(pop);render();btn.setAttribute('aria-expanded','true');
+      document.addEventListener('pointerdown',outside,true);
+      const f=pop.querySelector('.dday[tabindex="0"]');if(f)f.focus();
+    }
+    btn.onclick=()=>pop?close():open();
+    return wrap;
   }
 
   /* ---------- doodles ---------- */
