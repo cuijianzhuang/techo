@@ -12,7 +12,7 @@
 | API | Worker + [Hono](https://hono.dev)（`src/index.ts`） |
 | 数据 | D1：`techo-db`（日记页、随手记、联系方式） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取 |
-| 后台登录 | Cloudflare Access（只放行你的邮箱），Worker 里再用 `jose` 校验 Access JWT |
+| 后台登录 | 密码（Worker 密钥 `ADMIN_PASSWORD`）→ 签名的 HttpOnly Cookie，30 天有效；登录限流每 IP 每分钟 5 次 |
 | 部署 | GitHub Actions（`.github/workflows/deploy.yml`）：push 到 main → 类型检查 → `wrangler deploy` |
 | 写草稿 | Claude API（`@anthropic-ai/sdk`，`src/compose.ts`），模型 `claude-opus-5` |
 
@@ -55,37 +55,23 @@ wrangler.jsonc       Worker 配置（D1 / R2 已填好 ID）
 
 > 不要再在 Cloudflare 里连接 Workers Builds，否则每次 push 会部署两遍。
 
-### 3. 绑定域名
+### 3. 设置后台密码
 
-Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custom domain**，例如 `techo.你的域名`。
+至少 12 位，只存在 Cloudflare 上，不进仓库：
 
-### 4. 用 Cloudflare Access 保护后台
-
-Zero Trust → **Access** → **Applications** → **Add an application** → **Self-hosted**：
-
-- Application domain 加两条：
-  - `techo.你的域名` / 路径 `admin`
-  - `techo.你的域名` / 路径 `api/admin`
-- Policy：Action **Allow**，Include → **Emails** → 你的邮箱
-- 保存后，在应用详情里复制 **Application Audience (AUD) Tag**
-- 团队域名在 Zero Trust 的 **Settings** 里（Team domain，形如 `https://xxx.cloudflareaccess.com`）
-
-把这两个值填进 `wrangler.jsonc`：
-
-```jsonc
-"vars": {
-  "TEAM_DOMAIN": "https://xxx.cloudflareaccess.com",
-  "POLICY_AUD": "上一步复制的 AUD Tag"
-}
+```bash
+npx wrangler secret put ADMIN_PASSWORD
 ```
 
-commit 并 push，等自动部署完成。
+改密码也是这条命令，改完所有已登录的设备都会退出。
 
-> 变量要写在 `wrangler.jsonc` 里：每次 `wrangler deploy` 都会用配置文件覆盖控制台里手动设置的变量。
+### 4. 绑定域名（可选）
+
+Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custom domain**，例如 `techo.你的域名`。不绑也能用 `techo.<你的子域>.workers.dev`。
 
 ### 5. 开始写
 
-打开 `https://techo.你的域名/admin/`，用邮箱验证码登录，点「新写一页」。保存后刷新主页就能看到。
+主页底部点「✎ 写一页」（或直接打开 `/admin/`），输入密码，点「新写一页」。保存后刷新主页就能看到。
 
 ## 小插画
 
@@ -110,14 +96,15 @@ commit 并 push，等自动部署完成。
 ## 安全说明
 
 - 主页、`/api/entries`、`/api/settings`、`/img/*` 是公开只读的。
-- 所有写操作都在 `/api/admin/*`，Worker 会校验 Access JWT（签名、issuer、AUD）。就算有人绕过 Access 直接访问 `*.workers.dev`，没有有效凭证也只会得到 401。
+- 所有写操作都在 `/api/admin/*`，要带登录后的 Cookie。Cookie 是 `过期时间.HMAC`，用 `ADMIN_PASSWORD` 签名，HttpOnly + Secure + SameSite=Strict；没有或被改过都只会得到 401。
+- `/api/login` 按 IP 限流（每分钟 5 次），密码比较不泄露时间差。密码请用长一点的随机串，交给密码管理器记。
 - 想彻底关掉 workers.dev 地址：在 `wrangler.jsonc` 加 `"workers_dev": false`。
 
 ## 本地开发
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars     # 本地跳过 Access（只对 localhost 生效）
+cp .dev.vars.example .dev.vars     # 本地跳过登录（只对 localhost 生效）
 npm run db:init:local
 npm run dev                        # http://localhost:8787 ，后台 http://localhost:8787/admin/
 ```
@@ -135,7 +122,9 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | GET | `/api/entries` | 已发布的日记页（按日期） |
 | GET | `/api/settings` | 联系方式 |
 | GET | `/img/p/<uuid>.<ext>` | 照片 |
-| GET | `/api/admin/me` | 当前登录邮箱 |
+| POST | `/api/login` | 用密码登录（`{"password": "..."}`），成功后下发 Cookie |
+| GET | `/api/admin/me` | 是否已登录 |
+| POST | `/api/admin/logout` | 退出 |
 | GET | `/api/admin/entries` | 所有页，含草稿 |
 | POST | `/api/admin/entries` | 新建一页（JSON；`stickers` 数组、`status` 默认 `published`） |
 | PUT | `/api/admin/entries/:id` | 整页覆盖更新（换照片时自动删旧图） |

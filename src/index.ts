@@ -1,16 +1,16 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { ComposeError, composePage } from "./compose";
 
 type Env = {
   DB: D1Database;
   PHOTOS: R2Bucket;
   ASSETS: Fetcher;
-  /** https://<team>.cloudflareaccess.com */
-  TEAM_DOMAIN: string;
-  /** Access application AUD tag */
-  POLICY_AUD: string;
+  /** secret: `wrangler secret put ADMIN_PASSWORD`; also signs the session cookie, so changing it logs everyone out */
+  ADMIN_PASSWORD?: string;
+  /** wrangler.jsonc ratelimits: login attempts per IP */
+  LOGIN_LIMITER?: RateLimit;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
   /** secret: `wrangler secret put ANTHROPIC_API_KEY`; without it the Claude features are off */
@@ -18,10 +18,9 @@ type Env = {
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
 };
-type Vars = { email: string };
-type C = Context<{ Bindings: Env; Variables: Vars }>;
+type C = Context<{ Bindings: Env }>;
 
-const app = new Hono<{ Bindings: Env; Variables: Vars }>();
+const app = new Hono<{ Bindings: Env }>();
 
 /* ---------------- entries: validation & mapping ---------------- */
 
@@ -94,7 +93,7 @@ function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: fal
   };
 }
 
-const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 500, error: string) => c.json({ error }, status);
+const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 429 | 500, error: string) => c.json({ error }, status);
 
 /* ---------------- public API ---------------- */
 
@@ -127,39 +126,73 @@ app.get("/img/:dir/:name", async (c) => {
   return new Response(obj.body, { headers: h });
 });
 
-/* ---------------- admin: Cloudflare Access ---------------- */
+/* ---------------- admin: password login ---------------- */
 
-const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+const SESSION_COOKIE = "techo_session";
+const SESSION_DAYS = 30;
+const MIN_PASSWORD = 12;
+const enc = new TextEncoder();
 
-async function requireAccess(c: C, next: Next) {
-  const url = new URL(c.req.url);
-  if (c.env.DEV_BYPASS_AUTH === "1" && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
-    c.set("email", "dev@localhost");
-    return next();
-  }
-  const team = (c.env.TEAM_DOMAIN || "").replace(/\/+$/, "");
-  if (!team || !c.env.POLICY_AUD) return bad(c, 500, "Worker 未配置 TEAM_DOMAIN / POLICY_AUD");
-  const token =
-    c.req.header("cf-access-jwt-assertion") ||
-    (c.req.header("cookie") || "").match(/(?:^|;\s*)CF_Authorization=([^;]+)/)?.[1];
-  if (!token) return bad(c, 401, "需要先通过 Cloudflare Access 登录");
-  let jwks = jwksCache.get(team);
-  if (!jwks) {
-    jwks = createRemoteJWKSet(new URL(`${team}/cdn-cgi/access/certs`));
-    jwksCache.set(team, jwks);
-  }
-  try {
-    const { payload } = await jwtVerify(token, jwks, { issuer: team, audience: c.env.POLICY_AUD });
-    c.set("email", String(payload.email || ""));
-  } catch {
-    return bad(c, 403, "登录凭证无效或已过期，请刷新页面重新登录");
-  }
+async function hmac(secret: string, msg: string): Promise<ArrayBuffer> {
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", key, enc.encode(msg));
+}
+const b64url = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const sameBytes = (a: ArrayBuffer, b: ArrayBuffer) => a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+
+function passwordProblem(env: Env): string | null {
+  if (!env.ADMIN_PASSWORD) return "Worker 未配置 ADMIN_PASSWORD（运行 npx wrangler secret put ADMIN_PASSWORD）";
+  if ([...env.ADMIN_PASSWORD].length < MIN_PASSWORD) return `ADMIN_PASSWORD 太短，至少 ${MIN_PASSWORD} 位`;
+  return null;
+}
+
+/** "<expiry ms>.<hmac>" — no server-side state to keep */
+async function makeSession(pw: string): Promise<string> {
+  const exp = String(Date.now() + SESSION_DAYS * 86_400_000);
+  return `${exp}.${b64url(await hmac(pw, "session:" + exp))}`;
+}
+async function validSession(pw: string, token: string | undefined): Promise<boolean> {
+  const m = /^(\d{13,})\.([\w-]+)$/.exec(token || "");
+  if (!m || Number(m[1]) < Date.now()) return false;
+  const want = b64url(await hmac(pw, "session:" + m[1]));
+  return sameBytes(enc.encode(want).buffer as ArrayBuffer, enc.encode(m[2]).buffer as ArrayBuffer);
+}
+const isLocal = (c: C) => ["localhost", "127.0.0.1"].includes(new URL(c.req.url).hostname);
+
+async function requireLogin(c: C, next: Next) {
+  if (c.env.DEV_BYPASS_AUTH === "1" && isLocal(c)) return next();
+  const problem = passwordProblem(c.env);
+  if (problem) return bad(c, 500, problem);
+  if (!(await validSession(c.env.ADMIN_PASSWORD!, getCookie(c, SESSION_COOKIE)))) return bad(c, 401, "请先登录");
   return next();
 }
 
-app.use("/api/admin/*", requireAccess);
+app.post("/api/login", async (c) => {
+  const problem = passwordProblem(c.env);
+  if (problem) return bad(c, 500, problem);
+  if (c.env.LOGIN_LIMITER) {
+    const { success } = await c.env.LOGIN_LIMITER.limit({ key: c.req.header("cf-connecting-ip") || "unknown" });
+    if (!success) return bad(c, 429, "试得太频繁了，一分钟后再试");
+  }
+  const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const given = typeof o?.password === "string" ? o.password : "";
+  const pw = c.env.ADMIN_PASSWORD!;
+  // compare MACs, not the strings, so timing says nothing about the password
+  if (!sameBytes(await hmac(pw, "pw:" + given), await hmac(pw, "pw:" + pw))) return bad(c, 401, "密码不对");
+  setCookie(c, SESSION_COOKIE, await makeSession(pw), {
+    httpOnly: true, secure: !isLocal(c), sameSite: "Strict", path: "/", maxAge: SESSION_DAYS * 86_400,
+  });
+  return c.json({ ok: true });
+});
 
-app.get("/api/admin/me", (c) => c.json({ email: c.get("email") }));
+app.use("/api/admin/*", requireLogin);
+
+app.get("/api/admin/me", (c) => c.json({ ok: true }));
+
+app.post("/api/admin/logout", (c) => {
+  deleteCookie(c, SESSION_COOKIE, { path: "/", secure: !isLocal(c) });
+  return c.json({ ok: true });
+});
 
 /* drafts included */
 app.get("/api/admin/entries", async (c) => {

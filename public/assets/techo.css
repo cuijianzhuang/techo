@@ -216,6 +216,10 @@ body{
 .dragnote[hidden]{display:none}
 .restart{display:block;margin:10px auto 0;appearance:none;border:0;background:transparent;color:var(--desk-ink);font:400 13px/1 var(--print);cursor:pointer;padding:8px 12px}
 .restart:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:6px}
+/* the owner's way into /admin/ — quiet, the admin has its own password */
+.adminlink{position:relative;z-index:2;display:table;margin:10px auto 0;padding:6px 12px;border-radius:999px;color:var(--desk-ink);font:400 12px/1 var(--print);text-decoration:none;opacity:.55;transition:opacity .2s}
+.adminlink:hover{opacity:1;text-decoration:underline;text-underline-offset:3px}
+.adminlink:focus-visible{opacity:1;outline:2px solid var(--red);outline-offset:2px}
 
 /* ================= nav ================= */
 .stage{z-index:1}

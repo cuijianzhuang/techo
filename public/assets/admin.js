@@ -16,11 +16,22 @@
   async function api(path,opt){
     const r=await fetch(path,Object.assign({credentials:'same-origin',headers:{accept:'application/json'}},opt||{}));
     let body=null;try{body=await r.json();}catch(e){}
-    if(r.status===401||r.status===403){gate(body&&body.error);throw new Error((body&&body.error)||'需要登录');}
+    if(r.status===401){gate();throw new Error('需要登录');}
     if(!r.ok)throw new Error((body&&body.error)||('请求失败（'+r.status+'）'));
     return body;
   }
-  function gate(msg){$('gate').hidden=false;if(msg)$('gateMsg').textContent=msg;}
+  function gate(){$('gate').hidden=false;$('logout').hidden=true;setTimeout(()=>$('pw').focus(),0);}
+  $('loginForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const btn=e.target.querySelector('button');btn.disabled=true;$('gateMsg').textContent='正在登录……';
+    try{
+      const r=await fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({password:$('pw').value})});
+      let b=null;try{b=await r.json();}catch(_){}
+      if(!r.ok)throw new Error((b&&b.error)||'登录失败（'+r.status+'）');
+      location.reload();
+    }catch(err){$('gateMsg').textContent=err.message;$('pw').select();btn.disabled=false;}
+  });
+  $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
 
   /* ---------- list ---------- */
@@ -309,8 +320,8 @@
   /* ---------- boot ---------- */
   (async()=>{
     try{
-      const me=await api('/api/admin/me');
-      $('who').textContent=me.email?('已登录：'+me.email):'';
+      await api('/api/admin/me');
+      $('who').textContent='已登录';$('logout').hidden=false;
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
       entries=e.entries||[];settings=s.settings||{};
       drawList();drawForm();

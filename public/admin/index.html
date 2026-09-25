@@ -44,6 +44,7 @@
   <h1>手帐后台</h1>
   <span class="who" id="who"></span>
   <a class="home" href="/" target="_blank" rel="noopener">查看主页 ↗</a>
+  <button class="b small logout" id="logout" type="button" hidden>退出</button>
 </header>
 <div class="wrap" id="app">
   <aside class="side">
@@ -59,11 +60,13 @@
   </main>
 </div>
 <div class="gate" id="gate" hidden>
-  <div class="gatebox">
-    <h2>需要登录</h2>
-    <p id="gateMsg">这个后台只对手帐主人开放，请先通过 Cloudflare Access 登录。</p>
-    <button class="b pri" type="button" onclick="location.reload()">重新登录</button>
-  </div>
+  <form class="gatebox" id="loginForm">
+    <h2>登录</h2>
+    <p id="gateMsg">这个后台只对手帐主人开放。</p>
+    <input type="text" name="username" value="techo" autocomplete="username" hidden>
+    <label>密码<input type="password" id="pw" autocomplete="current-password" required></label>
+    <button class="b pri" type="submit">进去</button>
+  </form>
 </div>
 <script src="/assets/render.js"></script>
 <script src="/assets/admin.js"></script>

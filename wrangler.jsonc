@@ -16,10 +16,11 @@
   "r2_buckets": [
     { "binding": "PHOTOS", "bucket_name": "techo-photos" }
   ],
+  // admin password: `npx wrangler secret put ADMIN_PASSWORD` (not in this file)
+  "ratelimits": [
+    { "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } }
+  ],
   "vars": {
-    // fill these after creating the Access application (see README)
-    "TEAM_DOMAIN": "https://YOUR-TEAM.cloudflareaccess.com",
-    "POLICY_AUD": "",
     // the journal's days follow this zone (nightly draft, "today")
     "TIMEZONE": "Asia/Shanghai"
   },
