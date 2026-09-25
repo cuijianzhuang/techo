@@ -116,7 +116,8 @@
     // shadow thrown on the page the board is lifting from / landing on
     under.r.style.opacity=under.l.style.opacity='0';
     const us=land&&which==='back'?under.l:under.r;
-    us.style.opacity=(0.9*lift*(land?1:0.6)).toFixed(3);
+    // darkest while the board is still close over the page, gone once it lies open
+    us.style.opacity=(0.9*(1-p)*(land?1:0.6)).toFixed(3);
     // slide the whole book so whatever lies on the desk stays centred
     const shift=land?(which==='front'?-25*(1-p):25*(1-p)):0;
     shiftEl.style.transform='translateX('+shift.toFixed(3)+'%)';
