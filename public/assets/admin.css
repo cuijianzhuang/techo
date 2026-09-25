@@ -1,4 +1,5 @@
-body.admin{padding:0;min-height:100%;background:var(--desk);color:var(--ink)}
+/* the admin is paper-and-ink: keep the light desk even in dark mode (the book's dark desk has no light ink to go with it) */
+body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-height:100%;background:var(--desk);color:var(--ink)}
 .admin .top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-block:18px 12px;padding-inline:20px;border-bottom:1px solid rgba(120,110,90,.2)}
 .admin .top h1{margin:0;font:400 30px/1 var(--title)}
 .admin .who{font:400 12.5px/1 var(--print);color:var(--desk-ink)}

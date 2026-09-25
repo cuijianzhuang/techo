@@ -43,6 +43,10 @@ body{
 .undershade.l{left:0;background:linear-gradient(270deg,rgba(25,18,6,.55),rgba(25,18,6,.12) 55%,rgba(25,18,6,0))}
 .bookwrap.portrait .undershade{left:0;width:100%}
 
+/* StPageFlip's flip shadows are huge rotated boxes, only clip-path'ed down to the book. Their full boxes still
+   count as page overflow, so mid-turn the document grew and the scrollbar came and went: the book shook sideways.
+   Nothing is meant to show outside the block anyway (the canvas renderer draws inside the same rect). */
+.stf__block{overflow:hidden;overflow:clip}
 /* every page the flip library handles */
 .pf{overflow:hidden;background:var(--paper)}
 .pf>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--k,1));will-change:transform;backface-visibility:hidden}
