@@ -528,7 +528,7 @@
   }
 
   /* ---------- 时间线: the book's own table of contents, the pages after the flyleaf ----------
-     Every dated page in the book (the samples and the diary pages), newest first, a month at a time; a line
+     Every diary page in the book (not the hand-made samples), newest first, a month at a time; a line
      per day that opens the book there (#YYYY-MM-DD, which both books follow). As many pages as it takes,
      always a spread's worth (a left page, then a right one), so the days after it keep their sides. The
      diary pages as cards, with their words and photos, are on the timeline page (/timeline/, timeline.js). */
@@ -673,13 +673,15 @@
     // (a spread holds two days: the label's on the left, the next on the right)
     const sampleDate=(l,plus)=>{const m=/^(\d+)\/(\d+)$/.exec(l||'');if(!m)return null;
       const t=new Date(Date.UTC(2026,+m[1]-1,+m[2]+plus));return t.toISOString().slice(0,10);};
-    if(showSamples)days.forEach((p,i)=>p!==contact&&push(p,{label:i%2===0?p.dataset.label:null,date:p===contact?null:sampleDate(days[i-i%2].dataset.label,i%2)}));
+    // sample: the hand-made pages. They keep dates (the calendar shows them) but aren't on the 时间线, and a
+    // day that also has a diary page opens the diary page
+    if(showSamples)days.forEach((p,i)=>p!==contact&&push(p,{label:i%2===0?p.dataset.label:null,date:p===contact?null:sampleDate(days[i-i%2].dataset.label,i%2),sample:true}));
     sortEntries(entries).forEach(en=>{
       const side=leftNext()?'l':'r',d=parseDate(en.date);
       push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null});
     });
     // the timeline, after the flyleaf: its pages come in pairs, so every page after it keeps its side
-    const dated=pages.slice(tlAt).map((p,i)=>p.date&&{date:p.date,order:i,locked:p.node.classList.contains('locked'),
+    const dated=pages.slice(tlAt).map((p,i)=>p.date&&!p.sample&&{date:p.date,order:i,locked:p.node.classList.contains('locked'),
       title:p.node.classList.contains('locked')?'上了锁的一页':((p.node.querySelector('h2')||{}).textContent||'（无题）').replace(/\s+/g,'')}).filter(Boolean);
     if(dated.length){
       const tl=timelinePages(dated).map((node,k)=>({node,label:k===0?'时间线':null}));
