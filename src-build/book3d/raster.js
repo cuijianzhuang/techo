@@ -126,6 +126,43 @@ function written(root) {
   }
 }
 
+/* What the live page inherits from the document around it (body's font and colour, the language, the
+   theme): in the SVG image nothing is around it, so hand these to the wrapper instead. */
+function context(node) {
+  const cs = getComputedStyle(node.parentElement || document.body);
+  const keep = ['font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'color', 'letter-spacing', 'text-rendering', '-webkit-font-smoothing'];
+  const style = keep.map((k) => { const v = cs.getPropertyValue(k); return v ? `${k}:${v.replace(/"/g, "'")};` : ''; }).join('');
+  const lang = (node.closest('[lang]') || document.documentElement).getAttribute('lang') || '';
+  const theme = document.documentElement.getAttribute('data-theme') || '';
+  return { style, lang, theme };
+}
+
+/* The page as an SVG image `scale` times its size. The scaling is a CSS transform on the page itself, not the
+   SVG's viewBox: Safari leaves <foreignObject> HTML at 1× under a viewBox, so a 2× canvas showed the page
+   shrunk into its top-left quarter. A transform only changes painting, so the layout is the live page's. */
+function svgFor(html, style, ctx, scale) {
+  const w = PAGE_W * scale, h = PAGE_H * scale;
+  const inner = scale === 1 ? '' : `transform:scale(${scale});transform-origin:0 0;`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"${ctx.theme ? ` data-theme="${ctx.theme}"` : ''}>` +
+    `<foreignObject x="0" y="0" width="${w}" height="${h}">` +
+    `<div xmlns="http://www.w3.org/1999/xhtml"${ctx.lang ? ` lang="${ctx.lang}"` : ''} style="width:${PAGE_W}px;height:${PAGE_H}px;overflow:hidden;${inner}${ctx.style}">${style}${html}</div>` +
+    `</foreignObject></svg>`;
+}
+async function draw(svg) {
+  const img = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+  // Safari lays out an SVG image's web fonts a moment after it reports loaded: give it a beat
+  await new Promise((r) => setTimeout(r, 30));
+  return img;
+}
+/* did the page reach the far corner? A page is opaque paper all over, so a clear pixel well inside its
+   bottom-right quarter means the browser painted it smaller than asked. */
+function filled(canvas) {
+  try {
+    const a = canvas.getContext('2d').getImageData(Math.round(canvas.width * 0.8), Math.round(canvas.height * 0.8), 1, 1).data[3];
+    return a > 0;
+  } catch { return true; }   // can't read it back: trust it
+}
+
 /* Render `node` into a canvas `scale` times its 530×740 size; complete: as it looks fully written. */
 export async function rasterize(node, scale = 2, complete = false) {
   const [css, fonts] = await Promise.all([bookCSS(), fontCSSFor(node)]);
@@ -138,17 +175,16 @@ export async function rasterize(node, scale = 2, complete = false) {
   await inlineImages(clone);
   const html = new XMLSerializer().serializeToString(clone);
   const style = new XMLSerializer().serializeToString(Object.assign(document.createElement('style'), { textContent: fonts + '\n' + css }));
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${PAGE_W * scale}" height="${PAGE_H * scale}" viewBox="0 0 ${PAGE_W} ${PAGE_H}">` +
-    `<foreignObject x="0" y="0" width="${PAGE_W}" height="${PAGE_H}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${PAGE_W}px;height:${PAGE_H}px;overflow:hidden">${style}${html}</div>` +
-    `</foreignObject></svg>`;
-  const img = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
-  // Safari lays out an SVG image's web fonts a moment after it reports loaded: give it a beat
-  await new Promise((r) => setTimeout(r, 30));
+  const ctx = context(node);
   const canvas = document.createElement('canvas');
   canvas.width = PAGE_W * scale;
   canvas.height = PAGE_H * scale;
-  canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+  const g = canvas.getContext('2d');
+  g.drawImage(await draw(svgFor(html, style, ctx, scale)), 0, 0, canvas.width, canvas.height);
+  if (scale !== 1 && !filled(canvas)) {
+    // the transform wasn't honoured either: draw it at its own size and stretch it (softer, but whole)
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(await draw(svgFor(html, style, ctx, 1)), 0, 0, canvas.width, canvas.height);
+  }
   return canvas;
 }
