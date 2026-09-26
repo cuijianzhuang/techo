@@ -40,9 +40,10 @@ body{
 .leaf .face{position:absolute;inset:-4px -4px -4px -1px;background:#2b454b;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
 /* faces 5px apart = the board's thickness (--bt). Corners only just rounded, like a real board, so the square-ended
    edge strips below meet them cleanly. */
-.leaf{--bt:5px}
-.leaf .face.front{transform:translateZ(calc(var(--bt) / 2));border-radius:2px 4px 4px 2px}
-.leaf .face.back{transform:rotateY(180deg) translateZ(calc(var(--bt) / 2));border-radius:4px 2px 2px 4px}
+.leaf{--bt:5px;--br:5px}
+.leaf .face{border-radius:var(--br)}
+.leaf .face.front{transform:translateZ(calc(var(--bt) / 2))}
+.leaf .face.back{transform:rotateY(180deg) translateZ(calc(var(--bt) / 2))}
 .leaf .face>.page.cover,.leaf .face>.page.backcover{border-radius:0}
 .leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
 .leaf .shade{position:absolute;inset:0;background:#0b0f10;opacity:0;pointer-events:none}
@@ -52,8 +53,9 @@ body{
    (the overhang), so the strips are placed on those lines. */
 .leaf .edge{position:absolute;pointer-events:none;
   background:repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),linear-gradient(#34525a,#284047)}
-.leaf .edge.fore{top:-4px;height:calc(100% + 8px);width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
-.leaf .edge.head,.leaf .edge.tail{left:-1px;width:calc(100% + 5px);height:calc(var(--bt) + 1px);transform:rotateX(90deg);
+/* each strip stops where the corners start to round (--br), so its square end never pokes out past a corner */
+.leaf .edge.fore{top:calc(-4px + var(--br));height:calc(100% + 8px - 2 * var(--br));width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
+.leaf .edge.head,.leaf .edge.tail{left:calc(-1px + var(--br));width:calc(100% + 5px - 2 * var(--br));height:calc(var(--bt) + 1px);transform:rotateX(90deg);
   background:linear-gradient(90deg,#2a434a,#34525a)}   /* no weave here: seen edge-on it turned into a dashed line */
 .leaf .edge.head{top:calc(-4px - (var(--bt) + 1px) / 2)}
 .leaf .edge.tail{top:calc(100% + 4px - (var(--bt) + 1px) / 2)}
@@ -99,6 +101,10 @@ body{
     linear-gradient(rgba(40,32,16,.28),rgba(40,32,16,0) 14px,rgba(40,32,16,0) calc(100% - 14px),rgba(40,32,16,.3)),
     repeating-linear-gradient(90deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px);
   box-shadow:inset 0 1px 0 rgba(40,32,16,.25),inset 0 -1px 0 rgba(40,32,16,.25),-1px 0 0 rgba(0,0,0,.18)}
+/* ...but only while the book lies shut. Once the cover moves, the real pages show and the painted block would
+   ride along on the board's edge; the cover then opens as a bare board, like the back cover does. */
+.leaf .pages-edge{transition:opacity .2s ease}
+.bookwrap:not(.shut) .leaf .pages-edge{opacity:0}
 /* debossed title */
 .cover .deboss{position:absolute;left:104px;top:92px;font:600 58px/1 var(--mono);letter-spacing:-1px;color:#24393f;
   text-shadow:0 1px 0 rgba(255,255,255,.13),0 -1px 0 rgba(0,0,0,.35)}
