@@ -56,11 +56,17 @@
   const KEYS='techo-keys';
   function keys(){try{return JSON.parse(sessionStorage.getItem(KEYS)||'{}')||{};}catch(e){return {};}}
   function setKeys(k){try{if(Object.keys(k).length)sessionStorage.setItem(KEYS,JSON.stringify(k));else sessionStorage.removeItem(KEYS);}catch(e){}}
-  function dateHead(dt,aside){
+  // the note in the head's corner: the page's aside, where it was written and the weather, the year
+  function dateHead(dt,aside,en){
     const h=el('header','head');
     const m=el('span','m');m.append(dt.mo+'月',el('br'),MOE[dt.mo-1]);
     const wd=el('span','wd'+(dt.wd===0||dt.wd===6?' we':''));wd.append(el('b',null,WD[dt.wd]),el('i',null,WDE[dt.wd]));
-    const note=el('span','note');note.append(aside||'',el('br'),String(dt.y));
+    const note=el('span','note');
+    const pw=en?[en.place,en.weather].filter(Boolean).join(' · '):'';
+    [aside,pw].filter(Boolean).forEach(t=>note.append(t,el('br')));
+    if(!aside&&!pw)note.appendChild(el('br'));
+    note.append(String(dt.y));
+    if(en&&en.geo){const [la,lo]=en.geo.split(',').map(Number);note.title=Math.abs(la)+'°'+(la<0?'S':'N')+' '+Math.abs(lo)+'°'+(lo<0?'W':'E');}
     h.append(m,el('span','d',String(dt.d)),wd,note);
     return h;
   }
@@ -123,28 +129,132 @@
   /* lock again: forget this tab's keys */
   function relock(){setKeys({});history.replaceState(null,'',location.pathname+location.search);location.reload();}
 
+  /* a page's photos: [{key, cap, url}] (url: a photo still being uploaded in the admin); older pages have
+     just photoKey / photoCap */
+  function photosOf(en){
+    if(Array.isArray(en.photos)&&en.photos.length)return en.photos.filter(ph=>ph&&(ph.key||ph.url)).slice(0,3);
+    return en.photoKey||en.photoUrl?[{key:en.photoKey,cap:en.photoCap,url:en.photoUrl}]:[];
+  }
+
+  /* ---------- the words of a page: Markdown, set in the journal's hand ----------
+     Blocks: # / ## / ### headings, - lists, 1. lists, - [ ] / - [x] checklists (ticked in red), > quotes (a
+     slip of paper taped on), ``` code ```, --- a dashed rule, and paragraphs (a line break stays a line
+     break, as in a diary). Inline: **bold**, *italic*, ~~struck~~, `code`, [text](https://…) and ==marked==.
+     One addition from the sample pages: @09:10 站会：今天修什么？ #laptop lines make a comic strip (the time and
+     what, a speech bubble, up to two doodles). Built from text nodes only: nothing written is read as HTML,
+     and links go to http(s) addresses only. Each block is written in by the pen on its own (prepDraw). */
+  const INLINE=[
+    ['code',/`([^`\n]+)`/],
+    ['link',/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/],
+    ['strong',/\*\*([^*\n]+?)\*\*|__([^_\n]+?)__/],
+    ['del',/~~([^~\n]+?)~~/],
+    ['hl',/==([^=\n]+?)==/],
+    ['em',/\*([^*\n]+?)\*/],
+  ];
+  function inline(text,into){
+    text=String(text);
+    while(text){
+      let best=null;
+      for(const [kind,re] of INLINE){const m=re.exec(text);if(m&&(!best||m.index<best.m.index))best={kind,m};}
+      if(!best){into.append(text);break;}
+      const {kind,m}=best;
+      if(m.index)into.append(text.slice(0,m.index));
+      const inner=m[1]!=null?m[1]:m[2];
+      if(kind==='code')into.appendChild(el('code','jc',inner));
+      else if(kind==='link'){const a=el('a','ln');a.href=m[2];a.target='_blank';a.rel='noopener noreferrer';into.appendChild(inline(inner,a));}
+      else into.appendChild(inline(inner,el(kind==='hl'?'span':kind,kind==='hl'?'hl':null)));
+      text=text.slice(m.index+m[0].length);
+    }
+    return into;
+  }
+  /* the words without their marks, for a line of them somewhere else (the timeline page) */
+  function plainText(md){
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
+  }
+  function panel(time,rest){
+    // "站会：今天修什么？ #laptop" → what "站会", said "今天修什么？", doodle laptop
+    const doodles=[];
+    rest=rest.replace(/[#＃]([a-z]+)/g,(m,k)=>{if(STICKERS[k]&&doodles.length<2){doodles.push(k);return '';}return m;}).trim();
+    const m=/^([^：:]{1,12})[：:]\s*(.*)$/.exec(rest);
+    const what=m?m[1].trim():'',said=m?m[2].trim():rest;
+    const box=el('div','panel'+(doodles.length?' drawn':''));
+    box.appendChild(el('span','time',time.replace('：',':')+(what?' · '+what:'')));
+    doodles.forEach(k=>box.appendChild(stickerSvg(k,doodles.length>1?40:50)));
+    if(said)box.appendChild(inline(said,el('div','bub')));
+    return box;
+  }
+  const BLOCKS=[
+    ['fence',/^\s*```/],
+    ['h',/^\s*(#{1,3})\s+(.+)$/],
+    ['hr',/^\s*([-*_])(\s*\1){2,}\s*$/],
+    ['check',/^\s*(?:[-*+]\s+)?\[( |x|X|✓|√)\]\s+(.*)$/],
+    ['ul',/^\s*[-*+•]\s+(.*)$/],
+    ['ol',/^\s*(\d{1,3})[.)、]\s+(.*)$/],
+    ['quote',/^\s*[>＞]\s?(.*)$/],
+    ['panel',/^\s*[@＠](\d{1,2}[:：]\d{2})\s*(.*)$/],
+  ];
+  function bodyBlocks(body,into){
+    const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
+    let run=null;                              // the block lines are going into: {kind, node}
+    const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i];
+      if(!line.trim()){run=null;continue;}     // an empty line ends whatever block this was
+      let kind='p',m=null;
+      for(const [k,re] of BLOCKS){m=re.exec(line);if(m){kind=k;break;}}
+      if(kind==='fence'){
+        const code=[];
+        while(++i<lines.length&&!/^\s*```/.test(lines[i]))code.push(lines[i]);
+        const pre=open('code',el('pre','jcode'));pre.appendChild(el('code',null,code.join('\n')));run=null;continue;
+      }
+      if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
+      if(kind==='hr'){open('hr',el('div','jhr'));run=null;continue;}
+      if(!run||run.kind!==kind){
+        const node=kind==='check'?el('ul','check'):kind==='ul'?el('ul','jul'):kind==='ol'?el('ol','jol'):
+          kind==='quote'?el('div','label jnote'):kind==='panel'?el('div','jcomic'):el('p');
+        open(kind,node);
+        if(kind==='quote')node.appendChild(el('div','tape'));
+        if(kind==='ol'&&m[1]!=='1')node.start=+m[1];
+      }
+      if(kind==='check'){const li=inline(m[2],el('li'));if(m[1]!==' ')li.className='done';run.node.appendChild(li);}
+      else if(kind==='ul'||kind==='ol')run.node.appendChild(inline(kind==='ul'?m[1]:m[2],el('li')));
+      else if(kind==='panel')run.node.appendChild(panel(m[1],m[2]));
+      else{
+        if(run.n)run.node.appendChild(el('br'));
+        inline(kind==='quote'?m[1]:line.trim(),run.node);
+      }
+      run.n++;
+    }
+    into.querySelectorAll('.jcomic').forEach(c=>c.classList.add('n'+Math.min(c.children.length,4)));
+    return into;
+  }
+
   function entryPage(en,side){
     if(en.locked)return lockedPage(en,side);
     const dt=parseDate(en.date)||parseDate(todayStr());
     const p=el('div','page '+side+' jp');
-    const h=dateHead(dt,en.aside);
+    const h=dateHead(dt,en.aside,en);
     const b=el('div','body');
     if(en.stamp){const st=el('div','stamp',[...en.stamp][0]);st.style.cssText='top:0;right:4px';b.appendChild(st);}
     const jt=el('div','jt');jt.appendChild(el('h2',null,en.title||'（无题）'));
     if(en.latin)jt.appendChild(el('div','latin',en.latin));
     b.appendChild(jt);
-    if(en.photoUrl||en.photoKey){
-      const ph=el('figure','jph');
-      const img=el('img');img.alt=en.photoCap||'';img.decoding='async';img.loading='lazy';
-      // an opened locked page's photo needs its key too
-      const k=en.lock&&keys()[en.lock];
-      img.src=en.photoUrl||('/img/'+en.photoKey+(k?'?k='+encodeURIComponent(k):''));
-      ph.append(el('div','tape'),img);
-      if(en.photoCap)ph.appendChild(el('figcaption','cap',en.photoCap));
-      b.appendChild(ph);
-    }
+    // photos, like the sample pages' snapshots: one sits beside the words (they run round it), two or three
+    // are taped down in a loose row under the title
+    const k=en.lock&&keys()[en.lock];        // an opened locked page's photos need its key too
+    const shots=photosOf(en).map((ph,i,all)=>{
+      const f=el('figure','jph'),img=el('img');img.alt=ph.cap||'';img.decoding='async';img.loading='lazy';
+      img.src=ph.url||('/img/'+ph.key+(k?'?k='+encodeURIComponent(k):''));
+      f.append(el('div','tape'),img);
+      if(ph.cap)f.appendChild(el('figcaption','cap',ph.cap));
+      if(all.length>1)f.style.setProperty('--tilt',[-3,2.5,-1.5][i]+'deg');
+      return f;
+    });
+    if(shots.length>1){const row=el('div','jphs n'+shots.length);shots.forEach(f=>row.appendChild(f));b.appendChild(row);}
     const tx=el('div','jtext');
-    String(en.body||'').split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(par=>tx.appendChild(el('p',null,par)));
+    if(shots.length===1)tx.appendChild(shots[0]);
+    bodyBlocks(en.body,tx);
     if(en.note){const n=el('div','label jnote',en.note);n.appendChild(el('div','tape'));tx.appendChild(n);}
     b.appendChild(tx);
     const stk=(Array.isArray(en.stickers)?en.stickers:String(en.stickers||'').split(',')).filter(k=>STICKERS[k]).slice(0,2);
@@ -203,7 +313,7 @@
       });
       svg.querySelectorAll('text').forEach(t=>items.push({el:t,kind:'fade'}));
     });
-    page.querySelectorAll('.body h2,.body .latin,.body .hand,.body .jtext,.body .label,.body .bub,.body .stamp,.body .photo,.body .jph,.body .tape,.body .check,.body .wash,.body .comic .time,.body [data-draw]').forEach(n=>{
+    page.querySelectorAll('.body h2,.body .latin,.body .hand,.body .jtext>:not(.jcomic):not(.jph),.body .label,.body .bub,.body .stamp,.body .photo,.body .jph,.body .tape,.body .check,.body .wash,.body .comic .time,.body .jcomic .time,.body [data-draw]').forEach(n=>{
       if(n.closest('svg'))return;
       items.push({el:n,kind:n.classList.contains('stamp')?'stamp':'text'});
     });
@@ -348,6 +458,66 @@
     size();
     sc.focus({preventScroll:true});
   }
+  /* ---------- 跳到某一天: a little paper calendar in the nav, for both books ----------
+     Like the one in a page's corner: the days with a page are marked and can be picked, the day open now is
+     circled red; ‹ › go through the months that have pages. dates: the days there are pages for; now(): the
+     day open now (or null); go(day): open the book there. */
+  function dayPicker(dates,now,go){
+    const have=new Set(dates.filter(Boolean));
+    const months=[...new Set([...have].map(d=>d.slice(0,7)))].sort();
+    if(!months.length)return null;
+    const cal=el('button','arrow daypick');cal.type='button';
+    cal.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    cal.setAttribute('aria-label','跳到某一天');cal.title='跳到某一天';
+    cal.setAttribute('aria-haspopup','dialog');cal.setAttribute('aria-expanded','false');
+    const pop=el('div','daypop');pop.hidden=true;pop.setAttribute('role','dialog');pop.setAttribute('aria-label','跳到某一天');
+    const box=el('span','calbox');box.append(cal,pop);
+    const pad=n=>String(n).padStart(2,'0');
+    let shown=months[months.length-1];
+    function paint(){
+      const [y,mo]=shown.split('-').map(Number),mi=months.indexOf(shown),today=now();
+      pop.textContent='';
+      const head=el('div','dp-head');
+      const pv=el('button','dp-nav','‹'),nx=el('button','dp-nav','›');
+      pv.type=nx.type='button';pv.setAttribute('aria-label','上个月');nx.setAttribute('aria-label','下个月');
+      pv.disabled=mi<=0;nx.disabled=mi>=months.length-1;
+      pv.onclick=()=>{shown=months[mi-1];paint();};
+      nx.onclick=()=>{shown=months[mi+1];paint();};
+      const title=el('div','dp-title');
+      title.append(el('b',null,String(mo)),el('span',null,'月'),el('i',null,y+' · '+MOE[mo-1]));
+      head.append(pv,title,nx);
+      const grid=el('div','dp-grid');
+      '一二三四五六日'.split('').forEach(c=>grid.appendChild(el('span','dp-wd',c)));
+      const off=(new Date(Date.UTC(y,mo-1,1)).getUTCDay()+6)%7,n=new Date(Date.UTC(y,mo,0)).getUTCDate();
+      for(let i=0;i<off;i++)grid.appendChild(el('span'));
+      for(let d=1;d<=n;d++){
+        const day=y+'-'+pad(mo)+'-'+pad(d);
+        if(!have.has(day)){grid.appendChild(el('span','dp-off',String(d)));continue;}
+        const b=el('button','dp-day'+(day===today?' dp-now':''),String(d));b.type='button';
+        b.setAttribute('aria-label',mo+'月'+d+'日');
+        if(day===today)b.setAttribute('aria-current','date');
+        b.onclick=()=>{close();go(day);};
+        grid.appendChild(b);
+      }
+      pop.append(head,grid,el('div','dp-foot','点有小圆点的日子翻过去'));
+    }
+    const onDoc=e=>{if(!box.contains(e.target))close();};
+    const onKey=e=>{if(e.key==='Escape'){close();cal.focus();}};
+    function open(){
+      const today=now();
+      shown=today&&months.includes(today.slice(0,7))?today.slice(0,7):months[months.length-1];
+      paint();pop.hidden=false;cal.setAttribute('aria-expanded','true');
+      document.addEventListener('pointerdown',onDoc,true);document.addEventListener('keydown',onKey);
+      const f=pop.querySelector('.dp-now')||pop.querySelector('.dp-day');if(f)f.focus({preventScroll:true});
+    }
+    function close(){
+      pop.hidden=true;cal.setAttribute('aria-expanded','false');
+      document.removeEventListener('pointerdown',onDoc,true);document.removeEventListener('keydown',onKey);
+    }
+    cal.onclick=()=>(pop.hidden?open():close());
+    return box;
+  }
+
   /* the nav's button for it; pages(): the page nodes open now */
   function readerButton(pages){
     const b=el('button','arrow zoomin');b.type='button';
@@ -550,5 +720,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,dayPicker,bodyBlocks,plainText};
 })();

@@ -11,10 +11,13 @@ CREATE TABLE IF NOT EXISTS entries (
   mood       TEXT NOT NULL DEFAULT 'mug', -- mug | sleep | none
   quote      TEXT NOT NULL DEFAULT '',
   quote_src  TEXT NOT NULL DEFAULT '',
-  photo_key  TEXT NOT NULL DEFAULT '',   -- R2 key, e.g. p/<uuid>.jpg
-  photo_cap  TEXT NOT NULL DEFAULT '',
+  photo_key  TEXT NOT NULL DEFAULT '',   -- R2 keys, comma separated (up to 3), e.g. p/<uuid>.jpg
+  photo_cap  TEXT NOT NULL DEFAULT '',   -- their captions, one per line
   stickers   TEXT NOT NULL DEFAULT '',   -- comma list, e.g. rain,cat (see render.js)
   status     TEXT NOT NULL DEFAULT 'published', -- draft | published; the book shows published only
+  place      TEXT NOT NULL DEFAULT '',   -- where it was written, e.g. 上海 · 徐汇
+  geo        TEXT NOT NULL DEFAULT '',   -- "lat,lon", two decimals
+  weather    TEXT NOT NULL DEFAULT '',   -- that day's weather, e.g. 多云 18~25°
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

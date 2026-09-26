@@ -53,7 +53,9 @@
       h.textContent=en.title||'（无题）';
       if(en.stamp){const st=el('span','tl-stamp',[...en.stamp][0]);st.setAttribute('aria-hidden','true');h.appendChild(st);}
       if(en.latin)main.appendChild(el('div','tl-latin',en.latin));
-      const ex=String(en.body||'').replace(/\s+/g,' ').trim();
+      const pw=[en.place,en.weather].filter(Boolean).join(' · ');
+      if(pw)main.appendChild(el('div','tl-meta',pw));
+      const ex=T.plainText(en.body);
       if(ex)main.appendChild(el('p','tl-ex',ex));
       const stk=(en.stickers||[]).map(k=>T.stickerSvg(k,30)).filter(Boolean);
       if(stk.length){const r=el('div','tl-stk');r.setAttribute('aria-hidden','true');stk.forEach(s=>r.appendChild(s));main.appendChild(r);}

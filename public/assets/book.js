@@ -84,15 +84,17 @@
     T.dragNote(dragnote,i===0&&landscape());
     restart.hidden=i<last;
     [...dots.children].forEach(b=>{
-      const t=+b.dataset.page,on=t===0?i===0:(i===t||i===t+1);
+      const on=+b.dataset.page===0?i===0:visible(i).some(isTimeline);
       b.setAttribute('aria-current',on?'true':'false');
       if(on&&dots.scrollWidth>dots.clientWidth)dots.scrollLeft=b.offsetLeft-dots.clientWidth/2+b.offsetWidth/2;
     });
     $('prev').disabled=i===0;
     $('next').disabled=i>=last;
   }
+  // the nav: 封面 and 时间线 between the arrows (any day is a line on the 时间线)
+  const isTimeline=k=>!!(pages[k]&&pages[k].node.classList.contains('tlp'));
   const chips=[{label:'封面',page:0}];
-  pages.forEach((p,i)=>{if(p.label)chips.push({label:p.label,page:i});});
+  {const t=pages.findIndex((p,k)=>isTimeline(k));if(t>=0)chips.push({label:'时间线',page:t});}
   chips.forEach(c=>{const b=el('button',null,c.label);b.type='button';b.dataset.page=c.page;b.onclick=()=>pf.flip(c.page);dots.appendChild(b);});
 
   pf.on('flip',e=>{setShift(e.data);chrome(e.data);reveal(e.data);});
@@ -139,6 +141,10 @@
   // once followed, the link is taken off the address, so the same line (or 时间线) can be followed again
   const clearHash=()=>history.replaceState(null,'',location.pathname+location.search);
   window.addEventListener('hashchange',()=>{const i=hashPage();if(i!=null){pf.flip(i);clearHash();}});
+  // 跳到某一天: the calendar in the nav
+  {const pick=T.dayPicker(dated.map(d=>d.date),()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].date).find(Boolean)||null,
+    day=>{const i=pageFor(day);if(i!=null)pf.flip(i);});
+   if(pick)$('next').after(pick);}
   const start=hashPage()||0;
   if(location.hash)clearHash();
   if(start)pf.turnToPage(start);   // arrived by a link: open straight there

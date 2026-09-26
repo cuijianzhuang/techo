@@ -43,7 +43,7 @@
   /* ---------- list: search, filter by status, grouped by month ---------- */
   let listQuery='',listFilter='all';
   const FILTERS=[['all','全部'],['draft','草稿'],['published','已发布']];
-  const plain=en=>[en.title,en.latin,en.aside,en.body,en.note,en.quote,en.date,en.date.replace(/-0?/g,'/')].join('\n').toLowerCase();
+  const plain=en=>[en.title,en.latin,en.aside,en.body,en.note,en.place,en.weather,en.quote,en.date,en.date.replace(/-0?/g,'/')].join('\n').toLowerCase();
   function drawList(){
     list.textContent='';
     const nd=entries.filter(e=>e.status==='draft').length;
@@ -69,8 +69,8 @@
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':dayLocks.has(en.date)?' · 🔒 这一天上锁':''));
-      const gist=String(en.body||'').replace(/\s+/g,' ').trim();
+      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+((en.photos&&en.photos.length)||en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':dayLocks.has(en.date)?' · 🔒 这一天上锁':''));
+      const gist=T.plainText(en.body);
       it.append(t,meta);
       if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
       (en.stickers||[]).slice(0,2).forEach(k=>{const g=T.stickerSvg(k,18);if(g){g.classList.add('lstk');it.appendChild(g);}});
@@ -87,7 +87,12 @@
   $('settingsBtn').onclick=()=>select('settings');
 
   const dirty=()=>draft&&JSON.stringify(stripLocal(draft))!==base;
-  function stripLocal(d){const c=Object.assign({},d);delete c.photoUrl;return c;}
+  function stripLocal(d){
+    const c=Object.assign({},d);delete c.photoUrl;
+    // photos being uploaded carry a local preview url: not part of the page
+    if(Array.isArray(c.photos))c.photos=c.photos.map(p=>({key:p.key,cap:p.cap||''}));
+    return c;
+  }
 
   /* switching away from unsaved changes asks first, inline */
   function select(id,force){
@@ -105,8 +110,8 @@
     sel=id;
     if(id==='settings'){draft=Object.assign({},settings);}
     else if(id==='jots'){draft=null;}
-    else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',stickers:[],status:'published'};}
-    else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en):null;}
+    else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',stickers:[],status:'published'};}
+    else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
     drawList();drawForm();
   }
@@ -187,7 +192,7 @@
     if(draft.status==='draft')f.appendChild(el('div','hintx','这一页还是草稿，主页上看不到。看过没问题就点「发布这一页」。'));
     const r1=el('div','row');r1.append(dateField(),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
     const r2=el('div','row');r2.append(field('标题（手写大字）','title','text',{ph:'今天的标题',max:30,hint:'8 个字以内最好看'}),field('英文小注','latin','text',{ph:'a small note in English',max:60}));
-    f.append(r1,r2,field('正文','body','textarea',{rows:10,max:4000,hint:'空一行分段。没有照片时大约 250 字写满一页，再多字会自动缩小。'}));
+    f.append(r1,r2,placeField(),mdField());
     f.appendChild(photoField());
     f.appendChild(stickerField());
     const r3=el('div','row');r3.append(field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60}),
@@ -507,33 +512,206 @@
     setTimeout(()=>ta.focus(),0);
   }
 
-  /* ---------- photo ---------- */
-  function photoField(){
-    const wrap=el('div');
-    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';l.textContent='照片（可空，会像拍立得一样贴在页上）';
-    const row=el('div','photo-field');
-    const th=el('div','thumb');
-    const setThumb=()=>{const u=draft.photoUrl||(draft.photoKey?'/img/'+draft.photoKey:'');th.style.backgroundImage=u?'url("'+u+'")':'';};
-    setThumb();
+  /* ---------- 地点和天气: where the page was written, and that day's weather ----------
+     "获取" asks the browser where it is, names the place (BigDataCloud) and looks up the page's date at those
+     coordinates (Open-Meteo: forecast for the last three months and the next two weeks, the archive before
+     that). Both are free and need no key; they're called from this page only. Coordinates are kept to two
+     decimals (about a kilometre): the book is public. All three can be typed or cleared by hand. */
+  const WMO={0:'晴',1:'晴间多云',2:'多云',3:'阴',45:'雾',48:'雾凇',51:'毛毛雨',53:'毛毛雨',55:'毛毛雨',56:'冻毛毛雨',57:'冻毛毛雨',
+    61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',77:'雪粒',80:'阵雨',81:'阵雨',82:'强阵雨',
+    85:'阵雪',86:'阵雪',95:'雷阵雨',96:'雷阵雨伴冰雹',99:'雷阵雨伴冰雹'};
+  async function weatherOn(date,lat,lon){
+    const days=(Date.parse(date+'T00:00:00Z')-Date.parse(T.todayStr()+'T00:00:00Z'))/864e5;
+    if(days>15)throw new Error('太远的日子还查不到天气');
+    const host=days<-85?'https://archive-api.open-meteo.com/v1/archive':'https://api.open-meteo.com/v1/forecast';
+    const u=host+'?latitude='+lat+'&longitude='+lon+'&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&start_date='+date+'&end_date='+date;
+    const r=await fetch(u);if(!r.ok)throw new Error('天气没查到（'+r.status+'）');
+    const d=(await r.json()).daily||{},code=d.weather_code&&d.weather_code[0];
+    if(code==null)throw new Error('那一天的天气还没有');
+    const lo=Math.round(d.temperature_2m_min[0]),hi=Math.round(d.temperature_2m_max[0]);
+    return (WMO[code]||'—')+' '+(lo===hi?hi:lo+'~'+hi)+'°';
+  }
+  async function placeAt(lat,lon){
+    const r=await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+lat+'&longitude='+lon+'&localityLanguage=zh');
+    if(!r.ok)return '';
+    const j=await r.json();
+    const city=(j.city||j.principalSubdivision||j.countryName||'').replace(/市$/,''),near=(j.locality||'').replace(/(街道|镇|乡)$/,'');
+    return [...(city&&near&&near!==city?city+' · '+near:city||near)].slice(0,30).join('');
+  }
+  const here=()=>new Promise((res,rej)=>{
+    if(!navigator.geolocation)return rej(new Error('这个浏览器拿不到位置'));
+    navigator.geolocation.getCurrentPosition(p=>res([+p.coords.latitude.toFixed(2),+p.coords.longitude.toFixed(2)]),
+      e=>rej(new Error(e.code===1?'没有允许获取位置（浏览器地址栏里可以打开）':'位置没拿到，稍后再试')),{enableHighAccuracy:false,timeout:12000,maximumAge:6e5});
+  });
+  function placeField(){
+    const wrap=el('div','placefield');
+    const h=el('div','hintx');h.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';h.textContent='地点和天气（可空，写在页眉右上角）';
+    const row=el('div','row');row.append(field('地点','place','text',{ph:'上海 · 徐汇',max:30}),field('天气','weather','text',{ph:'多云 18~25°',max:20}));
+    const r2=el('div','row place-row');
+    r2.appendChild(field('坐标（纬度,经度）','geo','text',{ph:'31.23,121.47',max:24}));
     const acts=el('div','photo-actions');
-    const fb=el('span','b small filebtn',draft.photoKey?'换一张':'选择照片');
-    const inp=el('input');inp.type='file';inp.accept='image/jpeg,image/png,image/webp,image/gif,image/heic';inp.id='f-photo';inp.setAttribute('aria-label','选择照片');
-    fb.appendChild(inp);acts.appendChild(fb);
-    if(draft.photoKey){const rm=el('button','b small','拿掉照片');rm.type='button';rm.onclick=()=>{draft.photoKey='';draft.photoUrl='';setThumb();drawForm();changed();};acts.appendChild(rm);}
-    const cap=el('input');cap.type='text';cap.maxLength=30;cap.placeholder='照片下面的小字，比如：2023 · 海边';cap.value=draft.photoCap||'';cap.id='f-photoCap';
-    cap.addEventListener('input',()=>{draft.photoCap=cap.value;changed();});
-    const right=el('div');right.style.cssText='display:grid;gap:8px';right.append(acts,cap);
-    row.append(th,right);wrap.append(l,row);
-    inp.addEventListener('change',async()=>{
-      const file=inp.files&&inp.files[0];if(!file)return;
-      fb.firstChild.textContent='上传中……';status('正在压缩并上传照片……');
-      try{
-        const blob=await shrink(file);
-        const r=await api('/api/admin/photos',{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
-        draft.photoKey=r.key;draft.photoUrl=URL.createObjectURL(blob);
-        setThumb();drawForm();changed();status('照片已上传，记得保存这一页。','ok');
-      }catch(e){fb.firstChild.textContent='选择照片';status(e.message||'照片上传失败','err');}
+    const go=el('button','b small','📍 获取位置和天气');go.type='button';
+    const wx=el('button','b small','按坐标查天气');wx.type='button';
+    acts.append(go,wx);r2.appendChild(acts);
+    const set=(k,v)=>{draft[k]=v;const i=$('f-'+k);if(i)i.value=v;};
+    const coords=()=>{const m=/^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(draft.geo||'');return m?[+m[1],+m[2]]:null;};
+    async function run(btn,fn){
+      const t=btn.textContent;btn.disabled=true;btn.textContent='查询中……';
+      try{await fn();changed();}catch(e){status(e.message||'没查到','err');}
+      finally{btn.disabled=false;btn.textContent=t;}
+    }
+    go.onclick=()=>run(go,async()=>{
+      status('正在获取位置……');
+      const [la,lo]=await here();set('geo',la+','+lo);
+      const [name,w]=await Promise.all([placeAt(la,lo).catch(()=>''),weatherOn(draft.date,la,lo).catch(e=>{status(e.message,'err');return '';})]);
+      if(name)set('place',name);if(w)set('weather',w);
+      if(w)status('已填好地点和天气，记得保存。','ok');
     });
+    wx.onclick=()=>run(wx,async()=>{
+      const c=coords();if(!c)throw new Error('先填坐标，或者点「获取位置和天气」');
+      if(!T.parseDate(draft.date))throw new Error('先填日期');
+      set('weather',await weatherOn(draft.date,c[0],c[1]));status('已按坐标查到 '+draft.date+' 的天气，记得保存。','ok');
+    });
+    wrap.append(h,row,r2,el('span','hintx','坐标只保留两位小数（大约 1 公里），因为手帐是公开的。天气按这一页的日期查。'));
+    return wrap;
+  }
+
+  /* ---------- 正文: a Markdown editor ----------
+     A toolbar for the marks the page understands (render.js bodyBlocks), ⌘/Ctrl+B / I / K, and Enter carrying
+     a list, checklist or quote on to the next line (Enter on an empty item ends it). Edits go through
+     insertText, so ⌘/Ctrl+Z undoes them. The page beside the form is the preview. */
+  function mdField(){
+    const wrap=el('div','mdfield');
+    const lab=el('label',null,'正文');lab.htmlFor='f-body';
+    const ta=el('textarea');ta.id='f-body';ta.rows=12;ta.maxLength=4000;ta.value=draft.body||'';ta.spellcheck=false;
+    const on=()=>{draft.body=ta.value;changed();};
+    ta.addEventListener('input',on);
+    // replace [a, b) with text, then select [sa, sb) (offsets from a)
+    function put(a,b,text,sa,sb){
+      ta.focus();ta.setSelectionRange(a,b);
+      if(!document.execCommand||!document.execCommand('insertText',false,text)){ta.setRangeText(text,a,b,'end');on();}
+      ta.setSelectionRange(a+(sa==null?text.length:sa),a+(sb==null?(sa==null?text.length:sa):sb));
+    }
+    const sel=()=>[ta.selectionStart,ta.selectionEnd,ta.value];
+    function wrapWith(pre,post,ph){
+      const [a,b,v]=sel(),t=v.slice(a,b)||ph;
+      put(a,b,pre+t+post,pre.length,pre.length+t.length);
+    }
+    // every line the selection touches gets the mark (or loses it, if they all have it)
+    function lines(mark){
+      const [a,b,v]=sel(),s0=v.lastIndexOf('\n',a-1)+1;let e0=v.indexOf('\n',b);if(e0<0)e0=v.length;
+      const ls=v.slice(s0,e0).split('\n');
+      const pre=i=>typeof mark==='function'?mark(i):mark;
+      const has=ls.every((l,i)=>l.startsWith(pre(i)));
+      const out=ls.map((l,i)=>has?l.slice(pre(i).length):pre(i)+l.replace(/^(\s*([-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|#{1,3}\s+))/,'')).join('\n');
+      put(s0,e0,out,out.length,out.length);
+    }
+    // a piece on lines of its own
+    function block(text,sa,sb){
+      const [a,b,v]=sel(),before=a>0&&v[a-1]!=='\n'?'\n':'',after=v[b]&&v[b]!=='\n'?'\n':'';
+      put(a,b,before+text+after,before.length+(sa==null?text.length:sa),before.length+(sb==null?text.length:sb));
+    }
+    function heading(){
+      const [a,,v]=sel(),s0=v.lastIndexOf('\n',a-1)+1,m=/^(#{1,3})\s+/.exec(v.slice(s0));
+      const n=m?m[1].length%3+1:1,cut=m?m[0].length:0;
+      put(s0,s0+cut,(m&&m[1].length===3)?'':'#'.repeat(n)+' ');
+    }
+    const TOOLS=[
+      ['B','粗体（⌘/Ctrl+B）',()=>wrapWith('**','**','粗体'),'b'],
+      ['I','强调（⌘/Ctrl+I）',()=>wrapWith('*','*','强调'),'i'],
+      ['S','删除线',()=>wrapWith('~~','~~','划掉'),'s'],
+      ['H','标题（再点换大小）',heading,'h'],
+      ['▰','荧光笔重点',()=>wrapWith('==','==','重点'),'hl'],
+      ['•','列表',()=>lines('- ')],
+      ['1.','编号',()=>lines(i=>(i+1)+'. ')],
+      ['☐','清单',()=>lines('- [ ] ')],
+      ['❝','便签 / 引用',()=>lines('> ')],
+      ['</>','代码',()=>{const [a,b,v]=sel();if(v.slice(a,b).includes('\n')||a===b)block('```\n'+(v.slice(a,b)||'代码')+'\n```',4,4+(v.slice(a,b)||'代码').length);else wrapWith('`','`','代码');}],
+      ['🔗','链接（⌘/Ctrl+K）',()=>{const [a,b,v]=sel(),t=v.slice(a,b)||'文字';put(a,b,'['+t+'](https://)',t.length+3,t.length+11);}],
+      ['—','分隔线',()=>block('---')],
+      ['▦','漫画格',()=>block('@09:00 做什么：说的话 #laptop',7,14)],
+    ];
+    const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
+    TOOLS.forEach(([t,title,fn,cls])=>{
+      const b=el('button','mdb'+(cls?' mdb-'+cls:''),t);b.type='button';b.title=title;b.setAttribute('aria-label',title);
+      b.addEventListener('mousedown',e=>e.preventDefault());   // keep the selection in the text
+      b.onclick=fn;bar.appendChild(b);
+    });
+    ta.addEventListener('keydown',e=>{
+      const mod=e.metaKey||e.ctrlKey;
+      if(mod&&!e.shiftKey&&!e.altKey){
+        const k=e.key.toLowerCase(),t=k==='b'?TOOLS[0]:k==='i'?TOOLS[1]:k==='k'?TOOLS[10]:null;
+        if(t){e.preventDefault();t[2]();}
+        return;
+      }
+      if(e.key!=='Enter'||e.shiftKey||e.isComposing||e.keyCode===229||ta.selectionStart!==ta.selectionEnd)return;
+      const v=ta.value,a=ta.selectionStart,s0=v.lastIndexOf('\n',a-1)+1;
+      const m=/^(\s*)([-*+] \[[ xX]\] |[-*+] |(\d+)([.)]) |> )(.*)$/.exec(v.slice(s0,a));
+      if(!m)return;
+      e.preventDefault();
+      if(!m[5].trim()){put(s0,a,'');return;}          // an empty item: the list ends here
+      const next=m[3]?(+m[3]+1)+m[4]+' ':m[2].replace(/\[[xX]\]/,'[ ]');
+      put(a,a,'\n'+m[1]+next);
+    });
+    const help=el('details','mdhelp');
+    help.appendChild(el('summary',null,'能写的格式'));
+    const rows=[['**粗体**  *强调*  ~~划掉~~  ==重点==  `代码`','[文字](https://…) 是链接'],
+      ['# 大标题  ## 中标题  ### 小标题','--- 一条虚线'],
+      ['- 列表 / 1. 编号','- [ ] 没做完 / - [x] 做完了（红叉）'],
+      ['> 一句话','贴一张胶带便签'],
+      ['```↵ 代码 ↵```','一块深色代码'],
+      ['@09:10 站会：今天修什么？ #laptop','漫画格：时间 · 在做什么、对话气泡、小插画（相邻几行排成一条）'],
+      ['空一行','分段；段落里换行就是换行']];
+    const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
+    help.appendChild(tb);
+    help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));
+    wrap.append(lab,bar,ta,el('span','hintx','没有照片时大约 250 字写满一页，再多字会自动缩小。'),help);
+    return wrap;
+  }
+
+  /* ---------- photos: up to three, each with its caption ---------- */
+  const MAX_PHOTOS=3;
+  function photoList(){
+    if(!Array.isArray(draft.photos))draft.photos=draft.photoKey?[{key:draft.photoKey,cap:draft.photoCap||'',url:draft.photoUrl}]:[];
+    return draft.photos;
+  }
+  // the first photo is also photoKey / photoCap (what older readers of a page look at)
+  function syncFirst(){const f=draft.photos[0];draft.photoKey=f?f.key:'';draft.photoCap=f?f.cap:'';delete draft.photoUrl;}
+  function photoField(){
+    const wrap=el('div'),list=photoList();
+    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';
+    l.textContent='照片（可空，最多 '+MAX_PHOTOS+' 张，像拍立得一样贴在页上：一张放在字旁边，两三张在标题下面排一排）';
+    wrap.appendChild(l);
+    list.forEach((ph,i)=>{
+      const row=el('div','photo-field');
+      const th=el('div','thumb');th.style.backgroundImage='url("'+(ph.url||'/img/'+ph.key)+'")';
+      const acts=el('div','photo-actions');
+      if(i>0){const up=el('button','b small','往前放');up.type='button';up.onclick=()=>{list.splice(i-1,0,list.splice(i,1)[0]);syncFirst();drawForm();changed();};acts.appendChild(up);}
+      const rm=el('button','b small','拿掉');rm.type='button';rm.onclick=()=>{list.splice(i,1);syncFirst();drawForm();changed();};acts.appendChild(rm);
+      const cap=el('input');cap.type='text';cap.maxLength=30;cap.placeholder='照片下面的小字，比如：2023 · 海边';cap.value=ph.cap||'';
+      cap.id='f-photoCap'+i;cap.setAttribute('aria-label','第 '+(i+1)+' 张照片的说明');
+      cap.addEventListener('input',()=>{ph.cap=cap.value;syncFirst();changed();});
+      const right=el('div');right.style.cssText='display:grid;gap:8px';right.append(cap,acts);
+      row.append(th,right);wrap.appendChild(row);
+    });
+    if(list.length<MAX_PHOTOS){
+      const acts=el('div','photo-actions');acts.style.marginTop=list.length?'8px':'0';
+      const fb=el('span','b small filebtn',list.length?'再加一张':'选择照片');
+      const inp=el('input');inp.type='file';inp.multiple=true;inp.accept='image/jpeg,image/png,image/webp,image/gif,image/heic';inp.id='f-photo';inp.setAttribute('aria-label','选择照片');
+      fb.appendChild(inp);acts.appendChild(fb);wrap.appendChild(acts);
+      inp.addEventListener('change',async()=>{
+        const files=[...(inp.files||[])].slice(0,MAX_PHOTOS-list.length);if(!files.length)return;
+        fb.firstChild.textContent='上传中……';status('正在压缩并上传照片……');
+        try{
+          for(const file of files){
+            const blob=await shrink(file);
+            const r=await api('/api/admin/photos',{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
+            list.push({key:r.key,cap:'',url:URL.createObjectURL(blob)});
+          }
+          syncFirst();drawForm();changed();status('照片已上传，记得保存这一页。','ok');
+        }catch(e){syncFirst();drawForm();changed();status(e.message||'照片上传失败','err');}
+      });
+    }
     return wrap;
   }
   /* shrink big photos (NAS originals) to 1600px JPEG before upload */
@@ -579,8 +757,10 @@
         }
         if(i>=0)en.locked=entries[i].locked;          // the lock is kept apart from the page's fields
         if(i>=0)entries[i]=en;else entries.push(en);
-        const keepUrl=draft.photoUrl;
-        sel=en.id;draft=Object.assign({},en);if(keepUrl&&draft.photoKey)draft.photoUrl=keepUrl;
+        // photos just uploaded keep showing from this browser's copy
+        const urls=new Map((draft.photos||[]).filter(p=>p.url).map(p=>[p.key,p.url]));
+        sel=en.id;draft=Object.assign({},en);
+        draft.photos=(en.photos||[]).map(p=>Object.assign({},p,urls.has(p.key)?{url:urls.get(p.key)}:{}));
         base=JSON.stringify(stripLocal(draft));
         drawList();drawForm();status((en.status==='draft'?'已存为草稿，主页上还看不到':'已发布，主页刷新就能看到')+lockNote+'。',lockNote.includes('没成功')?'err':'ok');
       }
