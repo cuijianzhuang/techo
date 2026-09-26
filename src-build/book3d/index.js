@@ -657,16 +657,57 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     const cal = T.el('button', 'arrow daypick'); cal.type = 'button';
     cal.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
     cal.setAttribute('aria-label', '跳到某一天'); cal.title = '跳到某一天';
-    const pick = document.createElement('input');
-    pick.type = 'date'; pick.className = 'calpick'; pick.tabIndex = -1; pick.setAttribute('aria-hidden', 'true');
-    pick.min = dated[0].date; pick.max = dated[dated.length - 1].date;
-    pick.onchange = () => { if (pick.value) openDay(pick.value); };
-    cal.onclick = () => {
-      const i = slotL.page >= 0 && pages[slotL.page].date ? slotL.page : slotR.page;
-      pick.value = (i >= 0 && pages[i].date) || pick.max;
-      try { pick.showPicker(); } catch { pick.focus(); pick.click(); }
-    };
-    const box = T.el('span', 'calbox'); box.append(cal, pick);
+    cal.setAttribute('aria-haspopup', 'dialog'); cal.setAttribute('aria-expanded', 'false');
+    /* a little paper calendar, like the one in a page's corner: the days with a diary page are marked and
+       can be picked, the day open now is circled red; ‹ › go through the months that have pages */
+    const pop = T.el('div', 'daypop'); pop.hidden = true; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', '跳到某一天');
+    const have = new Set(dated.map((d) => d.date));
+    const months = [...new Set(dated.map((d) => d.date.slice(0, 7)))];
+    let shown = months[months.length - 1];
+    const pad = (n) => String(n).padStart(2, '0');
+    function paintCal() {
+      const [y, mo] = shown.split('-').map(Number), mi = months.indexOf(shown);
+      pop.textContent = '';
+      const head = T.el('div', 'dp-head');
+      const pv = T.el('button', 'dp-nav', '‹'), nx = T.el('button', 'dp-nav', '›');
+      pv.type = nx.type = 'button'; pv.setAttribute('aria-label', '上个月'); nx.setAttribute('aria-label', '下个月');
+      pv.disabled = mi <= 0; nx.disabled = mi >= months.length - 1;
+      pv.onclick = () => { shown = months[mi - 1]; paintCal(); };
+      nx.onclick = () => { shown = months[mi + 1]; paintCal(); };
+      const title = T.el('div', 'dp-title');
+      title.append(T.el('b', null, String(mo)), T.el('span', null, '月'), T.el('i', null, y + ' · ' + ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'][mo - 1]));
+      head.append(pv, title, nx);
+      const grid = T.el('div', 'dp-grid');
+      '一二三四五六日'.split('').forEach((c) => grid.appendChild(T.el('span', 'dp-wd', c)));
+      const first = new Date(Date.UTC(y, mo - 1, 1)).getUTCDay(), off = (first + 6) % 7, n = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+      for (let i = 0; i < off; i++) grid.appendChild(T.el('span'));
+      const iv = pageInView(), now = iv >= 0 && pages[iv] && pages[iv].date;
+      for (let d = 1; d <= n; d++) {
+        const day = y + '-' + pad(mo) + '-' + pad(d);
+        if (!have.has(day)) { grid.appendChild(T.el('span', 'dp-off', String(d))); continue; }
+        const b = T.el('button', 'dp-day' + (day === now ? ' dp-now' : ''), String(d)); b.type = 'button';
+        b.setAttribute('aria-label', mo + '月' + d + '日');
+        if (day === now) b.setAttribute('aria-current', 'date');
+        b.onclick = () => { close(); openDay(day); };
+        grid.appendChild(b);
+      }
+      pop.append(head, grid, T.el('div', 'dp-foot', '点有小圆点的日子翻过去'));
+    }
+    const onDoc = (e) => { if (!box.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === 'Escape') { close(); cal.focus(); } };
+    function open() {
+      const iv = pageInView(), now = iv >= 0 && pages[iv] && pages[iv].date;
+      shown = now ? now.slice(0, 7) : months[months.length - 1];
+      paintCal(); pop.hidden = false; cal.setAttribute('aria-expanded', 'true');
+      document.addEventListener('pointerdown', onDoc, true); document.addEventListener('keydown', onKey);
+      const f = pop.querySelector('.dp-now') || pop.querySelector('.dp-day'); if (f) f.focus({ preventScroll: true });
+    }
+    function close() {
+      pop.hidden = true; cal.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('pointerdown', onDoc, true); document.removeEventListener('keydown', onKey);
+    }
+    cal.onclick = () => (pop.hidden ? open() : close());
+    const box = T.el('span', 'calbox'); box.append(cal, pop);
     nav.insertBefore(box, $('next').nextSibling);
   }
   // the page in view, for the link: on a phone the one looked at, otherwise the spread's dated page

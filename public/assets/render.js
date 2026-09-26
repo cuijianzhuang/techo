@@ -95,8 +95,8 @@
   function blankPage(side,text){
     const p=el('div','page '+side+' jp empty');
     const b=el('div','body');
-    b.appendChild(mugSvg('mug-sleep',64));
-    b.appendChild(el('div','hand',text||'下一页，还空着。'));
+    // text null: just paper (a page left over to keep left and right pages in step)
+    if(text!==null){b.appendChild(mugSvg('mug-sleep',64));b.appendChild(el('div','hand',text||'下一页，还空着。'));}
     p.appendChild(b);
     return p;
   }
@@ -268,10 +268,12 @@
       push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null});
     });
     if(contact){
-      if(leftNext())push(blankPage('l','下一页，还空着。'));   // contact is a right-hand page
+      if(leftNext())push(blankPage('l',null));                // contact is a right-hand page
       push(contact);
     }
-    if(leftNext())push(blankPage('l','下一页，还空着。'));     // the inside back cover is a right-hand page
+    // the last page before the inside back cover is always the next one, still empty (a left-hand page)
+    if(!leftNext())push(blankPage('r',null));
+    push(blankPage('l','下一页，还空着。'));
     push(q('.page.inside.r'),{hard:true});
     push(q('.page.backcover'),{hard:true});
     return {pages,settings};
