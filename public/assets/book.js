@@ -134,6 +134,9 @@
   const contactPage=pages.findIndex(p=>p.node.querySelector&&p.node.querySelector('#mail'));
   const timelinePage=pages.findIndex(p=>p.node.classList.contains('tlp'));
   function hashPage(){
+    // #e-<id>: one diary page (a day can have several); #YYYY-MM-DD: that day's first
+    const e=/^#e-([\w-]{1,64})$/.exec(location.hash),byId=e?pages.findIndex(p=>p.id===e[1]):-1;
+    if(byId>=0)return byId;
     const m=/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash);
     if(m)return pageFor(m[1]);
     if(location.hash==='#timeline'&&timelinePage>=0)return timelinePage;

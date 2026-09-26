@@ -713,8 +713,9 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   }
   function syncLink() {
     // a sample page has no link of its own: its day may be a diary page's
+    // a day's first page is linked by its date; another page of that day by its own id
     const i = pageInView(), day = i >= 0 && pages[i] && !pages[i].sample && pages[i].date;
-    const want = day ? '#' + day : '';
+    const want = !day ? '' : pageFor(day) === i || !pages[i].id ? '#' + day : '#e-' + pages[i].id;
     if (location.hash !== want) history.replaceState(null, '', location.pathname + location.search + want);
   }
   const hashDay = () => (/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash) || [])[1];
@@ -722,9 +723,12 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   const contactPage = pages.findIndex((p) => p.node.querySelector && p.node.querySelector('#mail'));
   // #timeline: the 时间线 pages after the flyleaf
   const timelinePage = pages.findIndex((p, i) => isTimeline(i));
+  // #e-<id>: one diary page (a day can have several)
+  const hashPage = () => { const m = /^#e-([\w-]{1,64})$/.exec(location.hash); return m ? pages.findIndex((p) => p.id === m[1]) : -1; };
   const openHash = () => {
-    const d = hashDay();
-    if (d) openDay(d);
+    const d = hashDay(), e = hashPage();
+    if (e >= 0) openPage(e);
+    else if (d) openDay(d);
     else if (location.hash === '#contact' && contactPage >= 0) openPage(contactPage);
     else if (location.hash === '#timeline' && timelinePage >= 0) openPage(timelinePage);
   };
