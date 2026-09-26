@@ -215,7 +215,9 @@ html{scrollbar-gutter:stable}
 .dragnote{position:absolute;pointer-events:none;color:var(--desk-ink);font:500 13px/1.4 var(--mono);transition:opacity .4s;white-space:nowrap}
 .dragnote svg{display:block}
 .dragnote[hidden]{display:none}
-.restart{display:block;margin:10px auto 0;appearance:none;border:0;background:transparent;color:var(--desk-ink);font:400 13px/1 var(--print);cursor:pointer;padding:8px 12px}
+/* "start again" sits on the empty desk beside the book shut on its back cover, like the drag note beside the
+   front cover: it takes no room in the page, so showing it doesn't push the nav down (the page slid). */
+.restart{position:absolute;left:87.5%;bottom:12%;transform:translateX(-50%);white-space:nowrap;margin:0;appearance:none;border:0;background:transparent;color:var(--desk-ink);font:400 13px/1 var(--print);cursor:pointer;padding:8px 12px}
 .restart:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:6px}
 /* the owner's way into /admin/ — quiet, the admin has its own password */
 .adminlink{position:relative;z-index:2;display:table;margin:10px auto 0;padding:6px 12px;border-radius:999px;color:var(--desk-ink);font:400 12px/1 var(--print);text-decoration:none;opacity:.55;transition:opacity .2s}
@@ -224,14 +226,20 @@ html{scrollbar-gutter:stable}
 
 /* ================= nav ================= */
 .stage{z-index:1}
-.nav,.hint,.restart{position:relative;z-index:2}
+.nav,.hint{position:relative;z-index:2}
+.restart{z-index:2}
 .nav{display:flex;align-items:center;justify-content:center;gap:6px;margin:16px auto 0;flex-wrap:nowrap;max-width:100%}
 #dots{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;min-width:0}
 #dots::-webkit-scrollbar{display:none}
+.nav[hidden]{display:flex;visibility:hidden}
+.nav .sound{margin-left:4px}
+.nav .sound[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .nav .arrow{flex:none}
 .nav button{white-space:nowrap;flex:none}
 .nav button{appearance:none;border:1px solid transparent;background:transparent;color:var(--desk-ink);font:500 13px/1 var(--print);padding:8px 12px;border-radius:999px;cursor:pointer;font-variant-numeric:tabular-nums}
-.loading{padding-block:30vh;text-align:center;color:var(--desk-ink);font:400 13px/1 var(--print)}
+/* the note fills the room the book will take (book3d.js: bookHeight), so nothing moves when the book arrives */
+.stage{container-type:inline-size}
+.loading{height:min(calc(100vh - 140px),100cqw * 792 / 1102);display:grid;place-items:center;text-align:center;color:var(--desk-ink);font:400 13px/1 var(--print)}
 
 /* entry photos */
 .jph{align-self:flex-end;margin:6px 10px 0 0;position:relative;background:#fff;padding:7px 7px 24px;box-shadow:0 2px 5px rgba(40,30,10,.22);transform:rotate(2.5deg);width:200px;flex:none}
@@ -243,12 +251,18 @@ html{scrollbar-gutter:stable}
 
 /* ================= the three.js book (book3d.js) ================= */
 .is-3d #shift{display:none}
-.book3d{position:relative;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none;cursor:pointer}
+.book3d{position:relative;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none;cursor:pointer;opacity:0;transition:opacity .35s ease}
+.book3d.ready{opacity:1}
+/* while the 3D book loads it already holds its place; the note sits over it instead of pushing it down */
+.is-3d .loading{position:absolute;left:0;right:0;top:0}
 .book3d>canvas{position:absolute;inset:0;display:block}
 /* the live pages at rest, laid over the 3D ones by CSS3DRenderer with the same camera */
 .book3d-dom{position:absolute!important;inset:0;overflow:hidden;pointer-events:none}
 .book3d-slot{width:530px;height:740px;pointer-events:auto;-webkit-user-select:text;user-select:text;cursor:auto}
 .book3d-slot>.page{position:relative}
+
+.restart[hidden]{display:none}
+@media (max-width:640px){.restart{padding:6px 4px;font-size:12px}}
 
 [hidden]{display:none!important}
 #static{position:absolute;left:-99999px;top:0;width:530px}

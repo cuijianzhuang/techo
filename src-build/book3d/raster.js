@@ -7,8 +7,7 @@
      handwriting fonts come in ~100–200 slices of ~40KB; a page needs a handful). Each slice is fetched once.
    - <use href="#mug">: the shared symbol's drawing is copied in.
    - <img src="/img/…">: fetched and turned into a data URL.
-   The page is captured as it stands, including the draw-in state: a page not yet reached has its writing hidden,
-   and writes itself once the live page is shown. */
+   3D pages are captured with their complete content so the live and moving versions match. */
 
 export const PAGE_W = 530, PAGE_H = 740;
 
@@ -104,7 +103,7 @@ async function inlineImages(root) {
   await Promise.all([...root.querySelectorAll('img')].map(async (img) => {
     const src = img.getAttribute('src');
     if (!src || src.startsWith('data:')) return;
-    try { img.setAttribute('src', await dataURL(new URL(src, location.href).href)); } catch { img.removeAttribute('src'); }
+    img.setAttribute('src', await dataURL(new URL(src, location.href).href));
   }));
 }
 
@@ -115,10 +114,23 @@ const loadImage = (src) => new Promise((res, rej) => {
   im.src = src;
 });
 
-/* Render `node` into a canvas `scale` times its 530×740 size. */
-export async function rasterize(node, scale = 2) {
+/* A page being written in (Techo.prepDraw / playDraw) hides its words and doodles with inline styles until
+   the pen reaches them: in a copy, take those away and the page is as it will be once written. The live
+   page is left alone, so capturing it never disturbs the writing. */
+function written(root) {
+  for (const el of root.querySelectorAll('[style]')) {
+    const st = el.style;
+    if (st.opacity === '0') st.opacity = '';
+    if (st.fillOpacity === '0') st.fillOpacity = '';
+    if (st.strokeDashoffset) { st.strokeDasharray = ''; st.strokeDashoffset = ''; }
+  }
+}
+
+/* Render `node` into a canvas `scale` times its 530×740 size; complete: as it looks fully written. */
+export async function rasterize(node, scale = 2, complete = false) {
   const [css, fonts] = await Promise.all([bookCSS(), fontCSSFor(node)]);
   const clone = node.cloneNode(true);
+  if (complete) written(clone);
   clone.style.transform = 'none';
   clone.style.position = 'relative';
   clone.style.left = clone.style.top = '0';
