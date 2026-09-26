@@ -114,10 +114,23 @@ const loadImage = (src) => new Promise((res, rej) => {
   im.src = src;
 });
 
-/* Render `node` into a canvas `scale` times its 530×740 size. */
-export async function rasterize(node, scale = 2) {
+/* A page being written in (Techo.prepDraw / playDraw) hides its words and doodles with inline styles until
+   the pen reaches them: in a copy, take those away and the page is as it will be once written. The live
+   page is left alone, so capturing it never disturbs the writing. */
+function written(root) {
+  for (const el of root.querySelectorAll('[style]')) {
+    const st = el.style;
+    if (st.opacity === '0') st.opacity = '';
+    if (st.fillOpacity === '0') st.fillOpacity = '';
+    if (st.strokeDashoffset) { st.strokeDasharray = ''; st.strokeDashoffset = ''; }
+  }
+}
+
+/* Render `node` into a canvas `scale` times its 530×740 size; complete: as it looks fully written. */
+export async function rasterize(node, scale = 2, complete = false) {
   const [css, fonts] = await Promise.all([bookCSS(), fontCSSFor(node)]);
   const clone = node.cloneNode(true);
+  if (complete) written(clone);
   clone.style.transform = 'none';
   clone.style.position = 'relative';
   clone.style.left = clone.style.top = '0';
