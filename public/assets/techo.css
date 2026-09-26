@@ -245,6 +245,14 @@ body{
 .page.inside{background-color:#dfe4dc;background-image:radial-gradient(rgba(47,74,80,.22) 1px,transparent 1.2px);background-size:14px 14px}
 .page.inside.l{box-shadow:inset -22px 0 26px -18px rgba(30,50,55,.3)}
 .page.inside.r{box-shadow:inset 22px 0 26px -18px rgba(30,50,55,.3)}
+/* the cover cloth turned in over the board's inside edges, the endpaper pasted down inside it. It joins the board's
+   edge strip when a cover stands up, so the edge reads as part of the board, not a bar beside the paper.
+   No turn-in at the hinge: there the endpaper runs on into the book. */
+.page.inside.l::after,.page.inside.r::after{display:block;content:"";position:absolute;inset:0;height:auto;border:0 solid #2f4a50;
+  background:none;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);
+  border-image:linear-gradient(#35535a,#2a434a) 1}
+.page.inside.l::after{border-width:14px 0 14px 14px;border-radius:0}
+.page.inside.r::after{border-width:14px 14px 14px 0;border-radius:0}
 /* flyleaf: README in a terminal-ish hand */
 .flyleaf .body{display:flex;flex-direction:column;justify-content:center;gap:0;padding-inline:26px}
 .flyleaf .readme{font:500 10.5px/1 var(--mono);letter-spacing:2px;color:var(--olive);margin-bottom:18px}
