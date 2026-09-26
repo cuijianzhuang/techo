@@ -360,7 +360,8 @@
   /* ---------- 时间线: the book's own table of contents, the pages after the flyleaf ----------
      Every dated page in the book (the samples and the diary pages), newest first, a month at a time; a line
      per day that opens the book there (#YYYY-MM-DD, which both books follow). As many pages as it takes,
-     always a spread's worth (a left page, then a right one), so the days after it keep their sides. */
+     always a spread's worth (a left page, then a right one), so the days after it keep their sides. The
+     diary pages as cards, with their words and photos, are on the timeline page (/timeline/, timeline.js). */
   const TL_TOP=78,TL_BOTTOM=648,TL_MONTH=40,TL_ROW=34;
   function timelinePages(items){
     items=items.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.order-a.order));
@@ -393,7 +394,10 @@
         list.appendChild(a);
       });
       const f=el('footer','foot');
-      f.append(el('span',null,'点一行，翻到那一天'),el('span','tlp-n',n>1?(k+1)+' / '+n:''));
+      // the same days as cards, with their words, doodles and photos: the timeline page (/timeline/)
+      const all=el('a','tlp-all','整页看 →');all.href='/timeline/';
+      const left=el('span');left.append('点一行，翻到那一天 · ',all);
+      f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;
     });
@@ -546,5 +550,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
 })();

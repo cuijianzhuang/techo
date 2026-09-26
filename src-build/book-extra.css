@@ -302,3 +302,5 @@ html.reading{overflow:hidden}
 .tlp-row:focus-visible{outline:2px solid var(--red);outline-offset:1px}
 .tlp .foot{display:flex;justify-content:space-between;align-items:flex-start}
 .tlp-n{font-variant-numeric:tabular-nums}
+.tlp-all{color:var(--teal-deep);text-decoration:underline;text-decoration-style:wavy;text-decoration-thickness:1px;text-underline-offset:3px}
+.tlp-all:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:2px}
