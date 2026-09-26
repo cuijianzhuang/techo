@@ -272,5 +272,16 @@
     return {pages,settings};
   }
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
-  window.Techo={loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
+  /* the "drag the corner" note beside the cover: fades and drifts away when the book opens (or a corner is
+     taken), and once the reader has opened the book it has done its job: it doesn't come back on the cover */
+  let noteDone=false;
+  function dragNote(el,show){
+    if(!el)return;
+    if(!show&&!el.hidden&&el.dataset.shown==='1')noteDone=true;
+    show=show&&!noteDone;
+    clearTimeout(el.__t);
+    if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
+    else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
+  }
+  window.Techo={dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
 })();

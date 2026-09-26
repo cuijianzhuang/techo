@@ -108,7 +108,10 @@ html{scrollbar-gutter:stable}
 .flyleaf .sig{margin-top:22px;display:flex;align-items:center;gap:10px;font:400 20px/1 var(--hand);color:var(--ink-soft)}
 
 /* ================= hints around the book ================= */
-.dragnote{position:absolute;pointer-events:none;color:var(--desk-ink);font:500 13px/1.4 var(--mono);transition:opacity .4s;white-space:nowrap}
+.dragnote{position:absolute;pointer-events:none;color:var(--desk-ink);font:500 13px/1.4 var(--mono);white-space:nowrap;
+  transition:opacity .55s ease,transform .55s ease,filter .55s ease}
+/* on its way out: fades, drifts off towards where the cover goes, softens */
+.dragnote.gone{opacity:0;transform:translate(10px,6px);filter:blur(2px)}
 .dragnote svg{display:block}
 .dragnote[hidden]{display:none}
 /* "start again" sits on the empty desk beside the book shut on its back cover, like the drag note beside the

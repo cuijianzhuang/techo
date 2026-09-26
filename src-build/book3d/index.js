@@ -429,6 +429,7 @@ export async function start() {
     side = fwd ? 'L' : 'R';
     const tx0 = fit.tx, tx1 = targetX(to), v0 = { pitch: fit.pitch, yaw: fit.yaw }, v1 = viewOf(to);
     const board = isFront ? front : isBack ? back : null;
+    if (from === 0) T.dragNote(dragnote, false);          // the note drifts away as the cover lifts
     const phi0 = held ? held.phi : fwd ? 0 : Math.PI, phi1 = fwd ? Math.PI : 0;
     // paper: the corner's start and where it is now (a click pulls the bottom corner over an arc)
     const C0 = held && held.C0 ? held.C0 : { x: W, y: -H / 2 }, Cs = held && held.C ? held.C : null;
@@ -546,7 +547,7 @@ export async function start() {
     if (!drag.moved) {
       if (to < 0 || to > S) { drag = null; return; }
       grabPage(drag);
-      drag.moved = true; host.setPointerCapture(ev.pointerId);
+      drag.moved = true; host.setPointerCapture(ev.pointerId); T.dragNote(dragnote, false);
       const d = drag; d.to = to; busy = true;
       d.board = (d.fwd ? cur === 0 : cur === 1) ? 'front' : (d.fwd ? to === S : cur === S) ? 'back' : null;
       ready([2 * cur, 2 * cur - 1, 2 * to, 2 * to - 1]).then(() => {
@@ -639,7 +640,7 @@ export async function start() {
     dots.appendChild(b);
   });
   function chrome() {
-    dragnote.hidden = cur !== 0 || fit.portrait;
+    T.dragNote(dragnote, cur === 0 && !fit.portrait);
     restart.hidden = cur < S;
     [...dots.children].forEach((b) => {
       const pg = +b.dataset.page;

@@ -81,7 +81,7 @@
   }
   function reveal(i){visible(i).forEach(k=>{const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);});}
   function chrome(i){
-    dragnote.hidden=i!==0||!landscape();
+    T.dragNote(dragnote,i===0&&landscape());
     restart.hidden=i<last;
     [...dots.children].forEach(b=>{
       const t=+b.dataset.page,on=t===0?i===0:(i===t||i===t+1);
@@ -110,7 +110,7 @@
       const fwd=rnd.getDirection()===0;                 // StPageFlip FlipDirection: 0 forward, 1 back
       const to=i===0||i>=last?0:(fwd&&i>=last-2)?25:(!fwd&&i<=2)?-25:null;
       if(to!==null){
-        dragnote.hidden=true;
+        T.dragNote(dragnote,false);
         // the turn's animation is set up right after this event fires: read its length once it exists
         Promise.resolve().then(()=>{
           const an=rnd.animation;
