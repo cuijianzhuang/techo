@@ -80,6 +80,17 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 主页底部点「✎ 写一页」（或直接打开 `/admin/`），用 GitHub 登录，点「新写一页」。保存后刷新主页就能看到。
 
+## 手帐设置
+
+后台左侧「手帐设置」里能改（没改过的项保持原样）：
+
+- **网站**：浏览器标题、一句介绍。Worker 在返回主页时直接写进 `<title>` 和 `<meta name="description">`，搜索和分享链接也看得到；已发布的页和设置一并内联进页面，主页不用再请求接口。
+- **封面**：大字（第一个「.」是绿色小圆点）、下面那行字；原来的 5 个贴纸可以逐个隐藏；最多 4 张自己的图片当贴纸（存 R2，透明 PNG 会保留透明背景，拿掉的图会从 R2 删除）。
+- **扉页**：README 里的 whoami / cat role / ls ~/life / 开始记的日期，和小咖旁边那句话。
+- **封底**：大字和下方小字（可换行）。
+- **示例页**：开头 9/25–9/29 的示例页可以隐藏；「写信给我」那一页会移到最后一篇日记后面，联系方式不会丢。
+- **联系方式**：邮箱、GitHub。
+
 ## 小插画
 
 后台编辑页里点选，最多两个：晴天、多云、下雨、月亮、猫、书、电脑、bug、植物、吃面、公交、骑车、音乐、心、星星、来信、拍照。
@@ -127,7 +138,7 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/entries` | 已发布的日记页（按日期） |
-| GET | `/api/settings` | 联系方式 |
+| GET | `/api/settings` | 手帐设置（没设置过的项返回默认值） |
 | GET | `/img/p/<uuid>.<ext>` | 照片 |
 | GET | `/api/auth/github` | 跳到 GitHub 登录 |
 | GET | `/api/auth/github/callback` | GitHub 登录回调，成功后下发 Cookie 并回到 `/admin/` |
@@ -137,7 +148,7 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | POST | `/api/admin/entries` | 新建一页（JSON；`stickers` 数组、`status` 默认 `published`） |
 | PUT | `/api/admin/entries/:id` | 整页覆盖更新（换照片时自动删旧图） |
 | DELETE | `/api/admin/entries/:id` | 删除（连同照片） |
-| PUT | `/api/admin/settings` | 更新联系方式 |
+| PUT | `/api/admin/settings` | 更新手帐设置（只改传了的项） |
 | GET | `/api/admin/jots` | 最近 100 条随手记 |
 | POST | `/api/admin/jots` | 记一句（`{"text": "..."}`，≤1000 字） |
 | DELETE | `/api/admin/jots/:id` | 删一条随手记 |

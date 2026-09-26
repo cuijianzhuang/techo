@@ -7,8 +7,8 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    // only API and photos hit the Worker first; pages & scripts are served straight from the edge
-    "run_worker_first": ["/api/*", "/img/*"]
+    // the book page (title + inlined data), API and photos hit the Worker first; the rest comes straight from the edge
+    "run_worker_first": ["/", "/api/*", "/img/*"]
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "techo-db", "database_id": "09d467c6-98de-46e4-8eb3-db07c06c6f45" }

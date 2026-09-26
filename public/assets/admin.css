@@ -131,3 +131,13 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .item .lstk{position:absolute;right:8px;top:10px;overflow:visible}
 .admin .item .lstk+.lstk{right:28px}
 .admin .item b{padding-right:44px}
+/* 手帐设置 */
+.admin .fsect{margin:14px 0 -4px;font:400 22px/1 var(--title);color:var(--ink);padding-top:12px;border-top:1px dashed rgba(120,110,90,.3)}
+.admin .chips{display:flex;gap:6px;flex-wrap:wrap}
+.admin .chip{appearance:none;border:1.5px solid #cfc8b3;background:#fffdf8;border-radius:999px;padding:6px 12px;cursor:pointer;font:500 12.5px/1 var(--print);color:var(--ink-soft);text-decoration:line-through}
+.admin .chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);text-decoration:none}
+.admin .cphotos{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.admin .cphoto{position:relative;width:78px;height:78px;border-radius:8px;background:#e8e3d2 center/contain no-repeat;border:1px solid #cfc8b3}
+.admin .cphoto .cx{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--ink);background:var(--paper);color:var(--ink);font:400 14px/1 var(--print);cursor:pointer;padding:0}
+.admin .check1{display:flex;align-items:center;gap:8px;font:400 14px/1.4 var(--print);color:var(--ink)}
+.admin .check1 input{width:auto}
