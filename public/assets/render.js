@@ -52,14 +52,82 @@
   }
 
   /* one journal page written from the admin */
-  function entryPage(en,side){
-    const dt=parseDate(en.date)||parseDate(todayStr());
-    const p=el('div','page '+side+' jp');
+  /* ---------- locks: the keys this tab holds (scope → token from /api/unlock), kept until it closes ---------- */
+  const KEYS='techo-keys';
+  function keys(){try{return JSON.parse(sessionStorage.getItem(KEYS)||'{}')||{};}catch(e){return {};}}
+  function setKeys(k){try{if(Object.keys(k).length)sessionStorage.setItem(KEYS,JSON.stringify(k));else sessionStorage.removeItem(KEYS);}catch(e){}}
+  function dateHead(dt,aside){
     const h=el('header','head');
     const m=el('span','m');m.append(dt.mo+'月',el('br'),MOE[dt.mo-1]);
     const wd=el('span','wd'+(dt.wd===0||dt.wd===6?' we':''));wd.append(el('b',null,WD[dt.wd]),el('i',null,WDE[dt.wd]));
-    const note=el('span','note');note.append(en.aside||'',el('br'),String(dt.y));
+    const note=el('span','note');note.append(aside||'',el('br'),String(dt.y));
     h.append(m,el('span','d',String(dt.d)),wd,note);
+    return h;
+  }
+  /* a page behind a lock: only its date, and a sealed envelope asking for the password */
+  const SEAL='<svg width="150" height="104" viewBox="0 0 150 104" aria-hidden="true"><rect x="3" y="3" width="144" height="98" rx="4" fill="#fffdf6" stroke="#2a2724" stroke-width="2.4"/><path d="M4 5 75 58 146 5" fill="none" stroke="#b9b3a3" stroke-width="1.6"/><path d="M4 100 60 50M146 100 90 50" fill="none" stroke="#d8d2c2" stroke-width="1.2"/><circle cx="75" cy="58" r="17" fill="#d9573b"/><circle cx="75" cy="58" r="12.5" fill="none" stroke="#fbe3dc" stroke-width="1.2" stroke-dasharray="2 2.4"/><rect x="69" y="56" width="12" height="9" rx="1.6" fill="#fbe3dc"/><path d="M71.5 56v-3a3.5 3.5 0 0 1 7 0v3" fill="none" stroke="#fbe3dc" stroke-width="1.8"/></svg>';
+  function lockedPage(en,side){
+    const dt=parseDate(en.date)||parseDate(todayStr());
+    const book=en.locked==='book';
+    const p=el('div','page '+side+' jp locked');
+    const b=el('div','body');
+    const box=el('div','seal');
+    const art=el('div','seal-art');art.innerHTML=SEAL;
+    box.append(art,el('div','seal-t',book?'这本手帐上了锁':'这一页上了锁'),
+      el('div','seal-s',book?'在封面输入口令，整本都能看':'只给知道口令的人看'));
+    const btn=el('button','lockbtn','输入口令');btn.type='button';
+    btn.dataset.scope=book?'book':en.id;btn.dataset.date=en.date;
+    box.appendChild(btn);b.appendChild(box);
+    p.append(dateHead(dt,''),b,el('footer','foot'));
+    if(side==='r'){p.appendChild(el('div','tab',String(dt.mo)));p.appendChild(makeCal(dt.y,dt.mo,dt.d));}
+    return p;
+  }
+  /* the password slip: a scrap of paper in the middle of the screen; right → keep the key, reopen the book
+     there (the reloaded book asks the Worker for the opened pages) */
+  let asking=null;
+  function askUnlock(scope,date){
+    if(asking)return;
+    const back=el('div','lockask-back'),card=el('form','lockask');card.setAttribute('role','dialog');card.setAttribute('aria-modal','true');
+    const d=parseDate(date);
+    card.append(el('div','la-t','输入口令'),el('div','la-s',scope==='book'?'打开整本手帐':d?('打开 '+d.mo+' 月 '+d.d+' 日 这一页'):'打开这一页'));
+    const inp=el('input');inp.type='password';inp.autocomplete='current-password';inp.maxLength=128;inp.setAttribute('aria-label','口令');
+    const err=el('div','la-err');err.setAttribute('role','alert');
+    const row=el('div','la-row'),ok=el('button','la-ok','打开'),no=el('button','la-no','算了');ok.type='submit';no.type='button';
+    row.append(no,ok);card.append(inp,err,row,el('div','la-forget','忘了口令？翻到最后一页写信给我'));back.appendChild(card);document.body.appendChild(back);
+    asking=back;
+    const close=()=>{back.remove();asking=null;document.removeEventListener('keydown',esc);};
+    const esc=e=>{if(e.key==='Escape')close();};
+    document.addEventListener('keydown',esc);
+    back.addEventListener('pointerdown',e=>{if(e.target===back)close();});
+    no.onclick=close;
+    card.onsubmit=async e=>{
+      e.preventDefault();if(!inp.value)return;
+      ok.disabled=true;err.textContent='';
+      try{
+        const r=await fetch('/api/unlock',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({scope,password:inp.value})});
+        const j=await r.json().catch(()=>({}));
+        if(!r.ok||!j.token){err.textContent=j.error||'没打开，稍后再试';card.classList.remove('shake');void card.offsetWidth;card.classList.add('shake');inp.select();return;}
+        const k=keys();k[scope]=j.token;setKeys(k);
+        // reopen at this day (the whole book: where the reader is)
+        if(date&&scope!=='book')history.replaceState(null,'',location.pathname+location.search+'#'+date);
+        location.reload();
+      }catch(x){err.textContent='网络不通，稍后再试';}
+      finally{ok.disabled=false;}
+    };
+    setTimeout(()=>inp.focus(),30);
+  }
+  document.addEventListener('click',e=>{
+    const b=e.target.closest&&e.target.closest('.lockbtn');
+    if(b){e.preventDefault();e.stopPropagation();askUnlock(b.dataset.scope,b.dataset.date);}
+  },true);
+  /* lock again: forget this tab's keys */
+  function relock(){setKeys({});history.replaceState(null,'',location.pathname+location.search);location.reload();}
+
+  function entryPage(en,side){
+    if(en.locked)return lockedPage(en,side);
+    const dt=parseDate(en.date)||parseDate(todayStr());
+    const p=el('div','page '+side+' jp');
+    const h=dateHead(dt,en.aside);
     const b=el('div','body');
     if(en.stamp){const st=el('div','stamp',[...en.stamp][0]);st.style.cssText='top:0;right:4px';b.appendChild(st);}
     const jt=el('div','jt');jt.appendChild(el('h2',null,en.title||'（无题）'));
@@ -68,7 +136,9 @@
     if(en.photoUrl||en.photoKey){
       const ph=el('figure','jph');
       const img=el('img');img.alt=en.photoCap||'';img.decoding='async';img.loading='lazy';
-      img.src=en.photoUrl||('/img/'+en.photoKey);
+      // an opened locked page's photo needs its key too
+      const k=en.lock&&keys()[en.lock];
+      img.src=en.photoUrl||('/img/'+en.photoKey+(k?'?k='+encodeURIComponent(k):''));
       ph.append(el('div','tape'),img);
       if(en.photoCap)ph.appendChild(el('figcaption','cap',en.photoCap));
       b.appendChild(ph);
@@ -188,17 +258,23 @@
      and the page list in reading order. */
   async function loadBook(src){
     /* ---------- data: inlined by the Worker, or fetched ---------- */
-    let entries=[],settings={};
-    if(window.TECHO_DATA){entries=window.TECHO_DATA.entries||[];settings=window.TECHO_DATA.settings||{};}
-    else{
+    let entries=[],settings={},lock={book:false,open:[]};
+    const held=keys(),inline=window.TECHO_DATA;
+    if(inline){entries=inline.entries||[];settings=inline.settings||{};lock=inline.lock||lock;}
+    // the tab holds keys to locked pages: ask for them opened (the inlined copy has them sealed)
+    if(!inline||Object.keys(held).length){
       try{
         const [e,s]=await Promise.all([
-          fetch('/api/entries',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():{entries:[]}),
-          fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():{settings:{}})
+          fetch('/api/entries',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>r.ok?r.json():null),
+          inline?null:fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():{settings:{}})
         ]);
-        entries=e.entries||[];settings=s.settings||{};
+        if(e){entries=e.entries||[];lock=e.lock||lock;
+          // keys that no longer open anything (password changed, expired) are dropped
+          const k={};(lock.open||[]).forEach(sc=>{if(held[sc])k[sc]=held[sc];});setKeys(k);}
+        if(s)settings=s.settings||{};
       }catch(err){console.warn('techo: API unavailable, showing built-in pages only',err);}
     }
+    const bookShut=lock.book&&!(lock.open||[]).includes('book');
     const mail=src.querySelector('#mail');if(mail&&settings.email)mail.textContent=settings.email;
     const gh=src.querySelector('#gh');
     if(gh){const ok=/^https:\/\//i.test(settings.github||'');gh.href=ok?settings.github:'https://github.com/';
@@ -256,7 +332,8 @@
     push(q('.page.flyleaf'));
     // the hand-made sample pages can be hidden. Their last page (写信给我, the contact details) is always the
     // book's last page: every newly published diary page goes in before it
-    const days=[...src.querySelectorAll('.day')],showSamples=settings.samples!=='hide';
+    // a locked book keeps its sample pages shut away too
+    const days=[...src.querySelectorAll('.day')],showSamples=settings.samples!=='hide'&&!bookShut;
     const contact=days.find(p=>p.querySelector('#mail'));
     // 写信给我 is the book's last page, written today: its date, month tab and little calendar are today's
     if(contact){
@@ -289,7 +366,18 @@
     push(blankPage('l','下一页，还空着。'));
     push(q('.page.inside.r'),{hard:true});
     push(q('.page.backcover'),{hard:true});
-    return {pages,settings};
+    // a locked book says so on its cover; a tab holding keys can lock it again (a link under the nav)
+    if(bookShut){
+      const cue=el('button','lockbtn lockcue');cue.type='button';cue.dataset.scope='book';
+      cue.innerHTML='<svg width="13" height="14" viewBox="0 0 13 14" aria-hidden="true"><rect x="1.5" y="6" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M3.8 6V4.2a2.7 2.7 0 0 1 5.4 0V6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+      cue.append('上了锁 · 输入口令');
+      const cover=q('.page.cover');if(cover)cover.appendChild(cue);
+    }
+    if((lock.open||[]).length){
+      const hint=document.querySelector('.hint');
+      if(hint&&!document.getElementById('relock')){const r=el('button','relock','重新上锁');r.type='button';r.id='relock';r.onclick=relock;hint.appendChild(r);}
+    }
+    return {pages,settings,lock};
   }
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
   /* the "drag the corner" note beside the cover: fades and drifts away when the book opens (or a corner is
@@ -303,5 +391,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
+  window.Techo={askUnlock,relock,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
 })();

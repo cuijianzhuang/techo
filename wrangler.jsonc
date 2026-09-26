@@ -25,6 +25,10 @@
     "TIMEZONE": "Asia/Shanghai"
   },
   // 23:30 Asia/Shanghai: write today's draft from the jots if the desktop task (22:00) didn't
+  // a reader guessing a page's password gets 10 tries a minute (per address and lock)
+  "ratelimits": [
+    { "name": "UNLOCK_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
   "triggers": { "crons": ["30 15 * * *"] },
   "observability": { "enabled": true }
 }

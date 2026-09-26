@@ -19,6 +19,8 @@ type Env = {
   ANTHROPIC_API_KEY?: string;
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
+  /** rate limit for password guesses (wrangler.jsonc "ratelimits"); missing: no limit */
+  UNLOCK_LIMIT?: { limit(o: { key: string }): Promise<{ success: boolean }> };
 };
 /** login: the GitHub account behind the admin session */
 type HonoEnv = { Bindings: Env; Variables: { login: string } };
@@ -160,9 +162,91 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   return { ok: true, value: v };
 }
 
+/* ---------------- locks: the whole book, or one day, behind a password ----------------
+   A 口令 gate, checked here: a locked page leaves the Worker only as its date until the reader has given the
+   password. Passwords are kept as PBKDF2 hashes in `locks` (scope 'book', or an entry id for a day locked on
+   its own — that day then needs its own password even when the book is open). Giving the right password
+   earns a signed token, keyed by the lock's hash (so changing the password retires it); the reader's tab
+   keeps it in sessionStorage and sends it back in X-Techo-Keys (or ?k= for a photo). */
+
+const LOCK_ITER = 10_000;               // Workers count CPU time; the rate limit does the real work
+const UNLOCK_HOURS = 12;
+const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (ch) => ch.charCodeAt(0));
+
+async function pbkdf2(password: string, salt: Uint8Array, iter: number): Promise<ArrayBuffer> {
+  const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
+  return crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: iter }, key, 256);
+}
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return `pbkdf2-sha256$${LOCK_ITER}$${b64url(salt.buffer as ArrayBuffer)}$${b64url(await pbkdf2(password, salt, LOCK_ITER))}`;
+}
+async function checkPassword(password: string, stored: string): Promise<boolean> {
+  const m = /^pbkdf2-sha256\$(\d+)\$([\w-]+)\$([\w-]+)$/.exec(stored);
+  if (!m) return false;
+  return sameText(b64url(await pbkdf2(password, unb64(m[2]), Number(m[1]))), m[3]);
+}
+/** scope → hash. Before the locks table exists (migration not run yet) nothing is locked. */
+async function loadLocks(env: Env): Promise<Map<string, string>> {
+  try {
+    const { results } = await env.DB.prepare("SELECT scope, hash FROM locks").all<{ scope: string; hash: string }>();
+    return new Map(results.map((r) => [r.scope, r.hash]));
+  } catch { return new Map(); }
+}
+/** "<scope>.<expiry ms>.<hmac>" */
+async function unlockToken(scope: string, hash: string): Promise<string> {
+  const body = `${scope}.${Date.now() + UNLOCK_HOURS * 3_600_000}`;
+  return `${body}.${b64url(await hmac("unlock:" + hash, body))}`;
+}
+/** the scopes these tokens open */
+async function openScopes(locks: Map<string, string>, tokens: string[]): Promise<Set<string>> {
+  const open = new Set<string>();
+  for (const t of tokens.slice(0, 64)) {
+    const m = /^(([\w-]{1,64})\.(\d{13,}))\.([\w-]+)$/.exec(t);
+    if (!m || Number(m[3]) < Date.now()) continue;
+    const hash = locks.get(m[2]);
+    if (hash && sameText(b64url(await hmac("unlock:" + hash, m[1])), m[4])) open.add(m[2]);
+  }
+  return open;
+}
+const keysOf = (c: C) => (c.req.header("x-techo-keys") || "").split(/[\s,]+/).filter(Boolean);
+/** which lock keeps this entry: its own, else the book's */
+const lockOf = (locks: Map<string, string>, id: string) => (locks.has(id) ? id : locks.has("book") ? "book" : null);
+
+type LockedStub = { id: string; date: string; locked: "book" | "day" };
+/** published pages as a reader may see them: a locked page they haven't opened is only its date */
+async function readerEntries(env: Env, tokens: string[]) {
+  const [entries, locks] = await Promise.all([loadPublished(env), loadLocks(env)]);
+  const open = await openScopes(locks, tokens);
+  const out: (Entry & { lock?: string } | LockedStub)[] = entries.map((e) => {
+    const scope = lockOf(locks, e.id);
+    if (!scope) return e;
+    if (!open.has(scope)) return { id: e.id, date: e.date, locked: scope === "book" ? "book" : "day" };
+    return { ...e, lock: scope };       // open: the page says which key opened it (for its photo)
+  });
+  return { entries: out, lock: { book: locks.has("book"), open: [...open] } };
+}
+
 app.get("/api/entries", async (c) => {
   c.header("Cache-Control", "no-store");
-  return c.json({ entries: await loadPublished(c.env) });
+  return c.json(await readerEntries(c.env, keysOf(c)));
+});
+
+/* the password for the book ('book') or a day (its entry id): right → a token; 10 guesses a minute */
+app.post("/api/unlock", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as { scope?: unknown; password?: unknown } | null;
+  const scope = typeof o?.scope === "string" ? o.scope : "", password = typeof o?.password === "string" ? o.password : "";
+  if (!/^[\w-]{1,64}$/.test(scope) || !password || password.length > 128) return bad(c, 400, "请输入口令");
+  if (c.env.UNLOCK_LIMIT) {
+    const ip = c.req.header("cf-connecting-ip") || "local";
+    const { success } = await c.env.UNLOCK_LIMIT.limit({ key: `${ip}:${scope}` });
+    if (!success) return c.json({ error: "试得太多了，过一分钟再来" }, 429);
+  }
+  const hash = (await loadLocks(c.env)).get(scope);
+  if (!hash) return bad(c, 404, "这里没有上锁");
+  if (!(await checkPassword(password, hash))) return bad(c, 403, "口令不对");
+  c.header("Cache-Control", "no-store");
+  return c.json({ scope, token: await unlockToken(scope, hash) });
 });
 
 app.get("/api/settings", async (c) => {
@@ -172,10 +256,11 @@ app.get("/api/settings", async (c) => {
 
 /* The book's page: title and description from the settings, and the data inlined so book.js needn't fetch it. */
 app.get("/", async (c) => {
-  const [page, settings, entries] = await Promise.all([c.env.ASSETS.fetch(c.req.raw), loadSettings(c.env), loadPublished(c.env)]);
+  // (no tokens here: a reader's opened pages come later from /api/entries, their tab holds the keys)
+  const [page, settings, reader] = await Promise.all([c.env.ASSETS.fetch(c.req.raw), loadSettings(c.env), readerEntries(c.env, [])]);
   if (!page.ok) return page;
   // "<" escaped so nothing in a journal page can close the script tag
-  const data = JSON.stringify({ entries, settings }).replace(/</g, "\\u003c");
+  const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings }).replace(/</g, "\\u003c");
   const res = new HTMLRewriter()
     .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
     .on('meta[name="description"]', { element: (e) => { e.setAttribute("content", settings.siteDesc); } })
@@ -186,16 +271,29 @@ app.get("/", async (c) => {
   return new Response(res.body, { status: res.status, headers: h });
 });
 
-/* Photos from R2. Keys are random UUIDs and never reused, so they cache forever. */
+/* Photos from R2. Keys are random UUIDs and never reused, so they cache forever — except a locked page's:
+   those need its key (?k=) or the admin's session, and are never kept by a shared cache. */
 app.get("/img/:dir/:name", async (c) => {
   const key = `${c.req.param("dir")}/${c.req.param("name")}`;
   if (!PHOTO_KEY.test(key)) return c.notFound();
+  let locked = false;
+  const locks = await loadLocks(c.env);
+  if (locks.size) {
+    const row = await c.env.DB.prepare("SELECT id FROM entries WHERE photo_key=?").bind(key).first<{ id: string }>();
+    const scope = row && lockOf(locks, row.id);
+    if (scope) {
+      locked = true;
+      const admin = !authProblem(c.env) && (await sessionLogin(c.env, getCookie(c, SESSION_COOKIE)));
+      const dev = c.env.DEV_BYPASS_AUTH === "1" && isLocal(c);
+      if (!admin && !dev && !(await openScopes(locks, [c.req.query("k") || ""])).has(scope)) return c.notFound();
+    }
+  }
   const obj = await c.env.PHOTOS.get(key);
   if (!obj) return c.notFound();
   const h = new Headers();
   obj.writeHttpMetadata(h);
   h.set("ETag", obj.httpEtag);
-  h.set("Cache-Control", "public, max-age=31536000, immutable");
+  h.set("Cache-Control", locked ? "private, no-store" : "public, max-age=31536000, immutable");
   return new Response(obj.body, { headers: h });
 });
 
@@ -307,9 +405,34 @@ app.post("/api/admin/logout", (c) => {
 
 /* drafts included */
 app.get("/api/admin/entries", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT * FROM entries ORDER BY date ASC, created_at ASC").all();
+  const [{ results }, locks] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM entries ORDER BY date ASC, created_at ASC").all(), loadLocks(c.env)]);
   c.header("Cache-Control", "no-store");
-  return c.json({ entries: results.map(rowToEntry) });
+  return c.json({ entries: results.map((r) => ({ ...rowToEntry(r), locked: locks.has(String(r.id)) })), bookLocked: locks.has("book") });
+});
+
+/* set, change or take off a password: scope 'book' or an entry id; password null takes the lock off */
+app.put("/api/admin/locks/:scope", async (c) => {
+  const scope = c.req.param("scope");
+  if (scope !== "book") {
+    const row = await c.env.DB.prepare("SELECT id FROM entries WHERE id=?").bind(scope).first();
+    if (!row) return bad(c, 404, "这一页不存在");
+  }
+  const o = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
+  try {
+    if (o?.password === null) {
+      await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(scope).run();
+      return c.json({ scope, locked: false });
+    }
+    const pw = typeof o?.password === "string" ? o.password : "";
+    if ([...pw].length < 4 || pw.length > 128) return bad(c, 400, "口令至少 4 个字符");
+    await c.env.DB.prepare("INSERT INTO locks (scope,hash,updated_at) VALUES (?,?,?) ON CONFLICT(scope) DO UPDATE SET hash=excluded.hash, updated_at=excluded.updated_at")
+      .bind(scope, await hashPassword(pw), Date.now()).run();
+    return c.json({ scope, locked: true });
+  } catch (e) {
+    if (/no such table/i.test(String(e))) return bad(c, 500, "数据库还没有 locks 表：运行 migrations/0002_locks.sql");
+    throw e;
+  }
 });
 
 app.post("/api/admin/entries", async (c) => {
@@ -346,6 +469,7 @@ app.delete("/api/admin/entries/:id", async (c) => {
   const old = await c.env.DB.prepare("SELECT photo_key FROM entries WHERE id=?").bind(id).first<{ photo_key: string }>();
   if (!old) return bad(c, 404, "这一页不存在");
   await c.env.DB.prepare("DELETE FROM entries WHERE id=?").bind(id).run();
+  await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(id).run().catch(() => {});
   if (old.photo_key) c.executionCtx.waitUntil(c.env.PHOTOS.delete(old.photo_key));
   return c.json({ ok: true });
 });

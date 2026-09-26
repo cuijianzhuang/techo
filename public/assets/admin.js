@@ -4,7 +4,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[];
+  let entries=[],settings={},jots=[],bookLocked=false;
   let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
@@ -68,7 +68,7 @@
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':''));
+      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':''));
       const gist=String(en.body||'').replace(/\s+/g,' ').trim();
       it.append(t,meta);
       if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
@@ -169,6 +169,8 @@
         ...sect('封底'),
         field('封底大字','backTitle','text',{max:12}),
         field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'}),
+        ...sect('加密','给整本手帐设一个口令。'),
+        lockField('book'),
         ...sect('翻页方式','首页的书怎么翻。'),
         bookModeField(),
         ...sect('示例页'),
@@ -191,6 +193,7 @@
       field('小咖','mood','select',{options:[['mug','醒着'],['sleep','睡着'],['none','不出场']]}));
     const r4=el('div','row');r4.append(field('印章（一个字）','stamp','text',{ph:'记',max:2}),field('页脚引文','quote','text',{ph:'一句喜欢的话',max:120}));
     f.append(r3,r4,field('引文出处','quoteSrc','text',{ph:'作者《书名》',max:60}));
+    if(sel!=='new'){const h=el('h3','fsect','单独上锁');h.style.fontSize='18px';f.append(h,lockField(sel));}
     const b=el('div','bar');
     const isDraft=draft.status==='draft';
     const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
@@ -337,6 +340,49 @@
       }
     };
     paint();wrap.append(l,row);return wrap;
+  }
+  /* a password for the whole book ('book') or this one day (its id). Saved at once, apart from the form:
+     only a hash is kept, so a forgotten password is simply set again here */
+  function lockField(scope){
+    const book=scope==='book',en=book?null:entries.find(e=>e.id===scope);
+    const on=book?bookLocked:!!(en&&en.locked);
+    const w=el('div','lockf');
+    w.appendChild(el('div','hintx',on
+      ?(book?'🔒 整本已上锁：主页上的日记只露出日期，读者输入口令才能看（单独上锁的那几天仍要用各自的口令）。'
+            :'🔒 这一页已单独上锁：只露出日期，要用这里的口令打开，整本的口令打不开它。')
+      :(book?'上锁后，主页上所有日记只露出日期，读者在封面输入口令才能看；示例页也会收起来。'
+            :'单独上锁后，这一页只露出日期，要用这里设的口令打开（和整本的口令分开）。')));
+    const row=el('div','row');
+    const mk=(ph,id)=>{const i=el('input');i.type='password';i.autocomplete='new-password';i.placeholder=ph;i.id=id;i.maxLength=128;return i;};
+    const p1=mk(on?'新口令（至少 4 个字符）':'口令（至少 4 个字符）','lk1-'+scope),p2=mk('再输一遍','lk2-'+scope);
+    const l1=el('label','fld');l1.append(el('span',null,on?'改成新口令':'口令'),p1);
+    const l2=el('label','fld');l2.append(el('span',null,'确认'),p2);
+    row.append(l1,l2);w.appendChild(row);
+    const bar=el('div','bar');
+    const go=el('button','b small',on?'改口令':(book?'给整本上锁':'给这一页上锁'));go.type='button';
+    const send=async(password,done)=>{
+      if(busy)return;busy=true;status('正在保存……');
+      try{
+        await sendJson('PUT','/api/admin/locks/'+encodeURIComponent(scope),{password});
+        const now=password!==null;
+        if(book)bookLocked=now;else if(en)en.locked=now;
+        drawList();drawForm();status(done,'ok');
+      }catch(e){status(e.message||'没有保存成功','err');}
+      finally{busy=false;}
+    };
+    go.onclick=()=>{
+      if([...p1.value].length<4){status('口令至少 4 个字符。','err');p1.focus();return;}
+      if(p1.value!==p2.value){status('两次输入的口令不一样。','err');p2.focus();return;}
+      send(p1.value,on?'口令已改好；读者需要用新口令重新打开。':'已上锁。');
+    };
+    bar.appendChild(go);
+    if(on){
+      const off=el('button','b small warn','取消上锁');off.type='button';
+      off.onclick=()=>send(null,book?'整本已取消上锁。':'这一页已取消上锁。');
+      bar.appendChild(off);
+    }
+    w.appendChild(bar);
+    return w;
   }
   function bookModeField(){
     const w=el('div');
@@ -485,6 +531,7 @@
         const body=stripLocal(draft);
         const r=sel==='new'?await sendJson('POST','/api/admin/entries',body):await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(sel),body);
         const en=r.entry;const i=entries.findIndex(e=>e.id===en.id);
+        if(i>=0)en.locked=entries[i].locked;          // the lock is kept apart from the page's fields
         if(i>=0)entries[i]=en;else entries.push(en);
         const keepUrl=draft.photoUrl;
         sel=en.id;draft=Object.assign({},en);if(keepUrl&&draft.photoKey)draft.photoUrl=keepUrl;
@@ -517,7 +564,7 @@
       const me=await api('/api/admin/me');
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
-      entries=e.entries||[];settings=s.settings||{};
+      entries=e.entries||[];settings=s.settings||{};bookLocked=!!e.bookLocked;
       drawList();drawForm();
     }catch(err){
       // not signed in, or the Worker can't do sign-in yet (e.g. GitHub app not configured): either way, the login sheet says why
