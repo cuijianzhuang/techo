@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { ComposeError, composePage, pingAi, normalizeBaseURL, DEFAULT_MODEL, type AiConfig } from "./compose";
+import { ComposeError, composePage, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
 
 type Env = {
   DB: D1Database;
@@ -15,8 +15,9 @@ type Env = {
   ADMIN_GITHUB_LOGIN: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
-  /** secret: `wrangler secret put ANTHROPIC_API_KEY` — the key for Anthropic's API, or for the endpoint set in
-      手帐设置 → AI; without it the AI features are off */
+  /** secret: the key for the AI set in 手帐设置 → AI (`wrangler secret put AI_API_KEY`); ANTHROPIC_API_KEY is read
+      when it isn't set. Without either the AI features are off. */
+  AI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
@@ -155,18 +156,20 @@ const SETTING_DEFAULTS: Record<string, string> = {
   backTitle: "EOF", backImprint: "cui.log · build 2026.09.25\ndeployed on the edge",
   samples: "show",
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
-  // the AI that writes drafts: an endpoint speaking the Anthropic Messages API ("" = Anthropic's own) and a model.
-  // The key is a Worker secret, never a setting. Admin only (PRIVATE_SETTINGS).
-  aiBaseUrl: "", aiModel: DEFAULT_MODEL,
+  // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
+  // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
+  // Admin only (PRIVATE_SETTINGS).
+  aiFormat: "anthropic", aiBaseUrl: "", aiModel: DEFAULT_MODEL,
 };
 /** settings only the admin sees: kept out of /api/settings and the page */
-const PRIVATE_SETTINGS = new Set(["aiBaseUrl", "aiModel"]);
+const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel"]);
 const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
 /** the AI as configured (the admin's settings, the Worker's key) */
+const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";
 async function aiConfig(env: Env): Promise<AiConfig> {
-  if (!env.ANTHROPIC_API_KEY) throw new ComposeError("Worker 未配置 ANTHROPIC_API_KEY（运行 npx wrangler secret put ANTHROPIC_API_KEY）");
+  if (!aiKey(env)) throw new ComposeError("Worker 还没有 AI 的 key（运行 npx wrangler secret put AI_API_KEY）");
   const s = await loadSettings(env);
-  return { apiKey: env.ANTHROPIC_API_KEY, baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL };
+  return { apiKey: aiKey(env), baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL, format: s.aiFormat === "openai" ? "openai" : "anthropic" };
 }
 /** max length (characters) per text setting */
 const SETTING_MAX: Record<string, number> = {
@@ -209,8 +212,9 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   }
   if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
+  if (v.aiFormat !== undefined && !["anthropic", "openai"].includes(v.aiFormat)) return { ok: false, error: "aiFormat 只能是 anthropic / openai" };
   if (v.aiBaseUrl) {
-    v.aiBaseUrl = normalizeBaseURL(v.aiBaseUrl);
+    v.aiBaseUrl = v.aiBaseUrl.replace(/\/+$/, "");   // what follows (/v1, /chat/completions) depends on the format: compose.ts
     let u: URL | null = null;
     try { u = new URL(v.aiBaseUrl); } catch { /* checked below */ }
     const local = u && ["localhost", "127.0.0.1"].includes(u.hostname);
@@ -566,19 +570,51 @@ app.delete("/api/admin/entries/:id", async (c) => {
 });
 
 /* the admin's view of the settings: all of them, and whether the AI has its key */
-const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!env.ANTHROPIC_API_KEY } });
+const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!aiKey(env) } });
 app.get("/api/admin/settings", async (c) => c.json(await adminSettings(c.env)));
 
-/* 测试连接: one short question with the AI as configured (or as about to be saved: base / model in the body) */
+/* 测试连接: one short question with the AI as configured (or as about to be saved: format / base / model in the body) */
 app.post("/api/admin/ai/test", async (c) => {
-  const o = (await c.req.json().catch(() => ({}))) as { aiBaseUrl?: unknown; aiModel?: unknown };
-  const parsed = cleanSettings({ aiBaseUrl: typeof o.aiBaseUrl === "string" ? o.aiBaseUrl : "", aiModel: typeof o.aiModel === "string" ? o.aiModel : "" });
+  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const s = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  const parsed = cleanSettings({ aiFormat: s("aiFormat") || "anthropic", aiBaseUrl: s("aiBaseUrl"), aiModel: s("aiModel") });
   if (!parsed.ok) return bad(c, 400, parsed.error);
   try {
     const ai = await aiConfig(c.env);
-    return c.json(await pingAi({ ...ai, baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL }));
+    return c.json(await pingAi({
+      ...ai, format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
+      baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL,
+    }));
   } catch (err) {
     return bad(c, 500, err instanceof ComposeError ? err.message : "没连上，稍后再试");
+  }
+});
+
+/* 一键补全: title, latin, aside, stamp, quote and doodles for a page, from what's written on it. The admin
+   fills in only the parts still empty; nothing is saved here. */
+app.post("/api/admin/ai/suggest", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!o || typeof o !== "object") return bad(c, 400, "请求体必须是 JSON 对象");
+  const s = (k: string, max = 4000) => [...(typeof o[k] === "string" ? (o[k] as string).trim() : "")].slice(0, max).join("");
+  const body = s("body");
+  if (!body) return bad(c, 400, "先写几句正文，再让 AI 补全");
+  try {
+    const ai = await aiConfig(c.env);
+    const got = await suggestFields(ai, {
+      date: s("date", 10), title: s("title", 60), latin: s("latin", 120), aside: s("aside", 60), body, note: s("note", 120),
+      stamp: s("stamp", 2), quote: s("quote", 200), quoteSrc: s("quoteSrc", 120), place: s("place", 60), weather: s("weather", 40),
+      stickers: (Array.isArray(o.stickers) ? o.stickers : []).filter((k): k is string => typeof k === "string" && STICKERS.has(k)),
+    }, STICKER_LABELS);
+    // the model's lengths are a request, not a guarantee: cut to what the page holds
+    const cut = (v: string, k: string) => [...v.trim()].slice(0, LIMITS[k]).join("");
+    return c.json({ suggestion: {
+      title: cut(got.title, "title"), latin: cut(got.latin, "latin"), aside: cut(got.aside, "aside"),
+      stamp: [...got.stamp.trim()].slice(0, 1).join(""), quote: cut(got.quote, "quote"), quoteSrc: cut(got.quoteSrc, "quoteSrc"),
+      stickers: [...new Set(got.stickers.filter((k) => STICKERS.has(k)))].slice(0, MAX_STICKERS),
+    } });
+  } catch (err) {
+    console.error(err);
+    return bad(c, 500, err instanceof ComposeError ? err.message : "没补全成，稍后再试");
   }
 });
 
