@@ -1,7 +1,7 @@
 /* The journal as a three.js book: boards with real thickness, page blocks whose depth follows your place in
    the book, and paper that bends as it turns. At rest the two open pages are the live web pages, laid over the
    3D pages with the same camera (CSS3DRenderer), so text stays crisp, selectable and clickable and the draw-in
-   still plays; while a sheet turns, WebGL shows rasterised copies of the pages (raster.js).
+   while a sheet turns, WebGL shows complete rasterised copies of the pages (raster.js).
 
    Layout (world units = page px): spine at x=0, the book lies in the XY plane, +z points up off the desk
    towards the viewer. A "sheet" is a pair of pages, front = right-hand page (even index), back = left-hand
@@ -14,6 +14,7 @@ import {
 } from 'three';
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { rasterize, PAGE_W as W, PAGE_H as H } from './raster.js';
+import { boardHeight, spreadCenter } from './motion.mjs';
 
 const OH = 6;          // boards overhang the pages
 const BT = 7;          // board thickness
@@ -24,7 +25,11 @@ const FOV = 18, DEG = Math.PI / 180;
    thickness shows (the back cover from the other side, its fore-edge being on the left). Open, it turns to
    nearly face-on, so the live pages read straight. Head-on, no book has any visible thickness. */
 const VIEW = { front: { pitch: 22 * DEG, yaw: 20 * DEG }, open: { pitch: 8 * DEG, yaw: 0 }, back: { pitch: 22 * DEG, yaw: -20 * DEG } };
-const CLOTH = new Color('#2b454b'), CLOTH_EDGE = new Color('#314d53'), PAPER = new Color('#f6f1e2');
+// The shader outputs raw display colors, just like the DOM textures. Convert
+// Three's linear Color values back to display space for untextured edges too.
+const CLOTH = new Color('#2b454b').convertLinearToSRGB();
+const CLOTH_EDGE = new Color('#314d53').convertLinearToSRGB();
+const PAPER = new Color('#f6f1e2').convertLinearToSRGB();
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -53,7 +58,8 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
       varying vec2 vUv; varying vec3 vN; varying vec3 vW;
       void main(){
         vec2 uv = vUv; if (flipU > 0.5) uv.x = 1.0 - uv.x;
-        vec3 base = useMap > 0.5 ? texture2D(map, uv).rgb : color;
+        vec4 texel = useMap > 0.5 ? texture2D(map, uv) : vec4(color, 1.0);
+        vec3 base = mix(color, texel.rgb, texel.a);
         vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
         // light from over the reader's shoulder: a face turned half away is only a little darker, never a grey slab
         vec3 L = normalize(vec3(-0.25, 0.3, 1.0));
@@ -123,29 +129,26 @@ export async function start() {
   const N = pages.length, S = N / 2, P = Math.max(0, S - 2);
   const meas = T.measure();
   pages.forEach((p) => meas.appendChild(p.node));
-  pages.forEach((p) => { if (p.node.classList.contains('day') || p.node.classList.contains('jp')) T.prepDraw(p.node); });
+  // Keep complete content in both renderers. A DOM draw-in animation cannot be
+  // captured reliably by SVG foreignObject and produced blank text during turns.
   src.remove();
 
-  /* ---------- page textures: rasterised on demand, re-done once a page has written itself ---------- */
-  const scale = () => clamp(fit.px * Math.min(window.devicePixelRatio || 1, 2), 1, 2);
-  const tex = new Map(); // i -> {state, promise, texture}
-  const drawState = (i) => pages[i].node.dataset.draw || 'none';
+  /* Complete, immutable page textures: never cache an unfinished draw-in frame. */
+  const tex = new Map();
   function texture(i) {
-    const cur = tex.get(i);
-    if (cur && cur.state === drawState(i)) return cur.promise;
-    const state = drawState(i);
-    const promise = rasterize(pages[i].node, scale()).then((canvas) => {
+    const cached = tex.get(i);
+    if (cached) return cached.promise;
+    const entry = { texture: null, promise: null };
+    entry.promise = rasterize(pages[i].node, 2).then((canvas) => {
       const t = new CanvasTexture(canvas);
       t.colorSpace = NoColorSpace;
       t.anisotropy = gl.capabilities.getMaxAnisotropy();
       t.minFilter = LinearMipmapLinearFilter; t.magFilter = LinearFilter;
-      const old = tex.get(i);
-      if (old && old.texture && old.texture !== t) old.texture.dispose();
-      tex.set(i, { state, promise, texture: t });
+      entry.texture = t;
       return t;
-    });
-    tex.set(i, { state, promise, texture: cur && cur.texture });
-    return promise;
+    }).catch((error) => { tex.delete(i); throw error; });
+    tex.set(i, entry);
+    return entry.promise;
   }
   const idle = window.requestIdleCallback || ((f) => setTimeout(f, 60));
   function warm(around) {
@@ -243,12 +246,12 @@ export async function start() {
 
   /* ---------- camera framing ---------- */
   const fit = { px: 1, portrait: false, tx: 0, pitch: VIEW.front.pitch, yaw: VIEW.front.yaw, w: 0, h: 0 };
-  const targetX = (c) => (fit.portrait ? W / 2 : c <= 0 ? W / 2 : c >= S ? -W / 2 : 0);
+  const targetX = (c) => spreadCenter(c, S, W);
   const viewOf = (c) => (c <= 0 ? VIEW.front : c >= S ? VIEW.back : VIEW.open);
   function frame() {
     const r = stage.getBoundingClientRect();
     fit.portrait = r.width < 640;
-    const spanW = fit.portrait ? W + 2 * OH + 20 : 2 * (W + OH) + 30, spanH = H + 2 * OH + 40;
+    const spanW = 2 * (W + OH) + 30, spanH = H + 2 * OH + 40;
     const w = Math.round(r.width), h = Math.round(Math.min(window.innerHeight - 140, r.width * spanH / spanW));
     fit.px = Math.min(w / spanW, h / spanH);
     fit.w = w; fit.h = Math.max(200, h);
@@ -257,7 +260,8 @@ export async function start() {
     gl.setSize(fit.w, fit.h); css.setSize(fit.w, fit.h);
     camera.aspect = fit.w / fit.h;
     camera.updateProjectionMatrix();
-    aim(fit.tx, fit.pitch, fit.yaw);
+    if (!busy) { const v = viewOf(cur); aim(targetX(cur), v.pitch, v.yaw); }
+    else aim(fit.tx, fit.pitch, fit.yaw);
   }
   function aim(tx, pitch, yaw) {
     fit.tx = tx; fit.pitch = pitch; fit.yaw = yaw;
@@ -293,7 +297,7 @@ export async function start() {
       s.obj.visible = true;
       s.obj.position.set(x, 0, z + 0.2);
       s.obj.scale.set(isBoard ? (W + OH + 1) / W : 1, isBoard ? (H + 2 * OH) / H : 1, 1);
-      T.playDraw(pages[i].node);
+
     };
     const st = restState(c), dl = blockDepth(st.nl), dr = blockDepth(st.nr);
     // left: the inside cover (board, c=1), a paper page, or the back cover lying shut on top
@@ -308,21 +312,19 @@ export async function start() {
     else put(slotR, null);
     host.classList.add('at-rest');
     invalidate();
-    // once the draw-in has written the pages, refresh their textures for the next turn
-    setTimeout(() => { [slotL.page, slotR.page].filter((i) => i >= 0).forEach((i) => texture(i).then(invalidate)); }, 3200);
+
   }
   function hideDom() { host.classList.remove('at-rest'); slotL.obj.visible = slotR.obj.visible = false; invalidate(); }
 
   /* ---------- turning ---------- */
   let busy = false;
   const FLIP_MS = 900, BOARD_MS = 1000;
-  async function ready(list) { await Promise.all(list.filter((i) => i != null && i >= 0 && i < N).map((i) => texture(i).catch(() => null))); }
+  async function ready(list) { await Promise.all([...new Set(list.filter((i) => i != null && i >= 0 && i < N))].map((i) => texture(i))); }
 
   // turn one sheet from `from` to `to` (to = from±1 normally; further for a jump, where the pages in between
   // just move with it). Boards turn rigid; paper bends.
   async function turn(to, fromPhi = null, soft = false) {
     const from = cur, fwd = to > from;
-    const k = fwd ? from : to;                         // the sheet that moves (by its resting place)
     const isFront = fwd ? from === 0 : to === 0, isBack = fwd ? to === S : from === S;
     const faceF = fwd ? 2 * from : 2 * to, faceB = fwd ? 2 * to - 1 : 2 * from - 1;   // what the moving sheet shows
     await ready([faceF, faceB, 2 * to - 1, 2 * to, 2 * from - 1, 2 * from, 0, 1, N - 2, N - 1]);
@@ -345,12 +347,12 @@ export async function start() {
         topL: fwd ? a.topL : b.topL, topR: fwd ? b.topR : a.topR,
       };
       if (board) {
-        const z0 = lerp(board === front ? a.frontZ : a.backZ, board === front ? b.frontZ : b.backZ, (1 - Math.cos(phi)) / 2);
+        const z0 = boardHeight(board === front ? 'front' : 'back', phi, BT, blockDepth(P));
         if (board === front) { st.frontPhi = phi; st.frontZ = z0; } else { st.backPhi = phi; st.backZ = z0; }
       }
       layout(st);
       if (!board) {
-        const zR = BT + blockDepth(st.nr), zL = BT + blockDepth(st.nl);
+        const zR = BT + blockDepth(fwd ? a.nr : b.nr), zL = BT + blockDepth(fwd ? b.nl : a.nl);
         const { edgeX } = bendSheet(sheetGeo, phi, soft ? 0.5 : 0.85, lerp(zR, zL, (1 - Math.cos(phi)) / 2) + 0.3);
         // the sheet's shadow on the page it uncovers
         const m = fwd ? topR.material : topL.material, o = fwd ? topL.material : topR.material;
@@ -371,12 +373,18 @@ export async function start() {
   const queue = []; let running = false, lastTurnEnd = 0;
   async function run() {
     if (running) return; running = true;
-    while (queue.length) { const job = queue.shift(); busy = true; try { await job(); } catch (e) { console.error(e); } busy = false; }
+    while (queue.length) { const job = queue.shift(); busy = true; try { await job(); } catch (e) {
+      console.error('techo: page turn failed', e);
+      sheetFront.visible = sheetBack.visible = false;
+      topL.material.uniforms.shadow.value.set(0, 0, 0); topR.material.uniforms.shadow.value.set(0, 0, 0);
+      layout(restState(cur)); const v = viewOf(cur); aim(targetX(cur), v.pitch, v.yaw); showDom(cur);
+    } busy = false; }
     running = false; lastTurnEnd = performance.now();
   }
   const enqueue = (job) => { queue.push(job); run(); };
   // go to `t` sheets turned: the boards turn on their own, the paper in between turns as one sheet
   function goTo(t) {
+    if (drag && drag.moved) return;
     t = clamp(t, 0, S);
     enqueue(async () => {
       if (t === cur) return;
@@ -404,14 +412,15 @@ export async function start() {
   }
   let drag = null;
   host.addEventListener('pointerdown', (ev) => {
-    if (busy || ev.button > 0) return;
+    if (busy || drag || ev.button > 0) return;
     if (ev.target.closest && ev.target.closest('a,button,input,textarea,select,label,[contenteditable]')) return;
     const x = worldX(ev);
+    if (Math.abs(x) > W + OH || Math.abs(hit.y) > H / 2 + OH) return;
     const fwd = x > 0;
     if ((fwd && cur >= S) || (!fwd && cur <= 0)) return;
     // a page is dragged by its outer edge; pressing further in leaves the text free to select
     const edge = Math.abs(x) / W > 0.78 || !ev.target.closest('.book3d-slot');
-    drag = { x0: ev.clientX, fwd, edge, moved: false, id: ev.pointerId };
+    drag = { x0: ev.clientX, fwd, edge, moved: false, id: ev.pointerId, phi: fwd ? 0 : Math.PI };
   });
   host.addEventListener('pointermove', (ev) => {
     if (!drag || ev.pointerId !== drag.id) return;
@@ -420,49 +429,61 @@ export async function start() {
     const to = drag.fwd ? cur + 1 : cur - 1;
     if (!drag.moved) {
       drag.moved = true; host.setPointerCapture(ev.pointerId);
-      // paper follows the pointer; a board just turns
-      const board = (drag.fwd && (cur === 0 || cur === S - 1)) || (!drag.fwd && (cur === 1 || cur === S));
-      if (board) { drag = null; goTo(to); return; }
-      const d = drag; d.to = to;
+      const d = drag; d.to = to; busy = true;
+      d.board = (d.fwd ? cur === 0 : cur === 1) ? 'front' : (d.fwd ? to === S : cur === S) ? 'back' : null;
       ready([2 * cur, 2 * cur - 1, 2 * to, 2 * to - 1]).then(() => {
         if (drag !== d) return;                       // let go already: endDrag turned it
         hideDom();
         setMap(sheetFront.material, d.fwd ? 2 * cur : 2 * to);
         setMap(sheetBack.material, d.fwd ? 2 * to - 1 : 2 * cur - 1);
         d.ready = true;
+        renderDrag(d, d.phi);
+      }).catch((error) => {
+        console.error('techo: drag textures failed', error);
+        if (drag === d) { drag = null; busy = false; layout(restState(cur)); showDom(cur); }
       });
     }
-    if (!drag.ready) return;
-    const x = clamp(worldX(ev) / W, -1, 1);
-    drag.phi = Math.acos(x);
-    const a = restState(cur), b = restState(drag.to);
-    const nl = drag.fwd ? a.nl : b.nl, nr = drag.fwd ? b.nr : a.nr;   // as in turn(): the leaving side thins at once
-    layout({ nl, nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
-      topL: drag.fwd ? a.topL : b.topL, topR: drag.fwd ? b.topR : a.topR });
-    const zR = BT + blockDepth(nr), zL = BT + blockDepth(nl);
-    sheetFront.visible = sheetBack.visible = true;
-    bendSheet(sheetGeo, drag.phi, 0.6, lerp(zR, zL, (1 - Math.cos(drag.phi)) / 2) + 0.3);
-    invalidate();
+    drag.phi = Math.acos(clamp(worldX(ev) / W, -1, 1));
+    if (drag.ready) renderDrag(drag, drag.phi);
   });
+  function renderDrag(d, phi) {
+    const a = restState(cur), b = restState(d.to);
+    const nl = d.fwd ? a.nl : b.nl, nr = d.fwd ? b.nr : a.nr;
+    const st = { nl, nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
+      topL: d.fwd ? a.topL : b.topL, topR: d.fwd ? b.topR : a.topR };
+    if (d.board) {
+      st[d.board + 'Phi'] = phi;
+      st[d.board + 'Z'] = boardHeight(d.board, phi, BT, blockDepth(P));
+    }
+    layout(st);
+    sheetFront.visible = sheetBack.visible = !d.board;
+    if (!d.board) {
+      const zR = BT + blockDepth(d.fwd ? a.nr : b.nr), zL = BT + blockDepth(d.fwd ? b.nl : a.nl);
+      bendSheet(sheetGeo, phi, 0.5, lerp(zR, zL, (1 - Math.cos(phi)) / 2) + 0.3);
+    }
+    invalidate();
+  }
   const endDrag = (ev) => {
     if (!drag || ev.pointerId !== drag.id) return;
-    const d = drag; drag = null;
+    const d = drag; drag = null; busy = false;
+    if (host.hasPointerCapture(ev.pointerId)) host.releasePointerCapture(ev.pointerId);
+    const cancelled = ev.type === 'pointercancel';
     if (!d.moved) {
+      if (cancelled) return;
       const sel = window.getSelection && window.getSelection();
       if (sel && !sel.isCollapsed) return;               // a click that ends a text selection doesn't turn
       d.fwd ? next() : prev(); return;
     }
-    if (!d.ready) { goTo(d.to); return; }
-    const done = d.fwd ? d.phi > Math.PI / 2 : d.phi < Math.PI / 2;
+    const done = !cancelled && (d.fwd ? d.phi > Math.PI / 2 : d.phi < Math.PI / 2);
+    if (!d.ready) { if (done) goTo(d.to); return; }
     // past halfway it goes over; otherwise it falls back where it came from
-    enqueue(() => (done ? turn(d.to, d.phi, true) : turnBack(d, cur)));
+    enqueue(() => (done ? turn(d.to, d.phi, true) : turnBack(d)));
   };
-  async function turnBack(d, from) {
-    const a = restState(from), phi0 = d.phi, phi1 = d.fwd ? 0 : Math.PI;
+  async function turnBack(d) {
+    const phi0 = d.phi, phi1 = d.fwd ? 0 : Math.PI;
     await animate(Math.max(220, 600 * Math.abs(phi1 - phi0) / Math.PI), (e) => {
       const phi = lerp(phi0, phi1, e);
-      const zR = BT + blockDepth(a.nr), zL = BT + blockDepth(a.nl);
-      bendSheet(sheetGeo, phi, 0.5, lerp(zR, zL, (1 - Math.cos(phi)) / 2) + 0.3);
+      renderDrag(d, phi);
     }, easeOut);
     sheetFront.visible = sheetBack.visible = false;
     layout(restState(cur)); showDom(cur);
@@ -472,6 +493,8 @@ export async function start() {
   // momentum while a page is turning and for a moment after
   let wheelSum = 0, wheelQuiet = 0;
   host.addEventListener('wheel', (ev) => {
+    // Vertical scrolling belongs to the document; horizontal swipes turn pages.
+    if (Math.abs(ev.deltaY) >= Math.abs(ev.deltaX)) return;
     ev.preventDefault();
     const now = performance.now();
     if (busy || queue.length || now < wheelQuiet || now < lastTurnEnd + 300) { wheelSum = 0; return; }
