@@ -27,7 +27,8 @@
   const pf=new St.PageFlip(bookEl,{
     width:530,height:740,size:'stretch',minWidth:240,maxWidth:600,minHeight:335,maxHeight:838,
     showCover:true,usePortrait:true,autoSize:true,drawShadow:true,maxShadowOpacity:0.45,
-    flippingTime:reduced?1:1000,   // keep in step with FLIP_MS and .shift's transitionmobileScrollSupport:true,swipeDistance:24,showPageCorners:true,
+    flippingTime:reduced?1:1000,   // keep in step with FLIP_MS and .shift's transition
+    mobileScrollSupport:true,swipeDistance:24,showPageCorners:true,
     clickEventForward:true,startZIndex:2
   });
   pf.loadFromHTML(bookEl.querySelectorAll('.pf'));
@@ -80,7 +81,7 @@
   }
   function reveal(i){visible(i).forEach(k=>{const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);});}
   function chrome(i){
-    dragnote.hidden=i!==0||!landscape();
+    T.dragNote(dragnote,i===0&&landscape());
     restart.hidden=i<last;
     [...dots.children].forEach(b=>{
       const t=+b.dataset.page,on=t===0?i===0:(i===t||i===t+1);
@@ -109,7 +110,7 @@
       const fwd=rnd.getDirection()===0;                 // StPageFlip FlipDirection: 0 forward, 1 back
       const to=i===0||i>=last?0:(fwd&&i>=last-2)?25:(!fwd&&i<=2)?-25:null;
       if(to!==null){
-        dragnote.hidden=true;
+        T.dragNote(dragnote,false);
         // the turn's animation is set up right after this event fires: read its length once it exists
         Promise.resolve().then(()=>{
           const an=rnd.animation;

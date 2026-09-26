@@ -169,6 +169,8 @@
         ...sect('封底'),
         field('封底大字','backTitle','text',{max:12}),
         field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'}),
+        ...sect('翻页方式','首页的书怎么翻。'),
+        bookModeField(),
         ...sect('示例页'),
         samplesField(),
         ...sect('联系方式','显示在「写信给我」那一页。'),
@@ -335,6 +337,16 @@
       }
     };
     paint();wrap.append(l,row);return wrap;
+  }
+  function bookModeField(){
+    const w=el('div');
+    [['3d','立体的书','有厚度和光影，纸从页角卷起翻过去（默认）'],['flip','平面翻页','轻一些的翻页效果；不支持立体效果的设备也会用它']].forEach(([v,name,hint])=>{
+      const l=el('label','check1');
+      const r=el('input');r.type='radio';r.name='f-bookmode';r.value=v;r.checked=(draft.bookMode||'3d')===v;
+      r.onchange=()=>{if(r.checked){draft.bookMode=v;changed();}};
+      l.append(r,el('span',null,name));w.append(l,el('div','hintx',hint));
+    });
+    return w;
   }
   function samplesField(){
     const l=el('label','check1');

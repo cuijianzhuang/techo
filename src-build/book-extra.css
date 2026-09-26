@@ -108,7 +108,10 @@ html{scrollbar-gutter:stable}
 .flyleaf .sig{margin-top:22px;display:flex;align-items:center;gap:10px;font:400 20px/1 var(--hand);color:var(--ink-soft)}
 
 /* ================= hints around the book ================= */
-.dragnote{position:absolute;pointer-events:none;color:var(--desk-ink);font:500 13px/1.4 var(--mono);transition:opacity .4s;white-space:nowrap}
+.dragnote{position:absolute;pointer-events:none;color:var(--desk-ink);font:500 13px/1.4 var(--mono);white-space:nowrap;
+  transition:opacity .55s ease,transform .55s ease,filter .55s ease}
+/* on its way out: fades, drifts off towards where the cover goes, softens */
+.dragnote.gone{opacity:0;transform:translate(10px,6px);filter:blur(2px)}
 .dragnote svg{display:block}
 .dragnote[hidden]{display:none}
 /* "start again" sits on the empty desk beside the book shut on its back cover, like the drag note beside the
@@ -129,6 +132,35 @@ html{scrollbar-gutter:stable}
 #dots::-webkit-scrollbar{display:none}
 .nav[hidden]{display:flex;visibility:hidden}
 .nav .sound{margin-left:4px}
+.nav .calbox{position:relative;display:inline-flex}
+.nav .daypick{display:inline-flex;align-items:center}
+/* the day picker: a scrap of the journal's paper, grid and all, opening above the nav */
+.daypop{position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%) rotate(-1deg);z-index:20;width:236px;padding:14px 14px 10px;
+  background-color:var(--paper);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:14px 14px;
+  border-radius:3px;box-shadow:0 1px 2px rgba(40,30,10,.18),0 10px 26px rgba(40,30,10,.22);color:var(--ink);font:400 12px/1 var(--print);text-align:left}
+.daypop::before{content:"";position:absolute;left:50%;top:-9px;width:64px;height:18px;transform:translateX(-50%) rotate(2deg);background:var(--tape);box-shadow:0 1px 1px rgba(0,0,0,.05)}
+.daypop[hidden]{display:none}
+.dp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.dp-title{display:flex;align-items:baseline;gap:3px;color:var(--olive)}
+.dp-title b{font:400 28px/1 var(--latin)}
+.dp-title span{font:500 12px/1 var(--print)}
+.dp-title i{font:400 15px/1 var(--latin);color:var(--ink-soft);margin-left:6px}
+.nav .daypop button{padding:0;border-radius:50%}
+.nav .daypop .dp-nav{width:26px;height:26px;font:400 18px/1 var(--print);color:var(--ink-soft)}
+.nav .daypop .dp-nav:disabled{opacity:.25;cursor:default}
+.nav .daypop .dp-nav:not(:disabled):hover{background:rgba(138,154,43,.14);color:var(--ink)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px 2px;text-align:center}
+.dp-grid>*{height:26px;display:flex;align-items:center;justify-content:center;font:400 12px/1 var(--print);font-variant-numeric:tabular-nums}
+.dp-wd{color:var(--olive);font-weight:500!important;height:18px!important}
+.dp-off{color:#bdb8a7}
+.nav .daypop .dp-day{position:relative;width:26px;height:26px;margin:auto;color:var(--ink);font:500 13px/1 var(--print)}
+.nav .daypop .dp-day::after{content:"";position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--olive)}
+.nav .daypop .dp-day:hover{background:rgba(138,154,43,.16)}
+.nav .daypop .dp-now{background:var(--red);color:#fff}
+.nav .daypop .dp-now::after{background:#fff}
+.nav .daypop .dp-now:hover{background:var(--red-deep)}
+.nav .daypop button:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.dp-foot{margin-top:8px;padding-top:7px;border-top:1px dashed rgba(90,84,76,.3);color:var(--ink-soft);font:400 14px/1.2 var(--latin),var(--hand);text-align:center}
 .nav .sound[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .nav .arrow{flex:none}
 .nav button{white-space:nowrap;flex:none}
@@ -159,3 +191,17 @@ html{scrollbar-gutter:stable}
 
 .restart[hidden]{display:none}
 @media (max-width:640px){.restart{padding:6px 4px;font-size:12px}}
+
+/* phones: the 3D book shows one page at a time (book3d.js: spanW), so the loading note holds that room; the
+   drag note would hang off the screen edge; the nav gets tighter so all of it fits */
+@media (max-width:639.98px){
+  .loading{height:min(calc(100vh - 140px),100cqw * 792 / 572)}
+  .dragnote{display:none}
+  .nav{gap:2px}
+  .nav button{padding:8px 7px}
+  .nav .sound{margin-left:0}
+  /* the day picker would hang off the screen edge beside the nav's right end: centre it on the screen */
+  .daypop{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px)}
+}
+/* the page-flip book's desk shadow has nothing to sit under until that book is built */
+.bookwrap:has(#book:empty)::before{display:none}

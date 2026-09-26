@@ -1,9 +1,12 @@
 /* Picks the book: the three.js book (book3d.js) where WebGL works and motion is welcome, otherwise the
-   page-flip book (StPageFlip + book.js). ?book=3d / ?book=flip force one. If the 3D book fails to start it
+   page-flip book (StPageFlip + book.js). The owner can pick the page-flip book in 手帐设置 (bookMode);
+   ?book=3d / ?book=flip force one. If the 3D book fails to start it
    hands over to the page-flip book. */
 (function(){
   "use strict";
-  var q=new URLSearchParams(location.search).get('book');
+  // ?book= wins (for trying one out); otherwise the owner's choice in 手帐设置 → 翻页方式
+  var set=(window.TECHO_DATA&&window.TECHO_DATA.settings)||{};
+  var q=new URLSearchParams(location.search).get('book')||(set.bookMode==='flip'?'flip':null);
   function script(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.body.appendChild(s);});}
   function flip(){return script('/vendor/page-flip.browser.js').then(function(){return script('/assets/book.js');});}
   function webgl(){try{var c=document.createElement('canvas');return !!(window.WebGLRenderingContext&&(c.getContext('webgl2')||c.getContext('webgl')));}catch(e){return false;}}

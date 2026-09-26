@@ -95,8 +95,8 @@
   function blankPage(side,text){
     const p=el('div','page '+side+' jp empty');
     const b=el('div','body');
-    b.appendChild(mugSvg('mug-sleep',64));
-    b.appendChild(el('div','hand',text||'下一页，还空着。'));
+    // text null: just paper (a page left over to keep left and right pages in step)
+    if(text!==null){b.appendChild(mugSvg('mug-sleep',64));b.appendChild(el('div','hand',text||'下一页，还空着。'));}
     p.appendChild(b);
     return p;
   }
@@ -248,29 +248,47 @@
        0 cover (hard, alone on the right) | 1 inside front (hard) + 2 flyleaf | days | entries | … |
        inside back (hard) | back cover (hard, alone on the left). With showCover, odd indexes are left-hand pages. */
     const q=s=>src.querySelector(s);
-    const pages=[];            // {node, hard, label}
+    const pages=[];            // {node, hard, label, date: 'YYYY-MM-DD' for a diary page}
     const push=(node,opt)=>pages.push(Object.assign({node},opt||{}));
     const leftNext=()=>pages.length%2===1;
     push(q('.page.cover'),{hard:true});
     push(q('.page.inside.l'),{hard:true});
     push(q('.page.flyleaf'));
-    // the hand-made sample pages can be hidden; their last page (写信给我, the contact details) then moves to the end
+    // the hand-made sample pages can be hidden. Their last page (写信给我, the contact details) is always the
+    // book's last page: every newly published diary page goes in before it
     const days=[...src.querySelectorAll('.day')],showSamples=settings.samples!=='hide';
     const contact=days.find(p=>p.querySelector('#mail'));
-    if(showSamples)days.forEach((p,i)=>push(p,{label:i%2===0?p.dataset.label:null}));
+    // the samples are dated by their spread's label (9/25 …) in the year the journal began
+    // (a spread holds two days: the label's on the left, the next on the right)
+    const sampleDate=(l,plus)=>{const m=/^(\d+)\/(\d+)$/.exec(l||'');if(!m)return null;
+      const t=new Date(Date.UTC(2026,+m[1]-1,+m[2]+plus));return t.toISOString().slice(0,10);};
+    if(showSamples)days.forEach((p,i)=>p!==contact&&push(p,{label:i%2===0?p.dataset.label:null,date:p===contact?null:sampleDate(days[i-i%2].dataset.label,i%2)}));
     sortEntries(entries).forEach(en=>{
       const side=leftNext()?'l':'r',d=parseDate(en.date);
-      push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null});
+      push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null});
     });
-    if(!showSamples&&contact){
-      if(leftNext())push(blankPage('l','下一页，还空着。'));   // contact is a right-hand page
+    if(contact){
+      if(leftNext())push(blankPage('l',null));                // contact is a right-hand page
       push(contact);
     }
-    if(leftNext())push(blankPage('l','下一页，还空着。'));     // the inside back cover is a right-hand page
+    // the last page before the inside back cover is always the next one, still empty (a left-hand page)
+    if(!leftNext())push(blankPage('r',null));
+    push(blankPage('l','下一页，还空着。'));
     push(q('.page.inside.r'),{hard:true});
     push(q('.page.backcover'),{hard:true});
     return {pages,settings};
   }
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
-  window.Techo={loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
+  /* the "drag the corner" note beside the cover: fades and drifts away when the book opens (or a corner is
+     taken), and once the reader has opened the book it has done its job: it doesn't come back on the cover */
+  let noteDone=false;
+  function dragNote(el,show){
+    if(!el)return;
+    if(!show&&!el.hidden&&el.dataset.shown==='1')noteDone=true;
+    show=show&&!noteDone;
+    clearTimeout(el.__t);
+    if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
+    else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
+  }
+  window.Techo={dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
 })();
