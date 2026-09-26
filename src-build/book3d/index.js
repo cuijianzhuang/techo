@@ -722,8 +722,11 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     if (location.hash !== want) history.replaceState(null, '', location.pathname + location.search + want);
   }
   const hashDay = () => (/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash) || [])[1];
-  const arrivalDay = hashDay();                          // read before the cover's own (empty) link replaces it
-  window.addEventListener('hashchange', () => { const d = hashDay(); if (d) openDay(d); });
+  // #contact: the 写信给我 page (linked from the 404 page)
+  const contactPage = pages.findIndex((p) => p.node.querySelector && p.node.querySelector('#mail'));
+  const openHash = () => { const d = hashDay(); if (d) openDay(d); else if (location.hash === '#contact' && contactPage >= 0) openPage(contactPage); };
+  const arrivalHash = location.hash;                     // read before the cover's own (empty) link replaces it
+  window.addEventListener('hashchange', openHash);
   function chrome() {
     T.dragNote(dragnote, cur === 0 && !fit.portrait);
     restart.hidden = cur < S;
@@ -763,6 +766,6 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   });
   new ResizeObserver(() => { frame(); invalidate(); }).observe(stage);
   warm(0);
-  if (arrivalDay) openDay(arrivalDay);                    // arrived by a day's link: open the book there
+  if (arrivalHash) { history.replaceState(null, '', location.pathname + location.search + arrivalHash); openHash(); }   // arrived by a link: open the book there
   window.__book3d = { goTo, get cur() { return cur; }, S, invalidate, scene, camera, gl, slots: [slotL, slotR], parts: { front, back, blockL, blockR, topL, topR, sheetFront } };   // for debugging
 }
