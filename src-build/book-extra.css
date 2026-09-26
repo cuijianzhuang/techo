@@ -22,13 +22,23 @@ body{
 .bookwrap.closed-back:not(.portrait)::before{left:3%;right:53%}
 /* The covers are StPageFlip hard pages (density "hard"), turned by the same engine as the paper. A closed book is
    one page wide, so the book slides half a page to sit centred while it's shut (see shiftFor in book.js). */
-.shift{transition:transform .9s cubic-bezier(.4,0,.2,1)}
+/* same length and curve as a cover turn (FLIP_MS / ease in book.js), so the book slides as the cover swings */
+.shift{transition:transform 1s cubic-bezier(.65,0,.35,1)}
+/* StPageFlip casts a hard page's shadows onto the half it's about to land on. Hard pages here are only the
+   covers, and that half is always empty desk when a cover turns: the shadows were grey slabs on the table. */
+.stf__hardShadow,.stf__hardInnerShadow{display:none!important}
+/* instead a cover darkens on itself as it tilts from flat (--tilt = |sin(angle)|, set each frame in book.js) */
+.pf.hard::after{content:"";position:absolute;inset:0;z-index:5;pointer-events:none;background:#101a1c;opacity:calc(var(--tilt,0) * .38)}
 @media (prefers-reduced-motion:reduce){.shift{transition:none}}
 
-/* StPageFlip's flip shadows are huge rotated boxes, only clip-path'ed down to the book. Their full boxes still
-   count as page overflow, so mid-turn the document grew and the scrollbar came and went: the book shook sideways.
-   Nothing is meant to show outside the block anyway (the canvas renderer draws inside the same rect). */
-.stf__block{overflow:hidden;overflow:clip}
+/* StPageFlip's flip shadows are huge rotated boxes, only clip-path'ed down to the book, and their full boxes count
+   as page overflow: mid-turn the document grew and the scrollbar came and went, shaking the book sideways.
+   Clipping the block flush with the book fixed that but also cut off a turning cover's near edge, which grows
+   taller in perspective, so covers turned like flat squashed pictures. Now: clip with room for the perspective,
+   and keep the scrollbar's place reserved so a brief overflow can't shift the layout. */
+html{scrollbar-gutter:stable}
+.stf__block{overflow:visible}
+@supports (overflow-clip-margin:1px){.stf__block{overflow:clip;overflow-clip-margin:220px}}
 /* every page the flip library handles */
 .pf{overflow:hidden;background:var(--paper)}
 .pf>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--k,1));will-change:transform;backface-visibility:hidden}
@@ -88,15 +98,6 @@ body{
 .page.inside{background-color:#dfe4dc;background-image:radial-gradient(rgba(47,74,80,.22) 1px,transparent 1.2px);background-size:14px 14px}
 .page.inside.l{box-shadow:inset -22px 0 26px -18px rgba(30,50,55,.3)}
 .page.inside.r{box-shadow:inset 22px 0 26px -18px rgba(30,50,55,.3)}
-/* the cover cloth turned in over the board's inside fore-edge, the endpaper pasted down beside it. It joins the
-   board's edge strip when a cover stands up, so the edge reads as part of the board, not a bar beside the paper.
-   Only the fore-edge: head and tail turn-ins span the board's width and foreshorten into wedges on a standing
-   cover; at the hinge the endpaper runs on into the book. */
-.page.inside.l::after,.page.inside.r::after{display:block;content:"";position:absolute;inset:0;height:auto;border:0 solid #2f4a50;
-  background:none;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);
-  border-image:linear-gradient(#35535a,#2a434a) 1}
-.page.inside.l::after{border-width:0 0 0 14px;border-radius:0}
-.page.inside.r::after{border-width:0 14px 0 0;border-radius:0}
 /* flyleaf: README in a terminal-ish hand */
 .flyleaf .body{display:flex;flex-direction:column;justify-content:center;gap:0;padding-inline:26px}
 .flyleaf .readme{font:500 10.5px/1 var(--mono);letter-spacing:2px;color:var(--olive);margin-bottom:18px}
