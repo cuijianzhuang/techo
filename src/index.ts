@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { ComposeError, composePage } from "./compose";
+import { ComposeError, composePage, pingAi, normalizeBaseURL, DEFAULT_MODEL, type AiConfig } from "./compose";
 
 type Env = {
   DB: D1Database;
@@ -15,7 +15,8 @@ type Env = {
   ADMIN_GITHUB_LOGIN: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
-  /** secret: `wrangler secret put ANTHROPIC_API_KEY`; without it the Claude features are off */
+  /** secret: `wrangler secret put ANTHROPIC_API_KEY` — the key for Anthropic's API, or for the endpoint set in
+      手帐设置 → AI; without it the AI features are off */
   ANTHROPIC_API_KEY?: string;
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
@@ -154,11 +155,24 @@ const SETTING_DEFAULTS: Record<string, string> = {
   backTitle: "EOF", backImprint: "cui.log · build 2026.09.25\ndeployed on the edge",
   samples: "show",
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
+  // the AI that writes drafts: an endpoint speaking the Anthropic Messages API ("" = Anthropic's own) and a model.
+  // The key is a Worker secret, never a setting. Admin only (PRIVATE_SETTINGS).
+  aiBaseUrl: "", aiModel: DEFAULT_MODEL,
 };
+/** settings only the admin sees: kept out of /api/settings and the page */
+const PRIVATE_SETTINGS = new Set(["aiBaseUrl", "aiModel"]);
+const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
+/** the AI as configured (the admin's settings, the Worker's key) */
+async function aiConfig(env: Env): Promise<AiConfig> {
+  if (!env.ANTHROPIC_API_KEY) throw new ComposeError("Worker 未配置 ANTHROPIC_API_KEY（运行 npx wrangler secret put ANTHROPIC_API_KEY）");
+  const s = await loadSettings(env);
+  return { apiKey: env.ANTHROPIC_API_KEY, baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL };
+}
 /** max length (characters) per text setting */
 const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
   readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
+  aiBaseUrl: 200, aiModel: 80,
 };
 const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
 const MAX_COVER_PHOTOS = 4;
@@ -195,6 +209,17 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   }
   if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
+  if (v.aiBaseUrl) {
+    v.aiBaseUrl = normalizeBaseURL(v.aiBaseUrl);
+    let u: URL | null = null;
+    try { u = new URL(v.aiBaseUrl); } catch { /* checked below */ }
+    const local = u && ["localhost", "127.0.0.1"].includes(u.hostname);
+    if (!u || !(u.protocol === "https:" || (local && u.protocol === "http:"))) return { ok: false, error: "AI 接口地址要以 https:// 开头" };
+  }
+  if (v.aiModel !== undefined) {
+    if (!v.aiModel) v.aiModel = DEFAULT_MODEL;
+    if (!/^[\w.:/@-]+$/.test(v.aiModel)) return { ok: false, error: "模型名只能有字母、数字和 . _ - : / @" };
+  }
   return { ok: true, value: v };
 }
 
@@ -291,7 +316,7 @@ app.post("/api/unlock", async (c) => {
 
 app.get("/api/settings", async (c) => {
   c.header("Cache-Control", "no-store");
-  return c.json({ settings: await loadSettings(c.env) });
+  return c.json({ settings: publicSettings(await loadSettings(c.env)) });
 });
 
 /* The book's page: title and description from the settings, and the data inlined so book.js needn't fetch it. */
@@ -300,7 +325,7 @@ app.get("/", async (c) => {
   const [page, settings, reader] = await Promise.all([c.env.ASSETS.fetch(c.req.raw), loadSettings(c.env), readerEntries(c.env, [])]);
   if (!page.ok) return page;
   // "<" escaped so nothing in a journal page can close the script tag
-  const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings }).replace(/</g, "\\u003c");
+  const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings: publicSettings(settings) }).replace(/</g, "\\u003c");
   const res = new HTMLRewriter()
     .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
     .on('meta[name="description"]', { element: (e) => { e.setAttribute("content", settings.siteDesc); } })
@@ -540,6 +565,23 @@ app.delete("/api/admin/entries/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+/* the admin's view of the settings: all of them, and whether the AI has its key */
+const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!env.ANTHROPIC_API_KEY } });
+app.get("/api/admin/settings", async (c) => c.json(await adminSettings(c.env)));
+
+/* 测试连接: one short question with the AI as configured (or as about to be saved: base / model in the body) */
+app.post("/api/admin/ai/test", async (c) => {
+  const o = (await c.req.json().catch(() => ({}))) as { aiBaseUrl?: unknown; aiModel?: unknown };
+  const parsed = cleanSettings({ aiBaseUrl: typeof o.aiBaseUrl === "string" ? o.aiBaseUrl : "", aiModel: typeof o.aiModel === "string" ? o.aiModel : "" });
+  if (!parsed.ok) return bad(c, 400, parsed.error);
+  try {
+    const ai = await aiConfig(c.env);
+    return c.json(await pingAi({ ...ai, baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL }));
+  } catch (err) {
+    return bad(c, 500, err instanceof ComposeError ? err.message : "没连上，稍后再试");
+  }
+});
+
 app.put("/api/admin/settings", async (c) => {
   const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!o || typeof o !== "object") return bad(c, 400, "请求体必须是 JSON 对象");
@@ -555,7 +597,7 @@ app.put("/api/admin/settings", async (c) => {
     const gone = csv(before.coverPhotos).filter((k) => !keep.has(k));
     if (gone.length) c.executionCtx.waitUntil(c.env.PHOTOS.delete(gone));
   }
-  return c.json({ settings: await loadSettings(c.env) });
+  return c.json(await adminSettings(c.env));
 });
 
 /* jots: loose lines written during the day, picked up by the nightly summary */
@@ -604,7 +646,7 @@ class ComposeSkip extends Error {}
 
 /** Writes today's unused jots into a draft page. Throws ComposeSkip when there is nothing to do. */
 async function composeToday(env: Env): Promise<Entry> {
-  if (!env.ANTHROPIC_API_KEY) throw new ComposeError("Worker 未配置 ANTHROPIC_API_KEY");
+  const ai = await aiConfig(env);
   const day = localDay(env.TIMEZONE || "Asia/Shanghai");
   const has = await env.DB.prepare("SELECT id FROM entries WHERE date=? LIMIT 1").bind(day.date).first();
   if (has) throw new ComposeSkip("今天已经有一页了");
@@ -614,11 +656,11 @@ async function composeToday(env: Env): Promise<Entry> {
   if (!jots.length) throw new ComposeSkip("今天还没有随手记");
 
   const page = await composePage(
-    env.ANTHROPIC_API_KEY, day.date,
+    ai, day.date,
     jots.map((j) => ({ text: j.text, createdAt: j.created_at })),
     STICKER_LABELS, env.TIMEZONE || "Asia/Shanghai",
   );
-  // Claude's lengths are a request, not a guarantee: trim to what the page holds before the usual validation
+  // the model's lengths are a request, not a guarantee: trim to what the page holds before the usual validation
   const cut = (v: unknown, k: string) => [...(typeof v === "string" ? v.trim() : "")].slice(0, LIMITS[k]).join("");
   const parsed = cleanEntry({
     date: day.date, title: cut(page.title, "title"), latin: cut(page.latin, "latin"), aside: cut(page.aside, "aside"),
@@ -627,7 +669,7 @@ async function composeToday(env: Env): Promise<Entry> {
     stickers: (Array.isArray(page.stickers) ? page.stickers : []).filter((k) => STICKERS.has(k)).slice(0, MAX_STICKERS),
     status: "draft",
   });
-  if (!parsed.ok) throw new ComposeError("Claude 写的内容不合格式：" + parsed.error);
+  if (!parsed.ok) throw new ComposeError("模型写的内容不合格式：" + parsed.error);
   const e = parsed.value, now = Date.now(), id = crypto.randomUUID();
   const used = env.DB.prepare("UPDATE jots SET used_in=? WHERE id=? AND used_in=''");
   await env.DB.batch([
@@ -647,7 +689,7 @@ app.post("/api/admin/compose", async (c) => {
   } catch (err) {
     if (err instanceof ComposeSkip) return bad(c, 409, err.message);
     console.error(err);
-    return bad(c, 500, err instanceof ComposeError ? err.message : "Claude 没写成，稍后再试");
+    return bad(c, 500, err instanceof ComposeError ? err.message : "没写成，稍后再试");
   }
 });
 

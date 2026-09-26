@@ -36,7 +36,7 @@
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取 |
 | 后台登录 | GitHub 登录（OAuth App），只放行 `ADMIN_GITHUB_LOGIN` 这一个账号 → 签名的 HttpOnly Cookie，30 天有效 |
 | 部署 | GitHub Actions：push 到 `main` → 类型检查 → 检查生成文件 → `wrangler deploy` |
-| 写草稿 | Claude API（`@anthropic-ai/sdk`，`src/compose.ts`），模型 `claude-opus-5` |
+| 写草稿 | Anthropic SDK（`@anthropic-ai/sdk`，`src/compose.ts`）：默认 Claude API 的 `claude-opus-5`，接口地址和模型可以在后台改成任何 Anthropic 兼容接口 |
 
 ```
 public/                 静态文件（部署的就是这个目录）
@@ -149,6 +149,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **封底**：大字和下方小字（可换行）。
 - **加密**：给整本手帐设口令。
 - **翻页方式**：自动 / 立体的书 / 平面翻页（见[功能](#功能)）。以前保存过设置的站点，这里存的是「立体的书」；想让手机用平面翻页，选一次「自动」。
+- **AI**：写草稿用的接口地址和模型（见[接哪个 AI](#接哪个-ai)）。
 - **示例页**：开头 9/25–9/29 的示例页可以隐藏；「写信给我」那一页会移到最后一篇日记后面，联系方式不会丢。示例页不进时间线；和日记同一天时，日期链接打开的是日记。
 - **联系方式**：邮箱、GitHub。
 
@@ -160,11 +161,22 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
   - 应用没开着时不会运行，下次打开时补跑。
   - 读不到 claude.ai 网页上的聊天。
   - 任务说明在 `~/.claude/scheduled-tasks/techo-nightly-page/SKILL.md`，改口吻或素材就改这里。
-- 网站自己也会写（需要 Claude API Key）：
+- 网站自己也会写（需要一个 AI 接口的 key，见下面的「接哪个 AI」）：
   - 后台「随手记」里的「现在就用今天的随手记写一页」随时生成一页草稿。
   - 每天 23:30（Asia/Shanghai，`wrangler.jsonc` 的 `triggers`）Worker 检查今天还没有页、又有随手记，就自动写一页草稿，电脑没开的日子靠它兜底。
   - 只读随手记，读不到 Claude 聊天；当天已经有一页就不写。
-  - 开启：在 [console.anthropic.com](https://console.anthropic.com) 建一个 API Key，首次部署后运行 `npx wrangler secret put ANTHROPIC_API_KEY` 粘贴进去。按量计费，一页大约 $0.03。
+  - 开启：拿到接口的 key 后运行 `npx wrangler secret put ANTHROPIC_API_KEY` 粘贴进去（只存在 Worker 密钥里，不进数据库）。用 Claude 官方接口时在 [console.anthropic.com](https://console.anthropic.com) 建 key，按量计费，一页大约 $0.03。
+
+### 接哪个 AI
+
+后台「手帐设置 → AI」里有两项，只给后台看，不会出现在主页和 `/api/settings` 里：
+
+- **接口地址**：留空是 Claude 官方接口（`https://api.anthropic.com`）。也可以填任何讲 **Anthropic Messages API** 的地址：中转，或者其他厂商提供的 Anthropic 兼容地址（比如 DeepSeek、Kimi、通义千问、智谱都有）。填到 `/v1` 之前那一截就行，末尾的 `/v1/messages` 会自动去掉。
+- **模型**：留空是 `claude-opus-5`；换别的接口时填那边的模型名。
+
+密钥始终是 Worker 密钥 `ANTHROPIC_API_KEY`，换接口时把它换成那个接口的 key。改完先点「测试连接」：它用输入框里的地址和模型问一句话，显示实际用的模型和回复；不对时会说是密钥错（401）、地址或模型不存在（404）、额度用完（429）还是连不上。
+
+怎么问取决于接口：Claude 官方接口加 `claude-opus-5` / `claude-fable-5-1` 时，用结构化输出（JSON schema）、`effort` 和拒答时自动换模型（server-side fallbacks）；别的接口先带 JSON schema 试一次，接口不认（400）就去掉再问，并且在提示词里要求只输出 JSON、宽松地读回答（能去掉代码块标记和多余的话）。OpenAI 格式（`/v1/chat/completions`）的接口不支持。
   - 日期按 `wrangler.jsonc` 里的 `TIMEZONE` 算。
 
 ## 数据库
@@ -231,7 +243,7 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 |---|---|---|
 | GET | `/api/entries` | 已发布的日记页（按日期）；上了锁、没给口令的只有日期。口令令牌放在 `X-Techo-Keys` 请求头里 |
 | POST | `/api/unlock` | 用口令换一个 12 小时有效的令牌（`{"scope", "password"}`） |
-| GET | `/api/settings` | 手帐设置（没设置过的项返回默认值） |
+| GET | `/api/settings` | 手帐设置（没设置过的项返回默认值；不含 AI 两项） |
 | GET | `/img/p/<uuid>.<ext>` | 照片；上了锁的页的照片要带 `?k=令牌` |
 | GET | `/api/auth/github` | 跳到 GitHub 登录 |
 | GET | `/api/auth/github/callback` | GitHub 登录回调，成功后下发 Cookie 并回到 `/admin/` |
@@ -242,11 +254,13 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 | PUT | `/api/admin/entries/:id` | 整页覆盖更新（拿掉的照片会从 R2 删除） |
 | DELETE | `/api/admin/entries/:id` | 删除（连同照片） |
 | PUT | `/api/admin/locks/:scope` | 设口令（`{"password": "…"}`，至少 4 个字符）；`{"password": null}` 去掉。`scope`：`book`、`d-YYYY-MM-DD` 或页的 id |
+| GET | `/api/admin/settings` | 全部手帐设置（含 AI 两项）和是否配置了 AI 密钥 |
 | PUT | `/api/admin/settings` | 更新手帐设置（只改传了的项） |
+| POST | `/api/admin/ai/test` | 测试连接（`{"aiBaseUrl", "aiModel"}`，用给的地址和模型问一句话） |
 | GET | `/api/admin/jots` | 最近 100 条随手记 |
 | POST | `/api/admin/jots` | 记一句（`{"text": "..."}`，≤1000 字） |
 | DELETE | `/api/admin/jots/:id` | 删一条随手记 |
-| POST | `/api/admin/compose` | 用今天的随手记让 Claude 写一页草稿（今天已有页或没有随手记时返回 409） |
+| POST | `/api/admin/compose` | 用今天的随手记让 AI 写一页草稿（今天已有页或没有随手记时返回 409） |
 | POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB） |
 
 ## 友链

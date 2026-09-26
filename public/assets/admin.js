@@ -4,7 +4,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[],bookLocked=false,newLock=null;
+  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
   let draft=null;          // working copy of the selected thing
@@ -181,6 +181,8 @@
         bookModeField(),
         ...sect('示例页'),
         samplesField(),
+        ...sect('AI','写草稿用的模型：「随手记」里的「现在就写一页」和每晚的自动草稿。只给后台看，不会出现在主页上。'),
+        aiField(),
         ...sect('联系方式','显示在「写信给我」那一页。'),
         field('邮箱','email','email',{ph:'you@example.com',max:120}),
         field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
@@ -425,6 +427,28 @@
       r.onchange=()=>{if(r.checked){draft.bookMode=v;changed();}};
       l.append(r,el('span',null,name));w.append(l,el('div','hintx',hint));
     });
+    return w;
+  }
+  /* 手帐设置 → AI: an endpoint speaking the Anthropic Messages API (empty: Anthropic's own), a model, whether the
+     Worker has its key, and 测试连接 (with what's typed, before saving) */
+  function aiField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const row=el('div','row');
+    row.append(field('接口地址（可空）','aiBaseUrl','url',{ph:'https://api.anthropic.com',max:200,hint:'留空就是 Claude 官方接口；也可以填中转或其他厂商的 Anthropic 兼容地址，不用加 /v1/messages'}),
+      field('模型','aiModel','text',{ph:'claude-opus-5',max:80,hint:'留空是 claude-opus-5'}));
+    const key=el('div','hintx',aiKeySet?'✓ 已配置密钥（Worker 密钥 ANTHROPIC_API_KEY）':'✗ 还没有密钥：运行 npx wrangler secret put ANTHROPIC_API_KEY，填这个接口的 key');
+    key.style.color=aiKeySet?'var(--olive)':'var(--red)';
+    const acts=el('div','photo-actions'),t=el('button','b small','测试连接'),out=el('span','hintx');
+    t.type='button';acts.append(t,out);
+    t.onclick=async()=>{
+      t.disabled=true;out.textContent='正在问……';out.style.color='';
+      try{
+        const r=await sendJson('POST','/api/admin/ai/test',{aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||''});
+        out.textContent='✓ 连上了：'+r.model+' 回复「'+(r.reply||'（空）')+'」';out.style.color='var(--olive)';
+      }catch(e){out.textContent='✗ '+(e.message||'没连上');out.style.color='var(--red)';}
+      finally{t.disabled=false;}
+    };
+    w.append(row,key,acts);
     return w;
   }
   function samplesField(){
@@ -743,7 +767,7 @@
     try{
       if(sel==='settings'){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
-        settings=r.settings;draft=Object.assign({},settings);base=JSON.stringify(draft);
+        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);
         drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
@@ -789,8 +813,9 @@
     try{
       const me=await api('/api/admin/me');
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
-      const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
-      entries=e.entries||[];settings=s.settings||{};bookLocked=!!e.bookLocked;
+      // all the settings, the AI's too (the public /api/settings leaves those out)
+      const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/admin/settings')]);
+      entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);bookLocked=!!e.bookLocked;
       entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();
     }catch(err){
