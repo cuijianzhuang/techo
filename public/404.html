@@ -1,3 +1,96 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>这一页不存在</title>
-<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#e8e6e1;color:#2a2724;font:15px/1.6 "Noto Sans SC",system-ui,sans-serif;padding-inline:16px}a{color:#3f6f7c}</style></head>
-<body><div><p>这一页还没写，或者被撕掉了。</p><p><a href="/">回到手帐</a></p></div></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>这一页被撕掉了 · 404</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=JetBrains+Mono:wght@500&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<!-- A page torn out of the journal, lying on the desk: the same paper, grid, fonts and colours as the book. -->
+<style>
+:root{
+  --desk:#e8e6e1;--desk-ink:#6d6a63;--paper:#fbf8ee;--grid:rgba(128,140,112,.17);
+  --ink:#2a2724;--ink-soft:#5a544c;--olive:#8a9a2b;--red:#d9573b;--red-deep:#b8432b;--tape:rgba(236,214,150,.72);
+  --hand:"Long Cang","Ma Shan Zheng","Kaiti SC","STKaiti","KaiTi",cursive;
+  --title:"Ma Shan Zheng","Long Cang","Kaiti SC","STKaiti","KaiTi",cursive;
+  --latin:"Caveat","Segoe Print","Comic Sans MS",cursive;
+  --print:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{--desk:#1e1f22;--desk-ink:#9c988f;color-scheme:dark}}
+html,body{margin:0}
+body{min-height:100vh;min-height:100dvh;box-sizing:border-box;display:grid;place-items:center;padding:32px 16px 40px;
+  background-color:var(--desk);color:var(--ink);font:400 15px/1.6 var(--print);
+  background-image:repeating-linear-gradient(0deg,rgba(120,110,90,.035) 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,rgba(120,110,90,.03) 0 1px,transparent 1px 4px)}
+.torn{position:relative;width:min(440px,100%);transform:rotate(-2.2deg);animation:land .7s cubic-bezier(.2,.8,.25,1) both;
+  filter:drop-shadow(0 1px 1px rgba(40,30,10,.18)) drop-shadow(0 14px 22px rgba(40,30,10,.18))}
+.page{position:relative;box-sizing:border-box;padding:22px 26px 46px;min-height:470px;
+  background-color:var(--paper);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:18px 18px;background-position:-1px 70px;clip-path:polygon(0% 0%,100% 0%,100.00% 98.6%,97.06% 98.8%,94.12% 99.7%,91.18% 100.0%,88.24% 99.4%,85.29% 99.4%,82.35% 98.6%,79.41% 100.0%,76.47% 98.0%,73.53% 100.0%,70.59% 99.4%,67.65% 99.7%,64.71% 99.7%,61.76% 99.4%,58.82% 98.0%,55.88% 99.4%,52.94% 99.7%,50.00% 100.0%,47.06% 99.4%,44.12% 98.0%,41.18% 100.0%,38.24% 99.7%,35.29% 100.0%,32.35% 98.0%,29.41% 100.0%,26.47% 98.8%,23.53% 97.2%,20.59% 99.7%,17.65% 98.8%,14.71% 99.4%,11.76% 97.2%,8.82% 98.8%,5.88% 99.4%,2.94% 98.0%,0.00% 98.6%)}
+/* where it came away from the binding: a row of punched holes down the left */
+.page::before{content:"";position:absolute;left:9px;top:28px;bottom:40px;width:7px;
+  background:radial-gradient(circle,var(--desk) 3px,transparent 3.6px) 0 0/7px 26px repeat-y;opacity:.9}
+.tape{position:absolute;top:-12px;left:50%;width:96px;height:26px;margin-left:-48px;background:var(--tape);transform:rotate(3deg);
+  box-shadow:0 1px 1px rgba(0,0,0,.05);z-index:2}
+.head{display:flex;align-items:flex-end;gap:8px;padding:0 0 10px 14px;border-bottom:1px solid rgba(128,140,112,.3);background:var(--paper);margin:0 -26px 0 -26px;padding-inline:40px 26px}
+.m{font:500 12px/1.05 var(--print);color:var(--olive)}
+.d{font:400 44px/.9 var(--latin);color:var(--olive);letter-spacing:1px}
+.note{margin-left:auto;text-align:right;font:400 11px/1.4 var(--print);color:#a8a592}
+.stamp{position:absolute;right:22px;top:78px;width:52px;height:52px;border:2px solid var(--red);border-radius:50%;color:var(--red);
+  font:400 30px/48px var(--title);text-align:center;transform:rotate(-10deg);opacity:.85;
+  box-shadow:inset 0 0 0 2px var(--paper),inset 0 0 0 3px rgba(217,87,59,.5)}
+h1{margin:34px 64px 4px 14px;font:400 44px/1.15 var(--title);letter-spacing:2px}
+.latin{margin:0 0 18px 16px;font:500 22px/1.1 var(--latin);color:var(--ink-soft);transform:rotate(-2deg);transform-origin:left}
+.body{margin-left:14px;font:400 19px/1.75 var(--hand);color:var(--ink-soft)}
+.body p{margin:0}
+.mug{position:absolute;right:30px;bottom:74px;width:72px;height:72px}
+.links{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 0 14px}
+.links a{display:inline-block;padding:8px 18px 9px;border:1.5px solid var(--ink);border-radius:999px;color:var(--ink);text-decoration:none;
+  font:400 18px/1 var(--hand);transition:background .2s,color .2s}
+.links a.pri{background:var(--ink);color:var(--paper)}
+.links a:hover{background:var(--ink);color:var(--paper)}
+.links a.pri:hover{background:#000}
+.links a:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.path{margin:14px 0 0 16px;font:500 11px/1.4 var(--mono);color:#a8a592;word-break:break-all}
+/* the scrap the rest of the page left behind, on the desk under it */
+.scrap{position:absolute;left:62%;bottom:-34px;width:84px;height:30px;background:var(--paper);transform:rotate(14deg);
+  clip-path:polygon(0 30%,20% 0,48% 22%,74% 4%,100% 26%,92% 100%,58% 80%,30% 100%,6% 86%);
+  box-shadow:0 2px 4px rgba(40,30,10,.15);opacity:.95}
+@keyframes land{from{opacity:0;transform:translateY(-14px) rotate(-6deg)}}
+@media (prefers-reduced-motion:reduce){.torn{animation:none}}
+@media (max-width:420px){h1{font-size:36px}.page{padding-bottom:84px}.mug{width:52px;height:52px;bottom:34px;right:18px}}
+</style>
+</head>
+<body>
+<main class="torn" aria-labelledby="t">
+  <div class="tape" aria-hidden="true"></div>
+  <div class="page">
+    <header class="head"><span class="m">??月<br>Page</span><span class="d">404</span><span class="note">找不到<br>这一页</span></header>
+    <div class="stamp" aria-hidden="true">缺</div>
+    <h1 id="t">这一页被撕掉了</h1>
+    <div class="latin">page not found.</div>
+    <div class="body">
+      <p>也可能是还没写，</p>
+      <p>或者地址抄错了一个字。</p>
+    </div>
+    <div class="links"><a class="pri" href="/">回到手帐</a><a href="/#contact">写信给我</a></div>
+    <div class="path" id="path"></div>
+    <svg class="mug" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#2a2724" stroke-width="6" stroke-linecap="round"/>
+      <path d="M46 26c9 0 10 13 0 13" fill="none" stroke="#d9573b" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M11 18h38v29c0 6-4 10-10 10H21c-6 0-10-4-10-10z" fill="#d9573b" stroke="#2a2724" stroke-width="2.2" stroke-linejoin="round"/>
+      <ellipse cx="30" cy="18.5" rx="17" ry="2.4" fill="#5b3522"/>
+      <path d="M20 34q3 2 6 0M34 34q3 2 6 0" fill="none" stroke="#2a2724" stroke-width="1.8" stroke-linecap="round"/>
+      <ellipse cx="18.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/><ellipse cx="41.5" cy="39.5" rx="3" ry="1.6" fill="#f3a08a"/>
+      <text x="44" y="12" font-family="Caveat,cursive" font-size="12" fill="#6a98a3">z z</text>
+    </svg>
+  </div>
+  <div class="scrap" aria-hidden="true"></div>
+</main>
+<script>var p=location.pathname;try{p=decodeURIComponent(p);}catch(e){}document.getElementById('path').textContent=p;</script>
+</body>
+</html>
