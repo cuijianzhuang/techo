@@ -18,7 +18,7 @@ import { boardHeight, spreadCenter } from './motion.mjs';
 import { foldOf, constrain, cornerPath } from './curl.mjs';
 import { unlock, soundOn, setSound, paperTurn, boardTurn, fallBack } from './sound.js';
 
-const OH = 6;          // boards overhang the pages
+const OH = 12;         // boards overhang the pages: the paper is a little smaller than its covers
 const BT = 7;          // board thickness
 const SHEET = 2.4;     // one paper sheet in the page block
 const MIN_BLOCK = 28;  // the page block never looks thinner than this
@@ -239,20 +239,24 @@ export async function start() {
   deskShadow.position.z = -0.5; book.add(deskShadow);
 
   // boards: a box on a hinge group (the group turns about the spine; the box sits above the hinge)
-  function board() {
+  function board(coverOnTop) {
     const w = W + OH + 1, h = H + 2 * OH;
     const edge = material({ color: CLOTH_EDGE });
-    // Every page is the same size and sits in the same place, board or paper: on a board the page covers
-    // x 0…W from the hinge (the top face's u runs from the hinge side, the bottom face's from the fore-edge),
-    // and the overhang around it is cloth, like a turn-in.
-    const top = material({ color: CLOTH, uvRect: new Vector4(1 / w, OH / h, W / w, H / h) });
-    const bottom = material({ color: CLOTH, uvRect: new Vector4(OH / w, OH / h, W / w, H / h) });
-    const mesh = new Mesh(boardGeometry(w, h, BT, 3, 10 + OH), [edge, top, bottom]);
+    // The board stands OH beyond the paper: the paper is a little smaller than its covers. Outside, the cover
+    // (or the back cover) is the whole board; the live page lying there is drawn to the board's size too
+    // (showDom), so the two always match. Inside, the endpaper is the size of a page and lies where the
+    // pages do (x 0…W from the hinge; the top face's u runs from the hinge side, the bottom face's from the
+    // fore-edge), with the cloth turned in around it.
+    const full = new Vector4(0, 0, 1, 1);
+    const inTop = new Vector4(1 / w, OH / h, W / w, H / h), inBottom = new Vector4(OH / w, OH / h, W / w, H / h);
+    const top = material({ color: CLOTH, uvRect: coverOnTop ? full : inTop });
+    const bottom = material({ color: CLOTH, uvRect: coverOnTop ? inBottom : full });
+    const mesh = new Mesh(boardGeometry(w, h, BT, 3, 11), [edge, top, bottom]);
     mesh.position.set(w / 2 - 1, 0, BT / 2);
     const hinge = new Group(); hinge.add(mesh); book.add(hinge);
     return { hinge, top, bottom };
   }
-  const front = board(), back = board();
+  const front = board(true), back = board(false);   // the front board's cover is on top, the back's underneath
   // page blocks (the paper between the boards), and the top page lying on each
   const blockMat = material({ color: PAPER, stripes: true });
   // round at the fore-edge like the pages on them: the right block as made, the left one mirrored (layout)
@@ -390,21 +394,24 @@ export async function start() {
 
   /* ---------- rest: show the live pages over the 3D ones ---------- */
   function showDom(c) {
-    const put = (s, i, x, z) => {
+    // board: the page lies on a board, whose size it takes (the board stands OH beyond the paper)
+    const put = (s, i, x, z, board) => {
       if (i == null) { s.obj.visible = false; if (s.page >= 0) meas.appendChild(pages[s.page].node); s.page = -1; return; }
       if (s.page !== i) { if (s.page >= 0) meas.appendChild(pages[s.page].node); s.el.appendChild(pages[i].node); s.page = i; }
       s.obj.visible = true;
-      s.obj.position.set(x, 0, z + 0.2);
+      const bx = Math.sign(x) * (W + OH - 1) / 2;
+      s.obj.position.set(board ? bx : x, 0, z + 0.2);
+      s.obj.scale.set(board ? (W + OH + 1) / W : 1, board ? (H + 2 * OH) / H : 1, 1);
 
     };
     const st = restState(c), dl = blockDepth(st.nl), dr = blockDepth(st.nr);
     // left: the inside cover (board, c=1), a paper page, or the back cover lying shut on top
     if (c === 1) put(slotL, 1, -W / 2, BT);
     else if (c >= 2 && c <= S - 1) put(slotL, 2 * c - 1, -W / 2, BT + dl, false);
-    else if (c === S) put(slotL, N - 1, -W / 2, 2 * BT + dl);
+    else if (c === S) put(slotL, N - 1, -W / 2, 2 * BT + dl, true);
     else put(slotL, null);
     // right: the cover shut on top, a paper page, or the inside back cover
-    if (c === 0) put(slotR, 0, W / 2, 2 * BT + dr);
+    if (c === 0) put(slotR, 0, W / 2, 2 * BT + dr, true);
     else if (c >= 1 && c <= S - 2) put(slotR, 2 * c, W / 2, BT + dr, false);
     else if (c === S - 1) put(slotR, N - 2, W / 2, BT);
     else put(slotR, null);
@@ -689,10 +696,12 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   });
 
   /* ---------- any day: the calendar in the nav, and a link (#2026-09-27) for every diary page (the 时间线 lines use it) ---------- */
-  const dated = pages.map((p, i) => ({ i, date: p.date })).filter((d) => d.date);
-  // the page for a day: that day's, or the first one written after it (or the last there is). That day's is
-  // looked for first: the sample pages come before the diary pages, whatever their dates.
-  const pageFor = (day) => (dated.find((d) => d.date === day) || dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
+  const dated = pages.map((p, i) => ({ i, date: p.date, sample: p.sample })).filter((d) => d.date);
+  // the page for a day: that day's diary page, else a sample page of that day, else the first one after it
+  // (or the last there is). The samples come before the diary pages, whatever their dates, so a day both
+  // have would otherwise open the sample.
+  const pageFor = (day) => (dated.find((d) => d.date === day && !d.sample) || dated.find((d) => d.date === day)
+    || dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
   function openDay(day) { const i = pageFor(day); if (i != null) openPage(i); }
   { const pick = T.dayPicker(dated.map((d) => d.date), () => { const i = pageInView(); return (i >= 0 && pages[i] && pages[i].date) || null; }, openDay);
     if (pick) nav.insertBefore(pick, $('next').nextSibling); }
@@ -703,7 +712,8 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     return pages[2 * cur - 1] && pages[2 * cur - 1].date ? 2 * cur - 1 : 2 * cur;
   }
   function syncLink() {
-    const i = pageInView(), day = i >= 0 && pages[i] && pages[i].date;
+    // a sample page has no link of its own: its day may be a diary page's
+    const i = pageInView(), day = i >= 0 && pages[i] && !pages[i].sample && pages[i].date;
     const want = day ? '#' + day : '';
     if (location.hash !== want) history.replaceState(null, '', location.pathname + location.search + want);
   }

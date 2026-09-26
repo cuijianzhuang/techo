@@ -127,9 +127,10 @@
   window.addEventListener('resize',()=>requestAnimationFrame(scale));
   new ResizeObserver(()=>scale()).observe(bookEl);
   /* #2026-09-27 opens that day's page (the timeline links here), #contact the 写信给我 page — like the 3D book */
-  const dated=pages.map((p,i)=>({i,date:p.date})).filter(d=>d.date);
-  // that day's page if there is one (the samples come before the diary pages, whatever their dates)
-  const pageFor=day=>(dated.find(d=>d.date===day)||dated.find(d=>d.date>=day)||dated[dated.length-1]||{}).i;
+  const dated=pages.map((p,i)=>({i,date:p.date,sample:p.sample})).filter(d=>d.date);
+  // that day's diary page, else a sample of that day (the samples come before the diary pages, whatever
+  // their dates), else the first page after it
+  const pageFor=day=>(dated.find(d=>d.date===day&&!d.sample)||dated.find(d=>d.date===day)||dated.find(d=>d.date>=day)||dated[dated.length-1]||{}).i;
   const contactPage=pages.findIndex(p=>p.node.querySelector&&p.node.querySelector('#mail'));
   const timelinePage=pages.findIndex(p=>p.node.classList.contains('tlp'));
   function hashPage(){
