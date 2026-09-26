@@ -4,7 +4,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[],bookLocked=false,newLock=null;
+  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
   let draft=null;          // working copy of the selected thing
@@ -181,6 +181,8 @@
         bookModeField(),
         ...sect('示例页'),
         samplesField(),
+        ...sect('AI','写草稿用的模型：「随手记」里的「现在就写一页」和每晚的自动草稿。只给后台看，不会出现在主页上。'),
+        aiField(),
         ...sect('联系方式','显示在「写信给我」那一页。'),
         field('邮箱','email','email',{ph:'you@example.com',max:120}),
         field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
@@ -192,7 +194,7 @@
     if(draft.status==='draft')f.appendChild(el('div','hintx','这一页还是草稿，主页上看不到。看过没问题就点「发布这一页」。'));
     const r1=el('div','row');r1.append(dateField(),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
     const r2=el('div','row');r2.append(field('标题（手写大字）','title','text',{ph:'今天的标题',max:30,hint:'8 个字以内最好看'}),field('英文小注','latin','text',{ph:'a small note in English',max:60}));
-    f.append(r1,r2,placeField(),mdField());
+    f.append(r1,r2,suggestField(),placeField(),mdField());
     f.appendChild(photoField());
     f.appendChild(stickerField());
     const r3=el('div','row');r3.append(field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60}),
@@ -427,6 +429,35 @@
     });
     return w;
   }
+  /* 手帐设置 → AI: the format the endpoint speaks, the endpoint (empty: Anthropic's own / OpenAI's own), a model,
+     whether the Worker has its key, and 测试连接 (with what's typed, before saving) */
+  const AI_FORMATS={
+    anthropic:{ph:'https://api.anthropic.com',hint:'留空就是 Claude 官方接口。中转或其他厂商的 Anthropic 兼容地址填到 /v1 之前，比如 https://api.deepseek.com/anthropic',model:'claude-opus-5'},
+    openai:{ph:'https://api.openai.com/v1',hint:'填到 /v1（不用加 /chat/completions），比如 https://api.deepseek.com、https://dashscope.aliyuncs.com/compatible-mode/v1；留空是 OpenAI 官方',model:'gpt-5 / deepseek-chat / qwen-plus …'},
+  };
+  function aiField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const fmt=AI_FORMATS[draft.aiFormat==='openai'?'openai':'anthropic'];
+    const pick=field('接口格式','aiFormat','select',{options:[['anthropic','Anthropic（Claude 官方、中转、各家 /anthropic 地址）'],['openai','OpenAI（/chat/completions：OpenAI、DeepSeek、通义、Kimi、中转…）']]});
+    pick.querySelector('select').addEventListener('change',()=>drawForm());   // the hints follow the format
+    const row=el('div','row');
+    row.append(field('接口地址（可空）','aiBaseUrl','url',{ph:fmt.ph,max:200,hint:fmt.hint}),
+      field('模型','aiModel','text',{ph:fmt.model,max:80,hint:draft.aiFormat==='openai'?'填那边的模型名':'留空是 claude-opus-5'}));
+    const key=el('div','hintx',aiKeySet?'✓ 已配置 key（Worker 密钥 AI_API_KEY 或 ANTHROPIC_API_KEY）':'✗ 还没有 key：运行 npx wrangler secret put AI_API_KEY，填这个接口的 key');
+    key.style.color=aiKeySet?'var(--olive)':'var(--red)';
+    const acts=el('div','photo-actions'),t=el('button','b small','测试连接'),out=el('span','hintx');
+    t.type='button';acts.append(t,out);
+    t.onclick=async()=>{
+      t.disabled=true;out.textContent='正在问……';out.style.color='';
+      try{
+        const r=await sendJson('POST','/api/admin/ai/test',{aiFormat:draft.aiFormat||'anthropic',aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||''});
+        out.textContent='✓ 连上了：'+r.model+' 回复「'+(r.reply||'（空）')+'」';out.style.color='var(--olive)';
+      }catch(e){out.textContent='✗ '+(e.message||'没连上');out.style.color='var(--red)';}
+      finally{t.disabled=false;}
+    };
+    w.append(pick,row,key,acts);
+    return w;
+  }
   function samplesField(){
     const l=el('label','check1');
     const cb=el('input');cb.type='checkbox';cb.id='f-samples';cb.checked=draft.samples!=='hide';
@@ -510,6 +541,30 @@
       if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
       paint();paintLock();}catch(e){status(e.message||'加载失败','err');}})();
     setTimeout(()=>ta.focus(),0);
+  }
+
+  /* ---------- 一键补全: the AI fills in the parts of the page still empty, from its words ----------
+     Title, English note, header note, stamp, footer quote and doodles; what's filled in stays as it is, and
+     nothing is saved until 保存. */
+  const SUGGEST=[['title','标题'],['latin','英文小注'],['aside','页眉小字'],['stamp','印章'],['quote','页脚引文'],['quoteSrc','引文出处']];
+  function suggestField(){
+    const acts=el('div','photo-actions suggest');
+    const b=el('button','b small','✨ AI 补全空着的项');b.type='button';
+    const note=el('span','hintx','根据正文补上标题、英文小注、页眉小字、印章、页脚引文和插画；已经写了的不动');
+    acts.append(b,note);
+    b.onclick=async()=>{
+      if(!String(draft.body||'').trim()){status('先写几句正文，再让 AI 补全。','err');const t=$('f-body');if(t)t.focus();return;}
+      b.disabled=true;b.textContent='正在想……';status('');
+      try{
+        const r=await sendJson('POST','/api/admin/ai/suggest',stripLocal(draft)),g=r.suggestion||{};
+        const done=[];
+        SUGGEST.forEach(([k,label])=>{if(!String(draft[k]||'').trim()&&g[k]){draft[k]=g[k];done.push(label);}});
+        if(!(draft.stickers||[]).length&&(g.stickers||[]).length){draft.stickers=g.stickers.slice();done.push('插画');}
+        drawForm();changed();
+        status(done.length?'已补全：'+done.join('、')+'。看看合不合适，可以改，记得保存。':'空着的项都有了，没有要补的。',done.length?'ok':'');
+      }catch(e){b.disabled=false;b.textContent='✨ AI 补全空着的项';status(e.message||'没补全成','err');}
+    };
+    return acts;
   }
 
   /* ---------- 地点和天气: where the page was written, and that day's weather ----------
@@ -743,7 +798,7 @@
     try{
       if(sel==='settings'){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
-        settings=r.settings;draft=Object.assign({},settings);base=JSON.stringify(draft);
+        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);
         drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
@@ -789,8 +844,9 @@
     try{
       const me=await api('/api/admin/me');
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
-      const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
-      entries=e.entries||[];settings=s.settings||{};bookLocked=!!e.bookLocked;
+      // all the settings, the AI's too (the public /api/settings leaves those out)
+      const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/admin/settings')]);
+      entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);bookLocked=!!e.bookLocked;
       entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();
     }catch(err){

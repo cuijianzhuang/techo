@@ -181,3 +181,5 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 /* 地点和天气 (admin.js placeField) */
 .admin .placefield{display:grid;gap:8px}
 .admin .place-row{align-items:end}
+/* fields side by side: a taller neighbour (a two-line hint) mustn't stretch this one's input */
+.admin .row>label{align-content:start}
