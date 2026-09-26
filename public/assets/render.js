@@ -253,6 +253,110 @@
   }
 
 
+  /* ---------- a closer look: the page(s) open now, big, over the desk ----------
+     On a phone a 530px page is shown at about two thirds of its size, too small for its small print (the
+     footer, the corner calendar). This lays a copy of the open page(s) over the desk as wide as the screen,
+     zoomable (＋/－, a double tap, or the browser's own pinch) and scrolled like any page. A copy of the live
+     page, so it's exactly what the book shows, as it looks once written. ×, Esc and the back button close it. */
+  const ZOOMS=[1,1.6,2.4];
+  function reader(nodes){
+    nodes=nodes.filter(Boolean);
+    if(!nodes.length||document.querySelector('.reader'))return;
+    const back=document.activeElement;
+    const box=el('div','reader');box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');box.setAttribute('aria-label','放大看这一页');
+    const sc=el('div','rd-scroll'),list=el('div','rd-pages');sc.tabIndex=0;sc.appendChild(list);
+    const bar=el('div','rd-bar'),out=el('button','rd-btn','－'),inn=el('button','rd-btn','＋'),x=el('button','rd-btn rd-x','×');
+    out.type=inn.type=x.type='button';
+    out.setAttribute('aria-label','缩小');inn.setAttribute('aria-label','放大');x.setAttribute('aria-label','关闭');
+    bar.append(out,inn,x);box.append(sc,bar);
+    // on a touch screen "fit" is barely bigger than the book: say how to get closer (fades by itself)
+    const tip=window.matchMedia&&matchMedia('(pointer: coarse)').matches?el('div','rd-tip','双击页面放大，双指也可以'):null;
+    if(tip)box.appendChild(tip);
+    const sheets=nodes.map(n=>{
+      const c=n.cloneNode(true);
+      // as it looks once written: take away what the draw-in hides until the pen gets there
+      for(const e of c.querySelectorAll('[style]')){
+        const st=e.style;
+        if(st.opacity==='0')st.opacity='';
+        if(st.fillOpacity==='0')st.fillOpacity='';
+        if(st.strokeDashoffset){st.strokeDasharray='';st.strokeDashoffset='';}
+      }
+      // ids stay with the book's own page; a button in the copy presses the book's (复制 on 写信给我)
+      c.querySelectorAll('[id]').forEach(e=>{e.dataset.rid=e.id;e.removeAttribute('id');});
+      c.style.transform=c.style.position=c.style.left=c.style.top='';
+      const sh=el('div','rd-sheet');sh.appendChild(c);list.appendChild(sh);
+      return{sh,c};
+    });
+    list.addEventListener('click',e=>{
+      const b=e.target.closest('button[data-rid]'),o=b&&document.getElementById(b.dataset.rid);
+      if(!o)return;
+      o.click();
+      const echo=()=>{b.textContent=o.textContent;};
+      setTimeout(echo,60);setTimeout(echo,1700);
+    });
+    let z=0;
+    function size(){
+      // "fit" is as wide as the screen allows (on a big screen no bigger than 1.4×)
+      const k=Math.min((sc.clientWidth-24)/530,1.4)*ZOOMS[z];
+      sheets.forEach(({sh,c})=>{sh.style.width=530*k+'px';sh.style.height=740*k+'px';c.style.transform='scale('+k+')';});
+      out.disabled=z===0;inn.disabled=z===ZOOMS.length-1;
+    }
+    // zoom about a point on the screen (the middle by default): what's under it stays under it
+    function zoom(to,cx,cy){
+      to=Math.max(0,Math.min(ZOOMS.length-1,to));
+      if(to===z)return;
+      const r=sc.getBoundingClientRect();
+      const px=(cx==null?r.width/2:cx-r.left),py=(cy==null?r.height/2:cy-r.top);
+      const fx=(sc.scrollLeft+px)/sc.scrollWidth,fy=(sc.scrollTop+py)/sc.scrollHeight;
+      z=to;size();if(tip)tip.remove();
+      sc.scrollLeft=fx*sc.scrollWidth-px;sc.scrollTop=fy*sc.scrollHeight-py;
+    }
+    // a double tap zooms in on that spot (and back out); the page's own double-tap zoom is off (touch-action)
+    let tap=0,tx=0,ty=0,tapped=0;
+    sc.addEventListener('pointerup',e=>{
+      if(e.pointerType==='mouse'||e.target.closest('a,button'))return;
+      if(e.timeStamp-tap<320&&Math.hypot(e.clientX-tx,e.clientY-ty)<30){tap=0;tapped=e.timeStamp;zoom(z?0:1,e.clientX,e.clientY);}
+      else{tap=e.timeStamp;tx=e.clientX;ty=e.clientY;}
+    });
+    sc.addEventListener('dblclick',e=>{
+      if(e.timeStamp-tapped<600||e.target.closest('a,button'))return;
+      zoom(z?0:1,e.clientX,e.clientY);
+    });
+    sc.addEventListener('mousedown',e=>{if(e.detail>1)e.preventDefault();});   // no word selected by the double click
+    inn.onclick=()=>zoom(z+1);out.onclick=()=>zoom(z-1);
+    // one step in the history, so the back button (or swipe) closes it rather than leaving the site
+    history.pushState({techoReader:1},'');
+    const done=()=>{if(history.state&&history.state.techoReader)history.back();else close();};
+    x.onclick=done;
+    const onKey=e=>{
+      if(e.key==='Escape'){e.preventDefault();done();return;}
+      if(e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]'))return;
+      // arrows scroll the copy, they don't turn the book behind it
+      if(e.key==='ArrowLeft'||e.key==='ArrowRight')e.stopPropagation();
+      if(e.key==='+'||e.key==='='){e.preventDefault();zoom(z+1);}
+      if(e.key==='-'){e.preventDefault();zoom(z-1);}
+    };
+    function close(){
+      if(!box.isConnected)return;
+      box.remove();document.documentElement.classList.remove('reading');
+      window.removeEventListener('keydown',onKey,true);window.removeEventListener('popstate',close);window.removeEventListener('resize',size);
+      if(back&&back.focus)back.focus({preventScroll:true});
+    }
+    window.addEventListener('keydown',onKey,true);window.addEventListener('popstate',close);window.addEventListener('resize',size);
+    document.documentElement.classList.add('reading');
+    document.body.appendChild(box);
+    size();
+    sc.focus({preventScroll:true});
+  }
+  /* the nav's button for it; pages(): the page nodes open now */
+  function readerButton(pages){
+    const b=el('button','arrow zoomin');b.type='button';
+    b.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.4 10.4 14.5 14.5M4.6 6.8h4.4M6.8 4.6v4.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    b.setAttribute('aria-label','放大看这一页');b.title='放大看这一页';b.setAttribute('aria-haspopup','dialog');
+    b.onclick=()=>reader(pages());
+    return b;
+  }
+
   /* The book's content, shared by the page-flip book (book.js) and the 3D book (book3d.js): data (inlined by the
      Worker as TECHO_DATA, or fetched), the owner's 手帐设置 applied to the built-in pages in `src`, fonts ready,
      and the page list in reading order. */
@@ -391,5 +495,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw};
+  window.Techo={askUnlock,relock,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
 })();

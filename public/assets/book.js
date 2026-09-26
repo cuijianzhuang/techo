@@ -127,6 +127,8 @@
   scale();setShift(0);chrome(0);
   nav.hidden=false;
 
+  // 放大看: the page(s) open now, big enough to read on a phone
+  $('next').after(T.readerButton(()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].node)));
   $('prev').onclick=()=>pf.flipPrev();
   $('next').onclick=()=>pf.flipNext();
   restart.onclick=()=>pf.flip(0);
