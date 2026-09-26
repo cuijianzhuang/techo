@@ -27,6 +27,14 @@
   function gate(){
     $('gate').hidden=false;$('logout').hidden=true;
     if(loginWhy&&LOGIN_MSG[loginWhy])$('gateMsg').textContent=LOGIN_MSG[loginWhy];
+    $('gateDate').textContent=T.todayStr().replace(/-/g,'.');
+    document.body.classList.add('gated');
+    // the journal's own name, as on its cover (settings are public)
+    fetch('/api/settings').then(r=>r.ok?r.json():null).then(d=>{
+      const t=d&&d.settings&&d.settings.coverTitle;if(!t)return;
+      const n=$('gateName'),i=t.indexOf('.');n.textContent='';
+      if(i<0)n.textContent=t;else n.append(t.slice(0,i),el('b',null,'.'),t.slice(i+1));
+    }).catch(()=>{});
   }
   $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
@@ -500,7 +508,9 @@
       entries=e.entries||[];settings=s.settings||{};
       drawList();drawForm();
     }catch(err){
-      main.textContent='';main.appendChild(el('div','empty-state hand',err.message||'加载失败，刷新再试。'));
+      // not signed in, or the Worker can't do sign-in yet (e.g. GitHub app not configured): either way, the login sheet says why
+      if(!$('gate').hidden)return;
+      gate();$('gateMsg').textContent=err.message||'加载失败，刷新再试。';
     }
   })();
 })();
