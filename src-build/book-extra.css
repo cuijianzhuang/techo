@@ -20,64 +20,10 @@ body{
   transition:left .5s ease,right .5s ease}
 .bookwrap.closed-front:not(.portrait)::before{left:53%;right:3%}
 .bookwrap.closed-back:not(.portrait)::before{left:3%;right:53%}
-/* while a cover is closed the half it swung away from is empty desk */
-.bookwrap.closed-front:not(.portrait) #book{clip-path:inset(-40px -40px -40px 50%)}
-.bookwrap.closed-back:not(.portrait) #book{clip-path:inset(-40px 50% -40px -40px)}
-/* a closed book shows only its board: the paper under it would peek out round the board's corners and edge */
-.bookwrap.shut #book{visibility:hidden}
-/* only an open book's pages take clicks and drags (see pagesLive in book.js) */
-.bookwrap:not(.open) #book{pointer-events:none}
-
-/* ---------- hard covers: a 3D board with thickness ---------- */
-.leaf{position:absolute;top:0;left:50%;width:50%;height:100%;transform-origin:0 50%;transform-style:preserve-3d;
-  z-index:30;cursor:grab;touch-action:pan-y;-webkit-user-select:none;user-select:none}
-.bookwrap.portrait .leaf{left:0;width:100%}
-.leaf:active{cursor:grabbing}
-/* Like a real hardcover the board overhangs the pages: 4px at the head, tail and fore-edge, 1px over the hinge
-   (BOARD_X / BOARD_Y in book.js). Flush with the pages, the paper peeked out round the rounded corners (and as an
-   antialiased line at the hinge) whenever the board lay flat or nearly so. The artwork is stretched to the board
-   (--kx/--ky), so its own edge, corners and page-edge stripe sit on the board's real edge. */
-.leaf .face{position:absolute;inset:-4px -4px -4px -1px;background:#2b454b;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
-/* faces 5px apart = the board's thickness (--bt). Corners only just rounded, like a real board, so the square-ended
-   edge strips below meet them cleanly. */
-.leaf{--bt:4px;--br:5px}
-.leaf .face{border-radius:var(--br)}
-.leaf .face.front{transform:translateZ(calc(var(--bt) / 2))}
-.leaf .face.back{transform:rotateY(180deg) translateZ(calc(var(--bt) / 2))}
-.leaf .face>.page.cover,.leaf .face>.page.backcover{border-radius:0}
-.leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
-.leaf .shade{position:absolute;inset:0;background:#1d3236;opacity:0;pointer-events:none}
-.leaf .face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(10,20,22,.3);pointer-events:none;z-index:10}
-/* The fore-edge strip: cloth like the faces, spanning the board's straight edge (it stops where the corners round,
-   --br) and 1px thicker than --bt so it overlaps both faces by half a pixel with no seam. One-sided: it faces
-   outwards, so it shows once a cover turns its edge towards you and hides while the board lies flat. There are no
-   head/tail strips: facing up and down, they're never seen from the page's eye level, and double-sided they drew
-   dark wedges across the top and bottom of a standing cover. */
-.leaf .edge{position:absolute;pointer-events:none;backface-visibility:hidden;-webkit-backface-visibility:hidden;
-  background:repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),linear-gradient(#34525a,#284047)}
-.leaf .edge.fore{top:calc(-4px + var(--br));height:calc(100% + 8px - 2 * var(--br));width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
-  background:linear-gradient(90deg,#2a434a,#34525a)}   /* no weave here: seen edge-on it turned into a dashed line */
-/* lying flat you can't see an edge head-on, so show the board's tail edge as if from a touch above */
-.bookwrap.shut .leaf .face{box-shadow:0 6px 12px -3px rgba(20,16,8,.26)}
-/* Closed, the book is seen from a touch to the side of its fore-edge: past the board you see its own edge, then
-   the page block (4px in from head and tail, since the boards overhang the pages), then the far board's edge.
-   It sits outside the board, never painted on it, and shows only while the book lies shut: once a board moves
-   the real pages are there. For the back board the leaf is turned over, so it lands on the left. */
-.leaf .block{position:absolute;top:0;bottom:0;left:calc(100% + 6px);width:7px;pointer-events:none;opacity:0;transition:opacity .2s ease;
-  border-radius:0 2px 2px 0;
-  background:
-    linear-gradient(90deg,rgba(60,48,24,.2),rgba(60,48,24,0) 40%,rgba(255,255,255,.3) 70%,rgba(60,48,24,.12)),
-    linear-gradient(rgba(40,32,16,.3),rgba(40,32,16,0) 10px,rgba(40,32,16,0) calc(100% - 10px),rgba(40,32,16,.32)),
-    repeating-linear-gradient(90deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px)}
-.leaf .block::before,.leaf .block::after{content:"";position:absolute;top:-4px;bottom:-4px}
-.leaf .block::before{right:100%;width:4px;border-radius:0 4px 4px 0;background:#2a434a}   /* this board's edge; 2px tucked under the board, no seam */
-.leaf .block::after{left:100%;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#1c3034,#2a434a)} /* the far board */
-.bookwrap.shut .leaf .block{opacity:1}
-.undershade{position:absolute;top:0;height:100%;width:50%;pointer-events:none;z-index:25;opacity:0}
-/* the page a board lifts from sits in the board's shadow, right out to the fore-edge (a bright hairline showed there) */
-.undershade.r{left:50%;background:linear-gradient(90deg,rgba(25,18,6,.6),rgba(25,18,6,.34) 55%,rgba(25,18,6,.26))}
-.undershade.l{left:0;background:linear-gradient(270deg,rgba(25,18,6,.6),rgba(25,18,6,.34) 55%,rgba(25,18,6,.26))}
-.bookwrap.portrait .undershade{left:0;width:100%}
+/* The covers are StPageFlip hard pages (density "hard"), turned by the same engine as the paper. A closed book is
+   one page wide, so the book slides half a page to sit centred while it's shut (see shiftFor in book.js). */
+.shift{transition:transform .9s cubic-bezier(.4,0,.2,1)}
+@media (prefers-reduced-motion:reduce){.shift{transition:none}}
 
 /* StPageFlip's flip shadows are huge rotated boxes, only clip-path'ed down to the book. Their full boxes still
    count as page overflow, so mid-turn the document grew and the scrollbar came and went: the book shook sideways.
