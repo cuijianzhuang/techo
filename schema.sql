@@ -29,5 +29,6 @@ CREATE TABLE IF NOT EXISTS jots (
 CREATE INDEX IF NOT EXISTS idx_jots_created ON jots(created_at);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT OR IGNORE INTO settings (key, value) VALUES ('email','hello@example.com'),('github',''),('githubText','');
--- passwords for the whole book ('book') or one day (its entry id); only PBKDF2 hashes are kept
+-- passwords, by scope: 'book' (the whole book), 'd-YYYY-MM-DD' (every page of that day) or an entry id
+-- (that page alone); only PBKDF2 hashes are kept
 CREATE TABLE IF NOT EXISTS locks (scope TEXT PRIMARY KEY, hash TEXT NOT NULL, updated_at INTEGER NOT NULL);
