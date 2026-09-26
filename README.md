@@ -1,48 +1,85 @@
 # xxx.log · 手帐主页
 
-一本可以一直写下去的网页手帐：封面默认合上，拖动页角翻页，纸张会弯折；新写的页从后台保存，照片存在 R2。
-每页可以贴两个手绘小插画，翻到时一笔一笔画出来；每晚 22:00 Claude 会把当天的随手记和聊天写成一页草稿。
+一本可以一直写下去的网页手帐。封面默认合上，翻开是一页一页的方格纸：开头几页是手工排好的示例，之后是在后台写的日记。翻到一页时，字和插画一笔一笔写出来。每晚 Claude 会把当天的随手记写成一页草稿，第二天看过再发布。
+
+跑在 Cloudflare Workers 上：页面是静态文件，日记存在 D1，照片存在 R2，后台用 GitHub 登录。
+
+## 功能
+
+**翻书**
+- **立体的书**（three.js）：封板有厚度和圆角，纸比封皮小一圈；拖页角翻页，纸页从页角折起；有翻页声（导航里的 ♪ 可以关）。
+- **平面翻页**（[StPageFlip](https://github.com/Nodlik/StPageFlip)）：更轻，手机默认用它。设备不支持 WebGL，或系统开了“减少动态效果”时，也会用它。
+- 后台「手帐设置 → 翻页方式」可选：自动（手机平面，平板和电脑立体，默认）、始终立体、始终平面。网址加 `?book=3d` 或 `?book=flip` 可以临时强制一种。
+
+**在书里找**
+- 导航：← → 翻页；「封面」「时间线」直接翻过去；🔍 放大看当前页（手机上看小字用，双击或双指缩放）；📅 日历，点有日记的日子翻过去。
+- **时间线**：扉页后面的几页是目录，列出后台写的每一篇日记，按月分组，最新的在前，点一行翻到那一天；页脚的「整页看 →」打开卡片样式的时间线页 `/timeline/`，带摘要、插画和照片。
+- 链接：`/#2026-09-27` 打开那一天，`/#timeline` 打开时间线，`/#contact` 打开「写信给我」。找不到的网址会显示一张被撕下来的手帐页（`public/404.html`）。
+
+**写**
+- 正文用 Markdown，后台有工具栏和实时预览，见[写一页](#写一页)。
+- 每页最多 3 张照片、2 个手绘小插画、一个印章字、一张便签、一句页脚引文，还有坐在角落的小咖（醒着或睡着）。
+- 地点和天气：一键定位，自动查那一天的天气。
+- 草稿和发布；白天记「随手记」，晚上自动写成一页草稿。
+
+**上锁**
+- 可以给整本手帐、某一天、或单独一页设口令。锁着的页只露出日期和一个封好的信封；读者输入口令后，这个浏览器标签页 12 小时内都能看（关掉标签页就忘了）。
 
 ## 技术栈
 
 | 层 | 用的是 |
 |---|---|
-| 页面 | 原生 HTML / CSS / JS，翻页用 [StPageFlip](https://github.com/Nodlik/StPageFlip)（MIT，已放在 `public/vendor/`） |
+| 页面 | 原生 HTML / CSS / JS；立体的书用 [three.js](https://threejs.org)（esbuild 打包进 `public/assets/book3d.js`），平面翻页用 StPageFlip（已放在 `public/vendor/`） |
 | 托管 | Cloudflare Workers 静态资源（`public/`） |
 | API | Worker + [Hono](https://hono.dev)（`src/index.ts`） |
-| 数据 | D1：`techo-db`（日记页、随手记、联系方式） |
+| 数据 | D1：`techo-db`（日记页、随手记、手帐设置、口令） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取 |
 | 后台登录 | GitHub 登录（OAuth App），只放行 `ADMIN_GITHUB_LOGIN` 这一个账号 → 签名的 HttpOnly Cookie，30 天有效 |
-| 部署 | GitHub Actions（`.github/workflows/deploy.yml`）：push 到 main → 类型检查 → `wrangler deploy` |
+| 部署 | GitHub Actions：push 到 `main` → 类型检查 → 检查生成文件 → `wrangler deploy` |
 | 写草稿 | Claude API（`@anthropic-ai/sdk`，`src/compose.ts`），模型 `claude-opus-5` |
 
 ```
-public/              静态页面：/ 手帐、/admin/ 后台
-  assets/            techo.css（生成）、render.js、book.js、admin.js、admin.css
-  vendor/            page-flip.browser.js
-src/index.ts         Worker：/api/*、/img/*、每晚的定时任务
-src/compose.ts       调 Claude 把随手记写成一页
-schema.sql           D1 表结构（可重复执行）
-migrations/          旧库升级用的 SQL
-src-build/           页面源文件与生成脚本（python3 src-build/build.py）
-wrangler.jsonc       Worker 配置（D1 / R2 已填好 ID）
+public/                 静态文件（部署的就是这个目录）
+  index.html            手帐主页（生成）
+  admin/index.html      后台（生成）
+  timeline/index.html   卡片样式的时间线页
+  404.html              撕下来的一页
+  assets/
+    boot.js             选用哪种书
+    render.js           两种书共用：拼页面、Markdown、写字动画、时间线、日历、放大看、上锁
+    book.js             平面翻页的书
+    book3d.js           立体的书（生成，源码在 src-build/book3d/）
+    timeline.js         /timeline/ 的脚本
+    admin.js / admin.css 后台
+    techo.css           样式（生成）
+  vendor/               StPageFlip
+src/index.ts            Worker：/api/*、/img/*、每晚的定时任务
+src/compose.ts          调 Claude 把随手记写成一页
+src-build/              页面源文件和生成脚本
+  design/               示例页、封面、扉页、封底的设计稿
+  book3d/               立体的书的源码（index.js、raster.js、curl.mjs……）
+  build.py              生成 index.html、admin/index.html、techo.css
+schema.sql              D1 表结构（新建数据库用，可重复执行）
+migrations/             旧数据库升级用的 SQL
+tests/                  立体的书的翻页几何和动作测试
+wrangler.jsonc          Worker 配置（D1 / R2 已填好 ID）
 ```
 
-## 已经在你的 Cloudflare 账号里建好的
+## 部署
 
-- D1 数据库 `techo-db`（APAC），表结构已初始化，ID 已写进 `wrangler.jsonc`
-- 这个库建于草稿 / 插画 / 随手记之前，要先升级一次（只跑一次）：
+### 1. Cloudflare 上的数据库和照片桶
 
-  ```bash
-  npx wrangler d1 execute techo-db --remote --file=migrations/0001_drafts_stickers_jots.sql
-  ```
-- R2 存储桶 `techo-photos`
+`wrangler.jsonc` 里已经填好了 D1 数据库 `techo-db`（APAC）和 R2 存储桶 `techo-photos` 的 ID。线上的库已经是最新的表结构（三个升级文件都跑过了）。
 
-## 部署步骤
+在别的账号从头部署时：
 
-### 1. 推到 GitHub
+```bash
+npx wrangler d1 create techo-db            # 把输出的 database_id 填进 wrangler.jsonc
+npx wrangler r2 bucket create techo-photos
+npm run db:init:remote                     # 用 schema.sql 建表，新库不用再跑 migrations/
+```
 
-已推到 [cuijianzhuang/techo](https://github.com/cuijianzhuang/techo)，之后直接 `git push`。
+以后改表结构时，`schema.sql` 和 `migrations/` 要一起改：`schema.sql` 给新库，`migrations/` 给已经在用的旧库。见[数据库](#数据库)。
 
 ### 2. 用 GitHub Actions 部署
 
@@ -51,14 +88,14 @@ wrangler.jsonc       Worker 配置（D1 / R2 已填好 ID）
 - `CLOUDFLARE_API_TOKEN`：Cloudflare 控制台 → 右上角头像 → **My Profile** → **API Tokens** → **Create Token** → 模板 **Edit Cloudflare Workers**（账户选你自己的）
 - `CLOUDFLARE_ACCOUNT_ID`：Cloudflare 控制台首页右侧的 **Account ID**
 
-之后每次 push 到 `main`：装依赖 → 类型检查 → 检查 `public/` 和 `src-build/` 一致 → `wrangler deploy`。PR 只跑检查不部署。也可以在 Actions 页手动 **Run workflow**。
+之后每次 push 到 `main`：装依赖 → 类型检查 → 重新生成页面，检查和 `public/` 里提交的一致 → `wrangler deploy`。合并请求只跑检查不部署。也可以在 Actions 页手动 **Run workflow**。
 
 > 不要再在 Cloudflare 里连接 Workers Builds，否则每次 push 会部署两遍。
 
 ### 3. 设置 GitHub 登录
 
 1. GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**：
-   - Application name：`cui.log 后台`（随意）
+   - Application name：`xxx.log 后台`（随意）
    - Homepage URL：`https://techo.cuijianzhuang.workers.dev`（绑了域名就填域名）
    - Authorization callback URL：`https://techo.cuijianzhuang.workers.dev/api/auth/github/callback`
 2. 创建后复制 **Client ID**，填进 `wrangler.jsonc` 的 `GITHUB_CLIENT_ID`（公开的，可以进仓库）。
@@ -80,20 +117,9 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 主页底部点「✎ 写一页」（或直接打开 `/admin/`），用 GitHub 登录，点「新写一页」。保存后刷新主页就能看到。
 
-## 手帐设置
-
-后台左侧「手帐设置」里能改（没改过的项保持原样）：
-
-- **网站**：浏览器标题、一句介绍。Worker 在返回主页时直接写进 `<title>` 和 `<meta name="description">`，搜索和分享链接也看得到；已发布的页和设置一并内联进页面，主页不用再请求接口。
-- **封面**：大字（第一个「.」是绿色小圆点）、下面那行字；原来的 5 个贴纸可以逐个隐藏；最多 4 张自己的图片当贴纸（存 R2，透明 PNG 会保留透明背景，拿掉的图会从 R2 删除）。
-- **扉页**：README 里的 whoami / cat role / ls ~/life / 开始记的日期，和小咖旁边那句话。
-- **封底**：大字和下方小字（可换行）。
-- **示例页**：开头 9/25–9/29 的示例页可以隐藏；「写信给我」那一页会移到最后一篇日记后面，联系方式不会丢。
-- **联系方式**：邮箱、GitHub。
-
 ## 写一页
 
-后台编辑页的「正文」是 Markdown 编辑器：上面一排按钮（粗体、标题、列表、清单、便签、代码、链接、重点、漫画格……），⌘/Ctrl+B / I / K，列表和清单按回车会自动接着写。右边是这一页在书里的样子。写在书里时，每一块都会一笔一笔写出来。
+后台编辑页的「正文」是 Markdown 编辑器：上面一排按钮（粗体、标题、列表、清单、便签、代码、链接、重点、漫画格……），⌘/Ctrl+B / I / K，列表和清单按回车会自动接着写，⌘/Ctrl+Z 能撤销。右边就是这一页在书里的样子。
 
 | 写法 | 书里的样子 |
 |---|---|
@@ -106,17 +132,25 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 | `---` | 一条虚线 |
 | `@09:10 站会：今天修什么？ #laptop` | 漫画格：时间和在做什么、对话气泡、小插画（相邻几行排成一条） |
 
-- **照片**：最多 3 张，每张有自己的说明。一张时贴在正文旁边，字绕着排；两三张时在标题下面错落排一排。
-- **地点和天气**：点「📍 获取位置和天气」，浏览器定位后自动填地名（BigDataCloud）和这一页那天的天气（Open-Meteo），都免费、不用 key。写在页眉右上角，坐标只保留两位小数（大约 1 公里）。用 `schema.sql` 新建的库已经有这几列；这之前建的库要升级一次（没升级之前照常能写，只是不能填地点和天气；新库不要再跑，会报列已存在）：
+空一行分段，段落里换行就是换行。字多了会自动缩小（最小 13px），没有照片时大约 250 字写满一页。
 
-  ```bash
-  npx wrangler d1 execute techo-db --remote --file=migrations/0003_place_weather.sql
-  ```
+- **照片**：最多 3 张，每张有自己的说明。一张时贴在正文旁边，字绕着排；两三张时在标题下面错落排一排。上传前会先压到 1600px；从页上拿掉的照片会从 R2 删掉。
+- **小插画**：点选，最多两个：晴天、多云、下雨、月亮、猫、书、电脑、bug、植物、吃面、公交、骑车、音乐、心、星星、来信、拍照。漫画格里 `#` 后面写的是它们的英文名（编辑器里「能写的格式」有对照表）。画在 `public/assets/render.js` 的 `STICKERS` 里（64×64 的线稿 SVG），新增一个要同时加到 `src/index.ts` 的 `STICKERS`。
+- **地点和天气**：点「📍 获取位置和天气」，浏览器定位后自动填地名（BigDataCloud）和这一页那天的天气（Open-Meteo），都免费、不用 key，也可以手填。写在页眉右上角，鼠标停上去显示坐标；坐标只保留两位小数（大约 1 公里），因为手帐是公开的。
+- **单独上锁**：编辑页最下面可以给这一页设口令；「随手记」里可以给今天整天设口令（这一天的所有页都锁上，包括还没写的）。
 
-## 小插画
+## 手帐设置
 
-后台编辑页里点选，最多两个：晴天、多云、下雨、月亮、猫、书、电脑、bug、植物、吃面、公交、骑车、音乐、心、星星、来信、拍照。
-画在 `public/assets/render.js` 的 `STICKERS` 里（64×64 的线稿 SVG）。新增一个要同时加到 `src/index.ts` 的 `STICKERS`。
+后台左侧「手帐设置」里能改（没改过的项保持原样）：
+
+- **网站**：浏览器标题、一句介绍。Worker 在返回主页时直接写进 `<title>` 和 `<meta name="description">`，搜索和分享链接也看得到；已发布的页和设置一并内联进页面，主页不用再请求接口。
+- **封面**：大字（第一个「.」是绿色小圆点）、下面那行字；原来的 5 个贴纸可以逐个隐藏；最多 4 张自己的图片当贴纸（透明 PNG 会保留透明背景，拿掉的图会从 R2 删除）。
+- **扉页**：README 里的 whoami / cat role / ls ~/life / 开始记的日期，和小咖旁边那句话。
+- **封底**：大字和下方小字（可换行）。
+- **加密**：给整本手帐设口令。
+- **翻页方式**：自动 / 立体的书 / 平面翻页（见[功能](#功能)）。以前保存过设置的站点，这里存的是「立体的书」；想让手机用平面翻页，选一次「自动」。
+- **示例页**：开头 9/25–9/29 的示例页可以隐藏；「写信给我」那一页会移到最后一篇日记后面，联系方式不会丢。示例页不进时间线；和日记同一天时，日期链接打开的是日记。
+- **联系方式**：邮箱、GitHub。
 
 ## 草稿与每晚自动写
 
@@ -128,16 +162,42 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
   - 任务说明在 `~/.claude/scheduled-tasks/techo-nightly-page/SKILL.md`，改口吻或素材就改这里。
 - 网站自己也会写（需要 Claude API Key）：
   - 后台「随手记」里的「现在就用今天的随手记写一页」随时生成一页草稿。
-  - 每天 23:30（Asia/Shanghai，`wrangler.jsonc` 的 `triggers`）Worker 检查今天还没有页、又有随手记，就自动写一页草稿——电脑没开的日子靠它兜底。
+  - 每天 23:30（Asia/Shanghai，`wrangler.jsonc` 的 `triggers`）Worker 检查今天还没有页、又有随手记，就自动写一页草稿，电脑没开的日子靠它兜底。
   - 只读随手记，读不到 Claude 聊天；当天已经有一页就不写。
   - 开启：在 [console.anthropic.com](https://console.anthropic.com) 建一个 API Key，首次部署后运行 `npx wrangler secret put ANTHROPIC_API_KEY` 粘贴进去。按量计费，一页大约 $0.03。
   - 日期按 `wrangler.jsonc` 里的 `TIMEZONE` 算。
 
+## 数据库
+
+| 表 | 存什么 |
+|---|---|
+| `entries` | 日记页：日期、标题、正文（Markdown）、照片（`photo_key` 是逗号分隔的最多 3 个 R2 key，`photo_cap` 每行一个说明）、插画、地点、坐标、天气、状态…… |
+| `jots` | 随手记，`used_in` 记着被写进了哪一页 |
+| `settings` | 手帐设置，一项一行 |
+| `locks` | 口令（PBKDF2 哈希，不存明文），`scope` 是 `book`、`d-YYYY-MM-DD`（一整天）或某一页的 id |
+
+新数据库用 `schema.sql`（`npm run db:init:remote`，本地是 `db:init:local`），里面已经是最新结构。之前建的数据库按顺序跑还没跑过的升级文件，每个只跑一次：
+
+| 文件 | 加了什么 |
+|---|---|
+| `migrations/0001_drafts_stickers_jots.sql` | 草稿状态、小插画、随手记 |
+| `migrations/0002_locks.sql` | 口令（可以重复跑） |
+| `migrations/0003_place_weather.sql` | 地点、坐标、天气（没跑之前照常能写，只是不能填这几项） |
+
+```bash
+npx wrangler d1 execute techo-db --remote --file=migrations/0003_place_weather.sql
+```
+
+不知道跑过哪些时，先看一眼表结构：`npx wrangler d1 execute techo-db --remote --command "PRAGMA table_info(entries)"`。
+
 ## 安全说明
 
-- 主页、`/api/entries`、`/api/settings`、`/img/*` 是公开只读的。
+- 主页、`/timeline/`、`/api/entries`、`/api/settings`、`/img/*` 是公开只读的。
 - 所有写操作都在 `/api/admin/*`，要带登录后的 Cookie。Cookie 是 `过期时间.GitHub用户名.HMAC`，用从 client secret 派生的密钥签名，HttpOnly + Secure + SameSite=Strict；没有、被改过、或用户名不是 `ADMIN_GITHUB_LOGIN` 都只会得到 401。
 - GitHub 登录带 `state` 防 CSRF（10 分钟有效的 HttpOnly Cookie），只申请最小权限（读公开资料），不保存 GitHub token。
+- 上了锁的页，没给口令的读者只拿得到日期，照片也要口令才能读。口令只存 PBKDF2 哈希；猜口令每个 IP 每分钟最多 10 次（`wrangler.jsonc` 的 `ratelimits`）。改口令会让已经打开过的读者失效。
+- 正文按 Markdown 渲染成页面时只用文本节点，写进去的内容不会被当成 HTML；链接只允许 http/https。
+- 坐标只保留两位小数（大约 1 公里）。
 - 想彻底关掉 workers.dev 地址：在 `wrangler.jsonc` 加 `"workers_dev": false`。
 
 ## 本地开发
@@ -149,33 +209,45 @@ npm run db:init:local
 npm run dev                        # http://localhost:8787 ，后台 http://localhost:8787/admin/
 ```
 
+提交前跑一下 CI 会检查的几项：
+
+```bash
+npm run typecheck
+node --test tests/*.mjs
+python3 src-build/build.py && npm run build:3d && git status   # public/ 不应该有没提交的改动
+```
+
 ## 改页面
 
-- 开头 6 页（9/25–9/30）、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`。
-- 改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css`。
-- 后台写的页面会按日期排在这 6 页后面。
+- 示例页、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`，样式在 `src-build/design/extra.css` 和 `src-build/book-extra.css`。改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css`。
+- 立体的书的源码在 `src-build/book3d/`，改完运行 `npm run build:3d` 重新打包 `public/assets/book3d.js`。
+- `public/assets/` 里其余的 js / css 和 `public/timeline/`、`public/404.html` 直接改。
+- 生成的文件要和源码一起提交，CI 会检查两边一致。
+- 后台写的页面按日期排在示例页后面。
 
 ## API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/entries` | 已发布的日记页（按日期） |
+| GET | `/api/entries` | 已发布的日记页（按日期）；上了锁、没给口令的只有日期。口令令牌放在 `X-Techo-Keys` 请求头里 |
+| POST | `/api/unlock` | 用口令换一个 12 小时有效的令牌（`{"scope", "password"}`） |
 | GET | `/api/settings` | 手帐设置（没设置过的项返回默认值） |
-| GET | `/img/p/<uuid>.<ext>` | 照片 |
+| GET | `/img/p/<uuid>.<ext>` | 照片；上了锁的页的照片要带 `?k=令牌` |
 | GET | `/api/auth/github` | 跳到 GitHub 登录 |
 | GET | `/api/auth/github/callback` | GitHub 登录回调，成功后下发 Cookie 并回到 `/admin/` |
 | GET | `/api/admin/me` | 当前登录的 GitHub 用户名 |
 | POST | `/api/admin/logout` | 退出 |
-| GET | `/api/admin/entries` | 所有页，含草稿 |
-| POST | `/api/admin/entries` | 新建一页（JSON；`stickers` 数组、`status` 默认 `published`） |
-| PUT | `/api/admin/entries/:id` | 整页覆盖更新（换照片时自动删旧图） |
+| GET | `/api/admin/entries` | 所有页，含草稿和上锁情况 |
+| POST | `/api/admin/entries` | 新建一页（JSON；`photos` 是 `[{key, cap}]`，最多 3 张；`stickers` 数组；`status` 默认 `published`） |
+| PUT | `/api/admin/entries/:id` | 整页覆盖更新（拿掉的照片会从 R2 删除） |
 | DELETE | `/api/admin/entries/:id` | 删除（连同照片） |
+| PUT | `/api/admin/locks/:scope` | 设口令（`{"password": "…"}`，至少 4 个字符）；`{"password": null}` 去掉。`scope`：`book`、`d-YYYY-MM-DD` 或页的 id |
 | PUT | `/api/admin/settings` | 更新手帐设置（只改传了的项） |
 | GET | `/api/admin/jots` | 最近 100 条随手记 |
 | POST | `/api/admin/jots` | 记一句（`{"text": "..."}`，≤1000 字） |
 | DELETE | `/api/admin/jots/:id` | 删一条随手记 |
 | POST | `/api/admin/compose` | 用今天的随手记让 Claude 写一页草稿（今天已有页或没有随手记时返回 409） |
-| POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB；后台会先压到 1600px） |
+| POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB） |
 
 ## 友链
 
@@ -183,4 +255,4 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 
 ## 许可证
 
-[MIT](LICENSE)。翻页库 StPageFlip 同为 MIT（见 `public/vendor/page-flip.LICENSE.txt`）。欢迎提 Issue 和 PR。
+[MIT](LICENSE)。StPageFlip 和 three.js 同为 MIT（StPageFlip 的许可见 `public/vendor/page-flip.LICENSE.txt`，three.js 的许可在打包后的 `book3d.js` 末尾）。欢迎提 Issue 和 PR。
