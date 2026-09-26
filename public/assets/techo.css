@@ -144,13 +144,13 @@ body{
 .leaf .face{position:absolute;inset:-4px -4px -4px -1px;background:#2b454b;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
 /* faces 5px apart = the board's thickness (--bt). Corners only just rounded, like a real board, so the square-ended
    edge strips below meet them cleanly. */
-.leaf{--bt:5px;--br:5px}
+.leaf{--bt:4px;--br:5px}
 .leaf .face{border-radius:var(--br)}
 .leaf .face.front{transform:translateZ(calc(var(--bt) / 2))}
 .leaf .face.back{transform:rotateY(180deg) translateZ(calc(var(--bt) / 2))}
 .leaf .face>.page.cover,.leaf .face>.page.backcover{border-radius:0}
 .leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
-.leaf .shade{position:absolute;inset:0;background:#0b0f10;opacity:0;pointer-events:none}
+.leaf .shade{position:absolute;inset:0;background:#1d3236;opacity:0;pointer-events:none}
 .leaf .face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(10,20,22,.3);pointer-events:none;z-index:10}
 /* The fore-edge strip: cloth like the faces, spanning the board's straight edge (it stops where the corners round,
    --br) and 1px thicker than --bt so it overlaps both faces by half a pixel with no seam. One-sided: it faces
@@ -162,7 +162,21 @@ body{
 .leaf .edge.fore{top:calc(-4px + var(--br));height:calc(100% + 8px - 2 * var(--br));width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
   background:linear-gradient(90deg,#2a434a,#34525a)}   /* no weave here: seen edge-on it turned into a dashed line */
 /* lying flat you can't see an edge head-on, so show the board's tail edge as if from a touch above */
-.bookwrap.shut .leaf .face{box-shadow:0 1px 0 #2d484e,0 3px 0 #1c3034,0 6px 10px -2px rgba(20,16,8,.28)}
+.bookwrap.shut .leaf .face{box-shadow:0 6px 12px -3px rgba(20,16,8,.26)}
+/* Closed, the book is seen from a touch to the side of its fore-edge: past the board you see its own edge, then
+   the page block (4px in from head and tail, since the boards overhang the pages), then the far board's edge.
+   It sits outside the board, never painted on it, and shows only while the book lies shut: once a board moves
+   the real pages are there. For the back board the leaf is turned over, so it lands on the left. */
+.leaf .block{position:absolute;top:0;bottom:0;left:calc(100% + 6px);width:7px;pointer-events:none;opacity:0;transition:opacity .2s ease;
+  border-radius:0 2px 2px 0;
+  background:
+    linear-gradient(90deg,rgba(60,48,24,.2),rgba(60,48,24,0) 40%,rgba(255,255,255,.3) 70%,rgba(60,48,24,.12)),
+    linear-gradient(rgba(40,32,16,.3),rgba(40,32,16,0) 10px,rgba(40,32,16,0) calc(100% - 10px),rgba(40,32,16,.32)),
+    repeating-linear-gradient(90deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px)}
+.leaf .block::before,.leaf .block::after{content:"";position:absolute;top:-4px;bottom:-4px}
+.leaf .block::before{right:100%;width:4px;border-radius:0 4px 4px 0;background:#2a434a}   /* this board's edge; 2px tucked under the board, no seam */
+.leaf .block::after{left:100%;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(90deg,#1c3034,#2a434a)} /* the far board */
+.bookwrap.shut .leaf .block{opacity:1}
 .undershade{position:absolute;top:0;height:100%;width:50%;pointer-events:none;z-index:25;opacity:0}
 /* the page a board lifts from sits in the board's shadow, right out to the fore-edge (a bright hairline showed there) */
 .undershade.r{left:50%;background:linear-gradient(90deg,rgba(25,18,6,.6),rgba(25,18,6,.34) 55%,rgba(25,18,6,.26))}
@@ -196,24 +210,6 @@ body{
   background:repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),linear-gradient(90deg,#223a40,#2b464c 70%,#253e44)}
 .cover .spine{left:0;box-shadow:1px 0 0 rgba(255,255,255,.08),2px 0 0 rgba(0,0,0,.25)}
 .backcover .spine{right:0;box-shadow:-1px 0 0 rgba(255,255,255,.08),-2px 0 0 rgba(0,0,0,.25)}
-/* the page block showing at the fore-edge: stacked sheets, rounded towards the reader, in the board's shadow at head and tail */
-.cover .pages-edge{position:absolute;right:0;top:6px;bottom:6px;width:10px;border-radius:0 4px 4px 0;
-  background:
-    linear-gradient(90deg,rgba(60,48,24,.22),rgba(60,48,24,0) 35%,rgba(255,255,255,.28) 65%,rgba(60,48,24,.14)),
-    linear-gradient(rgba(40,32,16,.28),rgba(40,32,16,0) 14px,rgba(40,32,16,0) calc(100% - 14px),rgba(40,32,16,.3)),
-    repeating-linear-gradient(90deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px);
-  box-shadow:inset 0 1px 0 rgba(40,32,16,.25),inset 0 -1px 0 rgba(40,32,16,.25),-1px 0 0 rgba(0,0,0,.18)}
-/* the back cover's fore-edge is its left side (the spine is on the right): the same block, mirrored */
-.backcover .pages-edge{position:absolute;left:0;top:6px;bottom:6px;width:10px;border-radius:4px 0 0 4px;
-  background:
-    linear-gradient(270deg,rgba(60,48,24,.22),rgba(60,48,24,0) 35%,rgba(255,255,255,.28) 65%,rgba(60,48,24,.14)),
-    linear-gradient(rgba(40,32,16,.28),rgba(40,32,16,0) 14px,rgba(40,32,16,0) calc(100% - 14px),rgba(40,32,16,.3)),
-    repeating-linear-gradient(270deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px);
-  box-shadow:inset 0 1px 0 rgba(40,32,16,.25),inset 0 -1px 0 rgba(40,32,16,.25),1px 0 0 rgba(0,0,0,.18)}
-/* ...but only while the book lies shut. Once the cover moves, the real pages show and the painted block would
-   ride along on the board's edge; the cover then opens as a bare board, like the back cover does. */
-.leaf .pages-edge{transition:opacity .2s ease}
-.bookwrap:not(.shut) .leaf .pages-edge{opacity:0}
 /* debossed title */
 .cover .deboss{position:absolute;left:104px;top:92px;font:600 58px/1 var(--mono);letter-spacing:-1px;color:#24393f;
   text-shadow:0 1px 0 rgba(255,255,255,.13),0 -1px 0 rgba(0,0,0,.35)}

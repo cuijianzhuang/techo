@@ -101,7 +101,8 @@
     front.appendChild(el('div','shade'));back.appendChild(el('div','shade'));
     // the board's thickness shows at the fore-edge (head and tail face up and down, away from an eye level
     // with the middle of the page; the hinge side is in the spine)
-    leaf.append(front,back,el('div','edge fore'));
+    // .block: the rest of the closed book seen past the board's fore-edge (board edge, pages, the other board)
+    leaf.append(front,back,el('div','edge fore'),el('div','block'));
     wrap.appendChild(leaf);
     return {leaf,front,back,fs:front.lastChild,bs:back.lastChild};
   }
@@ -172,9 +173,12 @@
     const angle=(which==='front'||!land)?180*p:180*(1-p);
     const lift=Math.sin(angle*Math.PI/180);
     L.leaf.style.transform='rotateY('+(-angle).toFixed(2)+'deg)';
-    // light shading only: the endpaper side stays a light paper, not a grey slab
-    L.fs.style.opacity=angle<90?(0.24*lift).toFixed(3):'0';
-    L.bs.style.opacity=angle>=90?(0.14*lift).toFixed(3):'0';
+    // A face turning edge-on falls into shadow, towards the cloth colour, so near 90deg the face and the lit
+    // fore-edge read as one board, not a pale sheet beside a dark strip. lift^20 keeps it to the last few
+    // degrees: lying open, the endpaper is paper again.
+    const edgeOn=Math.pow(lift,20);
+    L.fs.style.opacity=angle<90?(0.1*lift+0.45*edgeOn).toFixed(3):'0';
+    L.bs.style.opacity=angle>=90?(0.08*lift+0.82*edgeOn).toFixed(3):'0';
     L.leaf.style.opacity=(!land&&angle>120)?Math.max(0,(180-angle)/60).toFixed(3):'1';
     // shadow thrown on the page the board is lifting from / landing on
     under.r.style.opacity=under.l.style.opacity='0';
