@@ -124,7 +124,25 @@
   pf.on('update',scale);
   window.addEventListener('resize',()=>requestAnimationFrame(scale));
   new ResizeObserver(()=>scale()).observe(bookEl);
-  scale();setShift(0);chrome(0);
+  /* #2026-09-27 opens that day's page (the timeline links here), #contact the 写信给我 page — like the 3D book */
+  const dated=pages.map((p,i)=>({i,date:p.date})).filter(d=>d.date);
+  // that day's page if there is one (the samples come before the diary pages, whatever their dates)
+  const pageFor=day=>(dated.find(d=>d.date===day)||dated.find(d=>d.date>=day)||dated[dated.length-1]||{}).i;
+  const contactPage=pages.findIndex(p=>p.node.querySelector&&p.node.querySelector('#mail'));
+  const timelinePage=pages.findIndex(p=>p.node.classList.contains('tlp'));
+  function hashPage(){
+    const m=/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash);
+    if(m)return pageFor(m[1]);
+    if(location.hash==='#timeline'&&timelinePage>=0)return timelinePage;
+    return location.hash==='#contact'&&contactPage>=0?contactPage:null;
+  }
+  // once followed, the link is taken off the address, so the same line (or 时间线) can be followed again
+  const clearHash=()=>history.replaceState(null,'',location.pathname+location.search);
+  window.addEventListener('hashchange',()=>{const i=hashPage();if(i!=null){pf.flip(i);clearHash();}});
+  const start=hashPage()||0;
+  if(location.hash)clearHash();
+  if(start)pf.turnToPage(start);   // arrived by a link: open straight there
+  scale();setShift(start);chrome(start);if(start)reveal(start);
   nav.hidden=false;
 
   // 放大看: the page(s) open now, big enough to read on a phone
