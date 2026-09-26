@@ -48,17 +48,15 @@ body{
 .leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
 .leaf .shade{position:absolute;inset:0;background:#0b0f10;opacity:0;pointer-events:none}
 .leaf .face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(10,20,22,.3);pointer-events:none;z-index:10}
-/* Edge strips, cloth like the faces. Each spans the face's full length and is 1px thicker than --bt so it overlaps
-   both faces by half a pixel: no seam of page showing between board and edge. Faces reach -4px/-1px past the leaf
-   (the overhang), so the strips are placed on those lines. */
-.leaf .edge{position:absolute;pointer-events:none;
+/* The fore-edge strip: cloth like the faces, spanning the board's straight edge (it stops where the corners round,
+   --br) and 1px thicker than --bt so it overlaps both faces by half a pixel with no seam. One-sided: it faces
+   outwards, so it shows once a cover turns its edge towards you and hides while the board lies flat. There are no
+   head/tail strips: facing up and down, they're never seen from the page's eye level, and double-sided they drew
+   dark wedges across the top and bottom of a standing cover. */
+.leaf .edge{position:absolute;pointer-events:none;backface-visibility:hidden;-webkit-backface-visibility:hidden;
   background:repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),linear-gradient(#34525a,#284047)}
-/* each strip stops where the corners start to round (--br), so its square end never pokes out past a corner */
 .leaf .edge.fore{top:calc(-4px + var(--br));height:calc(100% + 8px - 2 * var(--br));width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
-.leaf .edge.head,.leaf .edge.tail{left:calc(-1px + var(--br));width:calc(100% + 5px - 2 * var(--br));height:calc(var(--bt) + 1px);transform:rotateX(90deg);
   background:linear-gradient(90deg,#2a434a,#34525a)}   /* no weave here: seen edge-on it turned into a dashed line */
-.leaf .edge.head{top:calc(-4px - (var(--bt) + 1px) / 2)}
-.leaf .edge.tail{top:calc(100% + 4px - (var(--bt) + 1px) / 2)}
 /* lying flat you can't see an edge head-on, so show the board's tail edge as if from a touch above */
 .bookwrap.shut .leaf .face{box-shadow:0 1px 0 #2d484e,0 3px 0 #1c3034,0 6px 10px -2px rgba(20,16,8,.28)}
 .undershade{position:absolute;top:0;height:100%;width:50%;pointer-events:none;z-index:25;opacity:0}
@@ -101,6 +99,13 @@ body{
     linear-gradient(rgba(40,32,16,.28),rgba(40,32,16,0) 14px,rgba(40,32,16,0) calc(100% - 14px),rgba(40,32,16,.3)),
     repeating-linear-gradient(90deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px);
   box-shadow:inset 0 1px 0 rgba(40,32,16,.25),inset 0 -1px 0 rgba(40,32,16,.25),-1px 0 0 rgba(0,0,0,.18)}
+/* the back cover's fore-edge is its left side (the spine is on the right): the same block, mirrored */
+.backcover .pages-edge{position:absolute;left:0;top:6px;bottom:6px;width:10px;border-radius:4px 0 0 4px;
+  background:
+    linear-gradient(270deg,rgba(60,48,24,.22),rgba(60,48,24,0) 35%,rgba(255,255,255,.28) 65%,rgba(60,48,24,.14)),
+    linear-gradient(rgba(40,32,16,.28),rgba(40,32,16,0) 14px,rgba(40,32,16,0) calc(100% - 14px),rgba(40,32,16,.3)),
+    repeating-linear-gradient(270deg,#fbf8ee 0 1px,#e4dcc6 1px 1.5px,#f6f1e2 1.5px 2.5px,#d6cdb3 2.5px 3px);
+  box-shadow:inset 0 1px 0 rgba(40,32,16,.25),inset 0 -1px 0 rgba(40,32,16,.25),1px 0 0 rgba(0,0,0,.18)}
 /* ...but only while the book lies shut. Once the cover moves, the real pages show and the painted block would
    ride along on the board's edge; the cover then opens as a bare board, like the back cover does. */
 .leaf .pages-edge{transition:opacity .2s ease}
@@ -141,14 +146,15 @@ body{
 .page.inside{background-color:#dfe4dc;background-image:radial-gradient(rgba(47,74,80,.22) 1px,transparent 1.2px);background-size:14px 14px}
 .page.inside.l{box-shadow:inset -22px 0 26px -18px rgba(30,50,55,.3)}
 .page.inside.r{box-shadow:inset 22px 0 26px -18px rgba(30,50,55,.3)}
-/* the cover cloth turned in over the board's inside edges, the endpaper pasted down inside it. It joins the board's
-   edge strip when a cover stands up, so the edge reads as part of the board, not a bar beside the paper.
-   No turn-in at the hinge: there the endpaper runs on into the book. */
+/* the cover cloth turned in over the board's inside fore-edge, the endpaper pasted down beside it. It joins the
+   board's edge strip when a cover stands up, so the edge reads as part of the board, not a bar beside the paper.
+   Only the fore-edge: head and tail turn-ins span the board's width and foreshorten into wedges on a standing
+   cover; at the hinge the endpaper runs on into the book. */
 .page.inside.l::after,.page.inside.r::after{display:block;content:"";position:absolute;inset:0;height:auto;border:0 solid #2f4a50;
   background:none;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);
   border-image:linear-gradient(#35535a,#2a434a) 1}
-.page.inside.l::after{border-width:14px 0 14px 14px;border-radius:0}
-.page.inside.r::after{border-width:14px 14px 14px 0;border-radius:0}
+.page.inside.l::after{border-width:0 0 0 14px;border-radius:0}
+.page.inside.r::after{border-width:0 14px 0 0;border-radius:0}
 /* flyleaf: README in a terminal-ish hand */
 .flyleaf .body{display:flex;flex-direction:column;justify-content:center;gap:0;padding-inline:26px}
 .flyleaf .readme{font:500 10.5px/1 var(--mono);letter-spacing:2px;color:var(--olive);margin-bottom:18px}
