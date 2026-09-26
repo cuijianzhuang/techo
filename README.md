@@ -155,6 +155,10 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 | POST | `/api/admin/compose` | 用今天的随手记让 Claude 写一页草稿（今天已有页或没有随手记时返回 409） |
 | POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB；后台会先压到 1600px） |
 
+## 友链
+
+- [LINUX DO](https://linux.do/)
+
 ## 许可证
 
 [MIT](LICENSE)。翻页库 StPageFlip 同为 MIT（见 `public/vendor/page-flip.LICENSE.txt`）。欢迎提 Issue 和 PR。
