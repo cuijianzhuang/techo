@@ -101,20 +101,87 @@ const bad = (c: C, status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 500, error:
 
 /* ---------------- public API ---------------- */
 
-app.get("/api/entries", async (c) => {
-  const { results } = await c.env.DB.prepare(
+
+
+/* ---------------- settings: everything on the book that isn't a journal page ---------------- */
+
+/** what the book shows until a setting is saved (the original hand-made content) */
+const SETTING_DEFAULTS: Record<string, string> = {
+  email: "hello@example.com", github: "", githubText: "",
+  siteTitle: "Cuijianzhuang 手帐", siteDesc: "Cuijianzhuang 的手帐：写代码的人，也记日记。",
+  coverTitle: "cui.log", coverSub: "手帐 · 2026.09 → ∞",
+  coverHide: "", coverPhotos: "",
+  readmeName: "Cuijianzhuang", readmeRole: "Java 后端 · 保险业务系统", readmeLife: "nas/  photos/  trips/  notes/",
+  readmeSince: "2026-09", readmeSign: "小咖在旁边看着",
+  backTitle: "EOF", backImprint: "cui.log · build 2026.09.25\ndeployed on the edge",
+  samples: "show",
+};
+/** max length (characters) per text setting */
+const SETTING_MAX: Record<string, number> = {
+  email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
+  readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
+};
+const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
+const MAX_COVER_PHOTOS = 4;
+const csv = (v: string) => v.split(",").filter(Boolean);
+
+async function loadSettings(env: Env): Promise<Record<string, string>> {
+  const { results } = await env.DB.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
+  const settings = { ...SETTING_DEFAULTS };
+  for (const r of results) if (r.key in SETTING_DEFAULTS) settings[r.key] = r.value;
+  return settings;
+}
+async function loadPublished(env: Env): Promise<Entry[]> {
+  const { results } = await env.DB.prepare(
     "SELECT * FROM entries WHERE status='published' ORDER BY date ASC, created_at ASC",
   ).all();
+  return results.map(rowToEntry);
+}
+
+function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<string, string> } | { ok: false; error: string } {
+  const v: Record<string, string> = {};
+  for (const k of Object.keys(SETTING_DEFAULTS)) {
+    if (!(k in o)) continue;
+    if (typeof o[k] !== "string") return { ok: false, error: `${k} 必须是文字` };
+    const t = (o[k] as string).replace(/\r\n/g, "\n").trim();
+    if (SETTING_MAX[k] && [...t].length > SETTING_MAX[k]) return { ok: false, error: `${k} 超过 ${SETTING_MAX[k]} 个字` };
+    v[k] = t;
+  }
+  if (v.github && !/^https:\/\/[^\s]+$/i.test(v.github)) return { ok: false, error: "GitHub 地址要以 https:// 开头" };
+  if (v.coverHide !== undefined && csv(v.coverHide).some((k) => !COVER_STICKERS.has(k))) return { ok: false, error: "coverHide 里有不认识的贴纸" };
+  if (v.coverPhotos !== undefined) {
+    const keys = csv(v.coverPhotos);
+    if (keys.length > MAX_COVER_PHOTOS) return { ok: false, error: `封面图片最多 ${MAX_COVER_PHOTOS} 张` };
+    if (keys.some((k) => !PHOTO_KEY.test(k))) return { ok: false, error: "封面图片无效" };
+  }
+  if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
+  return { ok: true, value: v };
+}
+
+app.get("/api/entries", async (c) => {
   c.header("Cache-Control", "no-store");
-  return c.json({ entries: results.map(rowToEntry) });
+  return c.json({ entries: await loadPublished(c.env) });
 });
 
 app.get("/api/settings", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
-  const settings: Record<string, string> = {};
-  for (const r of results) settings[r.key] = r.value;
   c.header("Cache-Control", "no-store");
-  return c.json({ settings });
+  return c.json({ settings: await loadSettings(c.env) });
+});
+
+/* The book's page: title and description from the settings, and the data inlined so book.js needn't fetch it. */
+app.get("/", async (c) => {
+  const [page, settings, entries] = await Promise.all([c.env.ASSETS.fetch(c.req.raw), loadSettings(c.env), loadPublished(c.env)]);
+  if (!page.ok) return page;
+  // "<" escaped so nothing in a journal page can close the script tag
+  const data = JSON.stringify({ entries, settings }).replace(/</g, "\\u003c");
+  const res = new HTMLRewriter()
+    .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
+    .on('meta[name="description"]', { element: (e) => { e.setAttribute("content", settings.siteDesc); } })
+    .on('script[src="/assets/book.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
+    .transform(page);
+  const h = new Headers(res.headers);
+  h.set("Cache-Control", "no-cache");
+  return new Response(res.body, { status: res.status, headers: h });
 });
 
 /* Photos from R2. Keys are random UUIDs and never reused, so they cache forever. */
@@ -284,16 +351,19 @@ app.delete("/api/admin/entries/:id", async (c) => {
 app.put("/api/admin/settings", async (c) => {
   const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!o || typeof o !== "object") return bad(c, 400, "请求体必须是 JSON 对象");
-  const s = (k: string, max: number) => {
-    const v = typeof o[k] === "string" ? (o[k] as string).trim() : "";
-    return [...v].length > max ? null : v;
-  };
-  const email = s("email", 120), github = s("github", 200), githubText = s("githubText", 60);
-  if (email === null || github === null || githubText === null) return bad(c, 400, "内容太长");
-  if (github && !/^https:\/\/[^\s]+$/i.test(github)) return bad(c, 400, "GitHub 地址要以 https:// 开头");
+  const parsed = cleanSettings(o);
+  if (!parsed.ok) return bad(c, 400, parsed.error);
+  const before = await loadSettings(c.env);
   const up = c.env.DB.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
-  await c.env.DB.batch([up.bind("email", email), up.bind("github", github), up.bind("githubText", githubText)]);
-  return c.json({ settings: { email, github, githubText } });
+  const pairs = Object.entries(parsed.value);
+  if (pairs.length) await c.env.DB.batch(pairs.map(([k, v]) => up.bind(k, v)));
+  // cover pictures taken off the cover aren't used anywhere else
+  if (parsed.value.coverPhotos !== undefined) {
+    const keep = new Set(csv(parsed.value.coverPhotos));
+    const gone = csv(before.coverPhotos).filter((k) => !keep.has(k));
+    if (gone.length) c.executionCtx.waitUntil(c.env.PHOTOS.delete(gone));
+  }
+  return c.json({ settings: await loadSettings(c.env) });
 });
 
 /* jots: loose lines written during the day, picked up by the nightly summary */

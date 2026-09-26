@@ -94,7 +94,7 @@
       return;
     }
     sel=id;
-    if(id==='settings'){draft=Object.assign({email:'',github:'',githubText:''},settings);}
+    if(id==='settings'){draft=Object.assign({},settings);}
     else if(id==='jots'){draft=null;}
     else if(id==='new'){draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en):null;}
@@ -142,11 +142,32 @@
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
     if(sel==='settings'){
-      f.append(el('h2',null,'联系方式'),
-        field('邮箱（显示在最后一页的信封上）','email','email',{ph:'you@example.com',max:120}),
+      const sect=(t,hint)=>{const h=el('h3','fsect',t);return hint?[h,el('div','hintx',hint)]:[h];};
+      f.append(el('h2',null,'手帐设置'),
+        ...sect('网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。'),
+        field('网站标题','siteTitle','text',{max:40}),
+        field('一句介绍','siteDesc','text',{max:120}),
+        ...sect('封面'),
+        field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
+        field('大字下面的一行','coverSub','text',{max:40}),
+        coverStickerField(),
+        coverPhotoField(),
+        ...sect('扉页','翻开封面后第一页的 README。'),
+        field('whoami（名字）','readmeName','text',{max:30}),
+        field('cat role（在做什么）','readmeRole','text',{max:40}),
+        field('ls ~/life（生活里有什么）','readmeLife','text',{max:60}),
+        field('从哪天开始记','readmeSince','text',{max:20,ph:'2026-09'}),
+        field('小咖旁边那句话','readmeSign','text',{max:30}),
+        ...sect('封底'),
+        field('封底大字','backTitle','text',{max:12}),
+        field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'}),
+        ...sect('示例页'),
+        samplesField(),
+        ...sect('联系方式','显示在「写信给我」那一页。'),
+        field('邮箱','email','email',{ph:'you@example.com',max:120}),
         field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
         field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60}));
-      const b=el('div','bar');const s=el('button','b pri','保存');s.type='submit';b.appendChild(s);
+      const b=el('div','bar');const s=el('button','b pri','保存设置');s.type='submit';b.appendChild(s);
       f.append(b,statusEl);main.appendChild(f);return;
     }
     f.appendChild(el('h2',null,sel==='new'?'新的一页':draft.status==='draft'?'草稿':'编辑这一页'));
@@ -260,6 +281,62 @@
     return wrap;
   }
 
+  /* ---------- 手帐设置: cover stickers, cover pictures, sample pages ---------- */
+  const COVER_STICKERS=[['mug','小咖'],['nas','NAS'],['cloud','云'],['film','胶卷'],['ticket','机票']];
+  const csv=v=>String(v||'').split(',').filter(Boolean);
+  function coverStickerField(){
+    const wrap=el('div');
+    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';l.textContent='封面上原来的贴纸（点一下隐藏 / 显示）';
+    const row=el('div','chips');row.setAttribute('role','group');row.setAttribute('aria-label','封面上原来的贴纸');
+    COVER_STICKERS.forEach(([k,label])=>{
+      const b=el('button','chip',label);b.type='button';
+      const paint=()=>b.setAttribute('aria-pressed',csv(draft.coverHide).includes(k)?'false':'true');
+      b.onclick=()=>{const h=csv(draft.coverHide);draft.coverHide=(h.includes(k)?h.filter(x=>x!==k):h.concat(k)).join(',');paint();changed();};
+      paint();row.appendChild(b);
+    });
+    wrap.append(l,row);return wrap;
+  }
+  function coverPhotoField(){
+    const wrap=el('div');
+    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';
+    l.textContent='我的贴纸（最多 4 张，会带白边贴在封面上；透明背景的 PNG 效果最好）';
+    const row=el('div','cphotos');
+    const paint=()=>{
+      row.textContent='';
+      const keys=csv(draft.coverPhotos);
+      keys.forEach(k=>{
+        const t=el('div','cphoto');t.style.backgroundImage='url("/img/'+k+'")';
+        const x=el('button','cx','×');x.type='button';x.setAttribute('aria-label','拿掉这张');
+        x.onclick=()=>{draft.coverPhotos=csv(draft.coverPhotos).filter(y=>y!==k).join(',');paint();changed();};
+        t.appendChild(x);row.appendChild(t);
+      });
+      if(keys.length<4){
+        const fb=el('span','b small filebtn','添加图片');
+        const inp=el('input');inp.type='file';inp.accept='image/png,image/webp,image/jpeg,image/gif';inp.setAttribute('aria-label','添加封面贴纸');
+        fb.appendChild(inp);row.appendChild(fb);
+        inp.addEventListener('change',async()=>{
+          const file=inp.files&&inp.files[0];if(!file)return;
+          fb.firstChild.textContent='上传中……';status('正在上传……');
+          try{
+            const blob=await shrink(file,600,true);
+            const r=await api('/api/admin/photos',{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
+            draft.coverPhotos=csv(draft.coverPhotos).concat(r.key).join(',');paint();changed();
+            status('图片已上传，记得保存设置。','ok');
+          }catch(e){fb.firstChild.textContent='添加图片';status(e.message||'上传失败','err');}
+        });
+      }
+    };
+    paint();wrap.append(l,row);return wrap;
+  }
+  function samplesField(){
+    const l=el('label','check1');
+    const cb=el('input');cb.type='checkbox';cb.id='f-samples';cb.checked=draft.samples!=='hide';
+    cb.onchange=()=>{draft.samples=cb.checked?'show':'hide';changed();};
+    l.append(cb,el('span',null,'显示开头的示例页（9/25–9/29）'));
+    const w=el('div');w.append(l,el('div','hintx','隐藏后，「写信给我」那一页会移到最后一篇日记后面，联系方式还在。'));
+    return w;
+  }
+
   /* ---------- doodles ---------- */
   function stickerField(){
     const wrap=el('div');
@@ -358,15 +435,17 @@
     return wrap;
   }
   /* shrink big photos (NAS originals) to 1600px JPEG before upload */
-  async function shrink(file){
+  async function shrink(file,max=1600,keepAlpha=false){
     if(file.type==='image/gif')return file;
     let bmp;
     try{bmp=await createImageBitmap(file);}catch(e){throw new Error('这个格式浏览器打不开，请换成 JPG 或 PNG');}
-    const max=1600,k=Math.min(1,max/Math.max(bmp.width,bmp.height));
+    const k=Math.min(1,max/Math.max(bmp.width,bmp.height));
     if(k===1&&file.size<1.5e6&&/^image\/(jpeg|png|webp)$/.test(file.type))return file;
     const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
     c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
-    return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('压缩失败')),'image/jpeg',0.86));
+    // cover stickers keep a transparent background: re-encode PNG / WebP as PNG, not JPEG
+    const out=keepAlpha&&/^image\/(png|webp)$/.test(file.type)?['image/png']:['image/jpeg',0.86];
+    return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('压缩失败')),...out));
   }
 
   /* ---------- save / delete ---------- */
@@ -381,7 +460,7 @@
       if(sel==='settings'){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
         settings=r.settings;draft=Object.assign({},settings);base=JSON.stringify(draft);
-        status('已保存，主页上的联系方式已更新。','ok');
+        drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
         const r=sel==='new'?await sendJson('POST','/api/admin/entries',body):await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(sel),body);
