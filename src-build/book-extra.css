@@ -275,3 +275,30 @@ html.reading{overflow:hidden}
 .rd-tip{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;pointer-events:none;
   color:var(--desk-ink);font:400 12px/1 var(--print);animation:rd-tip 3.5s ease-in forwards}
 @keyframes rd-tip{0%,70%{opacity:.9}100%{opacity:0;visibility:hidden}}
+
+/* ================= 时间线: the book's contents, after the flyleaf (Techo timelinePages) ================= */
+.tlp .head .tl-t{font:400 30px/1 var(--title);color:var(--ink);letter-spacing:2px}
+.tlp .head .tl-l{margin-bottom:1px;font:600 19px/1 var(--latin);color:var(--ink-soft)}
+.tlp-list{position:absolute;left:28px;right:28px;top:78px;z-index:2}
+.tlp-list::before{content:"";position:absolute;left:5px;top:22px;bottom:12px;border-left:1.5px dashed var(--olive);opacity:.45}
+.tlp-m{height:40px;box-sizing:border-box;display:flex;align-items:flex-end;gap:2px;padding:0 0 6px 22px;color:var(--olive)}
+.tlp-m b{font:600 26px/1 var(--latin)}
+.tlp-m span{font:500 11px/1 var(--print)}
+.tlp-m i{margin-left:8px;font:500 15px/1 var(--latin);font-style:normal;color:var(--ink-soft)}
+.tlp-row{position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 4px 0 22px;border-radius:4px;color:var(--ink);text-decoration:none}
+/* the whole line is the link (the page-flip book only lets a click through when it lands on the <a> itself) */
+.tlp-row *{pointer-events:none}
+.tlp-row::before{content:"";position:absolute;left:1px;top:50%;width:6px;height:6px;margin-top:-5px;border:2px solid var(--olive);border-radius:50%;background:var(--paper)}
+.tlp-row.we::before{border-color:var(--red)}
+.tlp-row.today::before{background:var(--red);border-color:var(--red);box-shadow:0 0 0 3px rgba(217,87,59,.2)}
+.tlp-d{width:40px;flex:none;font:400 13px/1 var(--print);color:var(--olive);font-variant-numeric:tabular-nums}
+.tlp-w{flex:none;padding:2px 3px;border:1px solid currentColor;border-radius:2px;font:500 10px/1 var(--print);color:var(--olive)}
+.tlp-row.we .tlp-d,.tlp-row.we .tlp-w{color:var(--red)}
+.tlp-t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font:400 20px/1.25 var(--hand)}
+.tlp-row.locked .tlp-t{color:var(--ink-soft)}
+.tlp-go{flex:none;font:400 17px/1 var(--print);color:var(--olive);opacity:.55}
+.tlp-row:hover{background:rgba(138,154,43,.1)}
+.tlp-row:hover .tlp-go{opacity:1}
+.tlp-row:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.tlp .foot{display:flex;justify-content:space-between;align-items:flex-start}
+.tlp-n{font-variant-numeric:tabular-nums}

@@ -650,8 +650,9 @@ const LIFT = 0.25 * H, CREASE = 2.5;
 
   /* ---------- any day: a calendar in the nav, and a link (#2026-09-27) for every diary page ---------- */
   const dated = pages.map((p, i) => ({ i, date: p.date })).filter((d) => d.date);
-  // the page for a day: that day's, or the first one written after it (or the last there is)
-  const pageFor = (day) => (dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
+  // the page for a day: that day's, or the first one written after it (or the last there is). That day's is
+  // looked for first: the sample pages come before the diary pages, whatever their dates.
+  const pageFor = (day) => (dated.find((d) => d.date === day) || dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
   function openDay(day) { const i = pageFor(day); if (i != null) openPage(i); }
   if (dated.length) {
     const cal = T.el('button', 'arrow daypick'); cal.type = 'button';
@@ -724,7 +725,14 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   const hashDay = () => (/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash) || [])[1];
   // #contact: the 写信给我 page (linked from the 404 page)
   const contactPage = pages.findIndex((p) => p.node.querySelector && p.node.querySelector('#mail'));
-  const openHash = () => { const d = hashDay(); if (d) openDay(d); else if (location.hash === '#contact' && contactPage >= 0) openPage(contactPage); };
+  // #timeline: the 时间线 pages after the flyleaf
+  const timelinePage = pages.findIndex((p) => p.node.classList.contains('tlp'));
+  const openHash = () => {
+    const d = hashDay();
+    if (d) openDay(d);
+    else if (location.hash === '#contact' && contactPage >= 0) openPage(contactPage);
+    else if (location.hash === '#timeline' && timelinePage >= 0) openPage(timelinePage);
+  };
   const arrivalHash = location.hash;                     // read before the cover's own (empty) link replaces it
   window.addEventListener('hashchange', openHash);
   function chrome() {

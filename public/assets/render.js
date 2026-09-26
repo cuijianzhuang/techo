@@ -357,6 +357,48 @@
     return b;
   }
 
+  /* ---------- 时间线: the book's own table of contents, the pages after the flyleaf ----------
+     Every dated page in the book (the samples and the diary pages), newest first, a month at a time; a line
+     per day that opens the book there (#YYYY-MM-DD, which both books follow). As many pages as it takes,
+     always a spread's worth (a left page, then a right one), so the days after it keep their sides. */
+  const TL_TOP=78,TL_BOTTOM=648,TL_MONTH=40,TL_ROW=34;
+  function timelinePages(items){
+    items=items.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.order-a.order));
+    // lay the lines out on pages by height: a month heading, then its days; a month carried over says so
+    const sheets=[];let cur=null,y=0,month=null;
+    for(const it of items){
+      const key=it.date.slice(0,7),head=key!==month||!cur;
+      if(!cur||y+(head?TL_MONTH:0)+TL_ROW>TL_BOTTOM){cur=[];sheets.push(cur);y=TL_TOP;month=null;}
+      if(key!==month){cur.push({month:key,more:sheets.length>1&&sheets[sheets.length-2].some(r=>r.date&&r.date.slice(0,7)===key)});y+=TL_MONTH;month=key;}
+      cur.push(it);y+=TL_ROW;
+    }
+    const today=todayStr(),n=sheets.length;
+    return sheets.map((rows,k)=>{
+      const side=k%2===0?'l':'r',p=el('div','page '+side+' tlp');
+      const h=el('header','head');
+      const note=el('span','note');note.append('共 '+items.length+' 页',el('br'),'最新的在前');
+      h.append(el('span','tl-t','时间线'),el('span','tl-l','timeline'),note);
+      const list=el('div','tlp-list');
+      rows.forEach(r=>{
+        if(r.month){
+          const [y,mo]=r.month.split('-').map(Number);
+          const m=el('div','tlp-m');m.append(el('b',null,String(mo)),el('span',null,'月'),el('i',null,MOE[mo-1]+' '+y+(r.more?' · 续':'')));
+          list.appendChild(m);return;
+        }
+        const d=parseDate(r.date),we=d.wd===0||d.wd===6;
+        const a=el('a','tlp-row'+(we?' we':'')+(r.date===today?' today':'')+(r.locked?' locked':''));
+        a.href='#'+r.date;
+        a.append(el('span','tlp-d',String(d.mo).padStart(2,'0')+'.'+String(d.d).padStart(2,'0')),el('span','tlp-w',WD[d.wd]),el('span','tlp-t',r.title),el('span','tlp-go','›'));
+        a.setAttribute('aria-label',d.mo+'月'+d.d+'日 '+r.title+'，翻到这一天');
+        list.appendChild(a);
+      });
+      const f=el('footer','foot');
+      f.append(el('span',null,'点一行，翻到那一天'),el('span','tlp-n',n>1?(k+1)+' / '+n:''));
+      p.append(h,list,f);
+      return p;
+    });
+  }
+
   /* The book's content, shared by the page-flip book (book.js) and the 3D book (book3d.js): data (inlined by the
      Worker as TECHO_DATA, or fetched), the owner's 手帐设置 applied to the built-in pages in `src`, fonts ready,
      and the page list in reading order. */
@@ -434,6 +476,7 @@
     push(q('.page.cover'),{hard:true});
     push(q('.page.inside.l'),{hard:true});
     push(q('.page.flyleaf'));
+    const tlAt=pages.length;             // the timeline goes here, once the dated pages are known
     // the hand-made sample pages can be hidden. Their last page (写信给我, the contact details) is always the
     // book's last page: every newly published diary page goes in before it
     // a locked book keeps its sample pages shut away too
@@ -461,6 +504,14 @@
       const side=leftNext()?'l':'r',d=parseDate(en.date);
       push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null});
     });
+    // the timeline, after the flyleaf: its pages come in pairs, so every page after it keeps its side
+    const dated=pages.slice(tlAt).map((p,i)=>p.date&&{date:p.date,order:i,locked:p.node.classList.contains('locked'),
+      title:p.node.classList.contains('locked')?'上了锁的一页':((p.node.querySelector('h2')||{}).textContent||'（无题）').replace(/\s+/g,'')}).filter(Boolean);
+    if(dated.length){
+      const tl=timelinePages(dated).map((node,k)=>({node,label:k===0?'时间线':null}));
+      if(tl.length%2)tl.push({node:blankPage('r',null)});
+      pages.splice(tlAt,0,...tl);
+    }
     if(contact){
       if(leftNext())push(blankPage('l',null));                // contact is a right-hand page
       push(contact);
@@ -495,5 +546,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
+  window.Techo={askUnlock,relock,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton};
 })();
