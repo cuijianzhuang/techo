@@ -161,3 +161,23 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .gatemug{position:absolute;right:18px;bottom:16px;transform:rotate(6deg)}
 @media (prefers-reduced-motion:reduce){.admin .ghbtn:hover{transform:none}}
 .admin .lockf{display:grid;gap:10px;margin-top:12px}
+/* 正文: the Markdown editor (admin.js mdField) */
+.admin .mdfield{display:grid;gap:5px}
+.admin .mdfield>label{display:block}
+.admin .mdbar{display:flex;flex-wrap:wrap;gap:2px;padding:4px;border:1px solid #cfc8b3;border-bottom:0;border-radius:7px 7px 0 0;background:#f6f1e1}
+.admin .mdbar+textarea{border-radius:0 0 7px 7px;font:400 14px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,"Noto Sans SC",monospace;min-height:240px;tab-size:2}
+.admin .mdb{appearance:none;border:1px solid transparent;background:transparent;border-radius:5px;min-width:30px;height:30px;padding:0 7px;
+  font:500 13px/1 var(--print);color:var(--ink);cursor:pointer}
+.admin .mdb:hover{background:#fffdf8;border-color:#cfc8b3}
+.admin .mdb-b{font-weight:700}
+.admin .mdb-i{font-style:italic;font-family:Georgia,serif}
+.admin .mdb-s{text-decoration:line-through}
+.admin .mdb-h{font-family:Georgia,serif}
+.admin .mdb-hl{color:#b8962b}
+.admin .mdhelp summary{cursor:pointer;font:500 12px/1.6 var(--print);color:var(--ink-soft)}
+.admin .mdhelp table{border-collapse:collapse;margin:6px 0;font:400 12px/1.5 var(--print);color:var(--ink)}
+.admin .mdhelp td{padding:3px 12px 3px 0;vertical-align:top}
+.admin .mdhelp td:first-child{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:nowrap}
+/* 地点和天气 (admin.js placeField) */
+.admin .placefield{display:grid;gap:8px}
+.admin .place-row{align-items:end}

@@ -34,6 +34,10 @@ type Entry = {
   id: string; date: string; title: string; latin: string; stamp: string; aside: string;
   body: string; note: string; mood: "mug" | "sleep" | "none"; quote: string; quoteSrc: string;
   photoKey: string; photoCap: string; stickers: string[]; status: "draft" | "published";
+  /** every photo on the page, in order (photoKey / photoCap are the first one's, for older readers) */
+  photos: Photo[];
+  /** where it was written: a place name, "lat,lon" (two decimals, about a kilometre), and that day's weather */
+  place: string; geo: string; weather: string;
   createdAt: number; updatedAt: number;
 };
 
@@ -47,16 +51,26 @@ const STICKERS = new Set(Object.keys(STICKER_LABELS));
 const MAX_STICKERS = 2;
 
 const LIMITS: Record<string, number> = {
-  title: 30, latin: 60, stamp: 2, aside: 30, body: 4000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30,
+  title: 30, latin: 60, stamp: 2, aside: 30, body: 4000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30, place: 30, weather: 20,
 };
 const PHOTO_KEY = /^p\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/;
+/* A page holds up to MAX_PHOTOS photos, kept in the columns that held one: photo_key is their keys joined by
+   commas, photo_cap their captions one per line (so an older database needs no migration). */
+type Photo = { key: string; cap: string };
+const MAX_PHOTOS = 3;
+const photoKeys = (col: unknown) => String(col || "").split(",").filter(Boolean);
+function photosOf(keyCol: unknown, capCol: unknown): Photo[] {
+  const caps = String(capCol || "").split("\n");
+  return photoKeys(keyCol).map((key, i) => ({ key, cap: caps[i] || "" }));
+}
 
 function rowToEntry(r: Record<string, unknown>): Entry {
   return {
     id: String(r.id), date: String(r.date), title: String(r.title), latin: String(r.latin),
     stamp: String(r.stamp), aside: String(r.aside), body: String(r.body), note: String(r.note),
+    place: String(r.place ?? ""), geo: String(r.geo ?? ""), weather: String(r.weather ?? ""),
     mood: (r.mood as Entry["mood"]) || "mug", quote: String(r.quote), quoteSrc: String(r.quote_src),
-    photoKey: String(r.photo_key), photoCap: String(r.photo_cap),
+    ...(() => { const photos = photosOf(r.photo_key, r.photo_cap); return { photos, photoKey: photos[0]?.key || "", photoCap: photos[0]?.cap || "" }; })(),
     stickers: String(r.stickers || "").split(",").filter((k) => STICKERS.has(k)),
     status: r.status === "draft" ? "draft" : "published",
     createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
@@ -64,6 +78,8 @@ function rowToEntry(r: Record<string, unknown>): Entry {
 }
 
 type EntryInput = Omit<Entry, "id" | "createdAt" | "updatedAt" | "status"> & { status?: Entry["status"] };
+/** the two columns the photos are kept in */
+const photoCols = (photos: Photo[]) => [photos.map((p) => p.key).join(","), photos.map((p) => p.cap).join("\n")];
 
 function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: false; error: string } {
   if (!input || typeof input !== "object") return { ok: false, error: "请求体必须是 JSON 对象" };
@@ -81,19 +97,39 @@ function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { ok: fal
   if (!v.title) return { ok: false, error: "标题不能为空" };
   const mood = str("mood") || "mug";
   if (!["mug", "sleep", "none"].includes(mood)) return { ok: false, error: "mood 只能是 mug / sleep / none" };
-  const photoKey = str("photoKey");
-  if (photoKey && !PHOTO_KEY.test(photoKey)) return { ok: false, error: "photoKey 无效" };
+  // photos: [{key, cap}] (up to MAX_PHOTOS), or the single photoKey / photoCap older clients send
+  const rawPhotos: unknown[] = Array.isArray(o.photos) ? o.photos : str("photoKey") ? [{ key: str("photoKey"), cap: v.photoCap }] : [];
+  if (rawPhotos.length > MAX_PHOTOS) return { ok: false, error: `照片最多 ${MAX_PHOTOS} 张` };
+  const photos: Photo[] = [];
+  for (const ph of rawPhotos) {
+    const q = (ph && typeof ph === "object" ? ph : {}) as Record<string, unknown>;
+    const key = typeof q.key === "string" ? q.key : "";
+    const cap = (typeof q.cap === "string" ? q.cap : "").replace(/\s+/g, " ").trim();
+    if (!PHOTO_KEY.test(key)) return { ok: false, error: "照片无效" };
+    if ([...cap].length > LIMITS.photoCap) return { ok: false, error: `照片说明超过 ${LIMITS.photoCap} 个字` };
+    if (photos.some((p) => p.key === key)) continue;
+    photos.push({ key, cap });
+  }
   const rawStk: unknown[] = Array.isArray(o.stickers) ? o.stickers : typeof o.stickers === "string" ? o.stickers.split(",") : [];
   const stickers = [...new Set(rawStk.map((k) => String(k).trim()).filter(Boolean))];
   if (stickers.some((k) => !STICKERS.has(k))) return { ok: false, error: "有不认识的插画" };
   if (stickers.length > MAX_STICKERS) return { ok: false, error: `插画最多 ${MAX_STICKERS} 个` };
+  // coordinates: kept to two decimals (about a kilometre), the book being public
+  let geo = "";
+  const g = /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(str("geo"));
+  if (str("geo").trim()) {
+    const lat = g ? Number(g[1]) : NaN, lon = g ? Number(g[2]) : NaN;
+    if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return { ok: false, error: "坐标应为「纬度,经度」，比如 31.23,121.47" };
+    geo = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  }
   const status = str("status");
   if (status && status !== "draft" && status !== "published") return { ok: false, error: "status 只能是 draft / published" };
   return {
     ok: true,
     value: {
       date, title: v.title, latin: v.latin, stamp: v.stamp, aside: v.aside, body: v.body, note: v.note,
-      mood: mood as Entry["mood"], quote: v.quote, quoteSrc: v.quoteSrc, photoKey, photoCap: v.photoCap,
+      place: v.place, geo, weather: v.weather,
+      mood: mood as Entry["mood"], quote: v.quote, quoteSrc: v.quoteSrc, photos, photoKey: photos[0]?.key || "", photoCap: photos[0]?.cap || "",
       stickers, status: (status || undefined) as Entry["status"] | undefined,
     },
   };
@@ -283,7 +319,9 @@ app.get("/img/:dir/:name", async (c) => {
   let locked = false;
   const locks = await loadLocks(c.env);
   if (locks.size) {
-    const row = await c.env.DB.prepare("SELECT id, date FROM entries WHERE photo_key=?").bind(key).first<{ id: string; date: string }>();
+    // photo_key may list several photos: look for this one among them
+    const row = await c.env.DB.prepare("SELECT id, date FROM entries WHERE photo_key=? OR instr(','||photo_key||',', ','||?||',')>0")
+      .bind(key, key).first<{ id: string; date: string }>();
     const scope = row && lockOf(locks, row);
     if (scope) {
       locked = true;
@@ -443,15 +481,31 @@ app.put("/api/admin/locks/:scope", async (c) => {
   }
 });
 
+/* place / geo / weather live in columns added by migrations/0003_place_weather.sql. Until that has run a page
+   still saves, without them; one that has them says what to run. */
+const PLACE_COLS = ["place", "geo", "weather"] as const;
+const missingColumn = (e: unknown) => /no (such )?column|has no column named/i.test(String(e));
+async function writeEntry(sql: (cols: string[]) => D1PreparedStatement, e: EntryInput) {
+  try { return await sql([...PLACE_COLS]).run(); }
+  catch (err) {
+    if (!missingColumn(err)) throw err;
+    if (PLACE_COLS.some((k) => e[k])) throw new HttpError(500, "数据库还没有地点和天气这几列：运行 migrations/0003_place_weather.sql");
+    return await sql([]).run();
+  }
+}
+class HttpError extends Error { constructor(public status: 500, message: string) { super(message); } }
+
 app.post("/api/admin/entries", async (c) => {
   const parsed = cleanEntry(await c.req.json().catch(() => null));
   if (!parsed.ok) return bad(c, 400, parsed.error);
   const e = parsed.value, now = Date.now(), id = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO entries (id,date,title,latin,stamp,aside,body,note,mood,quote,quote_src,photo_key,photo_cap,stickers,status,created_at,updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap,
-    e.stickers.join(","), e.status || "published", now, now).run();
+  try {
+    await writeEntry((cols) => c.env.DB.prepare(
+      `INSERT INTO entries (id,date,title,latin,stamp,aside,body,note,mood,quote,quote_src,photo_key,photo_cap,stickers,status,created_at,updated_at${cols.map((k) => "," + k).join("")})
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?${",?".repeat(cols.length)})`,
+    ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, ...photoCols(e.photos),
+      e.stickers.join(","), e.status || "published", now, now, ...cols.map((k) => e[k as keyof EntryInput] as string)), e);
+  } catch (err) { if (err instanceof HttpError) return bad(c, err.status, err.message); throw err; }
   const row = await c.env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
   return c.json({ entry: rowToEntry(row!) }, 201);
 });
@@ -463,11 +517,15 @@ app.put("/api/admin/entries/:id", async (c) => {
   const parsed = cleanEntry(await c.req.json().catch(() => null));
   if (!parsed.ok) return bad(c, 400, parsed.error);
   const e = parsed.value;
-  await c.env.DB.prepare(
-    `UPDATE entries SET date=?,title=?,latin=?,stamp=?,aside=?,body=?,note=?,mood=?,quote=?,quote_src=?,photo_key=?,photo_cap=?,stickers=?,status=?,updated_at=? WHERE id=?`,
-  ).bind(e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, e.photoKey, e.photoCap,
-    e.stickers.join(","), e.status || old.status, Date.now(), id).run();
-  if (old.photo_key && old.photo_key !== e.photoKey) c.executionCtx.waitUntil(c.env.PHOTOS.delete(old.photo_key));
+  try {
+    await writeEntry((cols) => c.env.DB.prepare(
+      `UPDATE entries SET date=?,title=?,latin=?,stamp=?,aside=?,body=?,note=?,mood=?,quote=?,quote_src=?,photo_key=?,photo_cap=?,stickers=?,status=?,updated_at=?${cols.map((k) => "," + k + "=?").join("")} WHERE id=?`,
+    ).bind(e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, ...photoCols(e.photos),
+      e.stickers.join(","), e.status || old.status, Date.now(), ...cols.map((k) => e[k as keyof EntryInput] as string), id), e);
+  } catch (err) { if (err instanceof HttpError) return bad(c, err.status, err.message); throw err; }
+  // photos taken off the page aren't used anywhere else
+  const keep = new Set(e.photos.map((p) => p.key)), gone = photoKeys(old.photo_key).filter((k) => !keep.has(k));
+  if (gone.length) c.executionCtx.waitUntil(c.env.PHOTOS.delete(gone));
   const row = await c.env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
   return c.json({ entry: rowToEntry(row!) });
 });
@@ -478,7 +536,7 @@ app.delete("/api/admin/entries/:id", async (c) => {
   if (!old) return bad(c, 404, "这一页不存在");
   await c.env.DB.prepare("DELETE FROM entries WHERE id=?").bind(id).run();
   await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(id).run().catch(() => {});
-  if (old.photo_key) c.executionCtx.waitUntil(c.env.PHOTOS.delete(old.photo_key));
+  if (old.photo_key) c.executionCtx.waitUntil(c.env.PHOTOS.delete(photoKeys(old.photo_key)));
   return c.json({ ok: true });
 });
 

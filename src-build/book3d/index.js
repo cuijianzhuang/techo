@@ -10,7 +10,7 @@
 import {
   WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry, PlaneGeometry, BufferGeometry,
   BufferAttribute, ShaderMaterial, Vector4, CanvasTexture, Vector2, Vector3, Raycaster, Plane, FrontSide, BackSide,
-  LinearMipmapLinearFilter, LinearFilter, NoColorSpace, LinearSRGBColorSpace, Color,
+  LinearMipmapLinearFilter, LinearFilter, NoColorSpace, LinearSRGBColorSpace, Color, Shape, ExtrudeGeometry,
 } from 'three';
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { rasterize, PAGE_W as W, PAGE_H as H } from './raster.js';
@@ -88,6 +88,35 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
         gl_FragColor = vec4(base * shade, 1.0);
       }`,
   });
+}
+
+/* A board: a slab w×h×depth, centred like a box, its corners rounded as the cover page's are — round at the
+   fore-edge (rFore, the page's 10px plus the cloth around it, so the two curves run together), barely at the
+   spine (rSpine). Groups as the board's materials want them: 0 the edges, 1 the top face (+z), 2 the bottom.
+   On the top face u runs from the spine side, on the bottom from the fore-edge, as on a BoxGeometry. */
+function boardGeometry(w, h, depth, rSpine, rFore) {
+  const x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2, s = new Shape();
+  s.moveTo(x0 + rSpine, y0);
+  s.lineTo(x1 - rFore, y0); s.quadraticCurveTo(x1, y0, x1, y0 + rFore);
+  s.lineTo(x1, y1 - rFore); s.quadraticCurveTo(x1, y1, x1 - rFore, y1);
+  s.lineTo(x0 + rSpine, y1); s.quadraticCurveTo(x0, y1, x0, y1 - rSpine);
+  s.lineTo(x0, y0 + rSpine); s.quadraticCurveTo(x0, y0, x0 + rSpine, y0);
+  const uv = {
+    generateTopUV(g, v, a, b, c) {
+      return [a, b, c].map((i) => {
+        const x = v[i * 3], y = v[i * 3 + 1], top = v[i * 3 + 2] > depth / 2;
+        return new Vector2(top ? (x - x0) / w : (x1 - x) / w, (y - y0) / h);
+      });
+    },
+    generateSideWallUV() { return [new Vector2(), new Vector2(), new Vector2(), new Vector2()]; },
+  };
+  const g = new ExtrudeGeometry(s, { depth, bevelEnabled: false, curveSegments: 10, UVGenerator: uv });
+  g.translate(0, 0, -depth / 2);
+  // ExtrudeGeometry puts both lids in group 0 (the bottom one first) and the walls in group 1
+  const [lids, walls] = g.groups, half = lids.count / 2;
+  g.clearGroups();
+  g.addGroup(lids.start, half, 2); g.addGroup(lids.start + half, half, 1); g.addGroup(walls.start, walls.count, 0);
+  return g;
 }
 
 /* A turning sheet, as in StPageFlip: a flat fold. It is two flat pieces of the same page, cut exactly along
@@ -210,7 +239,7 @@ export async function start() {
     // and the overhang around it is cloth, like a turn-in.
     const top = material({ color: CLOTH, uvRect: new Vector4(1 / w, OH / h, W / w, H / h) });
     const bottom = material({ color: CLOTH, uvRect: new Vector4(OH / w, OH / h, W / w, H / h) });
-    const mesh = new Mesh(new BoxGeometry(w, h, BT), [edge, edge, edge, edge, top, bottom]);
+    const mesh = new Mesh(boardGeometry(w, h, BT, 3, 10 + OH), [edge, top, bottom]);
     mesh.position.set(w / 2 - 1, 0, BT / 2);
     const hinge = new Group(); hinge.add(mesh); book.add(hinge);
     return { hinge, top, bottom };
@@ -636,9 +665,10 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   }, { passive: false });
   host.addEventListener('pointercancel', endDrag);
 
-  /* ---------- chrome: date chips, arrows, restart, drag hint ---------- */
+  /* ---------- chrome: the arrows, 封面 and 时间线 (any day is a line on the 时间线), restart, drag hint ---------- */
+  const isTimeline = (i) => !!(pages[i] && pages[i].node.classList.contains('tlp'));
   const chips = [{ label: '封面', page: 0 }];
-  pages.forEach((p, i) => { if (p.label) chips.push({ label: p.label, page: i }); });
+  { const t = pages.findIndex((p, i) => isTimeline(i)); if (t >= 0) chips.push({ label: '时间线', page: t }); }
   const sheetOf = (page) => (page === 0 ? 0 : Math.ceil(page / 2));
   // open the book at page i: turn there, then (on a phone) look at that page
   function openPage(i) { goTo(sheetOf(i)); if (fit.portrait) pan(i % 2 ? 'L' : 'R'); }
@@ -648,69 +678,14 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     dots.appendChild(b);
   });
 
-  /* ---------- any day: a calendar in the nav, and a link (#2026-09-27) for every diary page ---------- */
+  /* ---------- any day: the calendar in the nav, and a link (#2026-09-27) for every diary page (the 时间线 lines use it) ---------- */
   const dated = pages.map((p, i) => ({ i, date: p.date })).filter((d) => d.date);
   // the page for a day: that day's, or the first one written after it (or the last there is). That day's is
   // looked for first: the sample pages come before the diary pages, whatever their dates.
   const pageFor = (day) => (dated.find((d) => d.date === day) || dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
   function openDay(day) { const i = pageFor(day); if (i != null) openPage(i); }
-  if (dated.length) {
-    const cal = T.el('button', 'arrow daypick'); cal.type = 'button';
-    cal.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="13" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
-    cal.setAttribute('aria-label', '跳到某一天'); cal.title = '跳到某一天';
-    cal.setAttribute('aria-haspopup', 'dialog'); cal.setAttribute('aria-expanded', 'false');
-    /* a little paper calendar, like the one in a page's corner: the days with a diary page are marked and
-       can be picked, the day open now is circled red; ‹ › go through the months that have pages */
-    const pop = T.el('div', 'daypop'); pop.hidden = true; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', '跳到某一天');
-    const have = new Set(dated.map((d) => d.date));
-    const months = [...new Set(dated.map((d) => d.date.slice(0, 7)))];
-    let shown = months[months.length - 1];
-    const pad = (n) => String(n).padStart(2, '0');
-    function paintCal() {
-      const [y, mo] = shown.split('-').map(Number), mi = months.indexOf(shown);
-      pop.textContent = '';
-      const head = T.el('div', 'dp-head');
-      const pv = T.el('button', 'dp-nav', '‹'), nx = T.el('button', 'dp-nav', '›');
-      pv.type = nx.type = 'button'; pv.setAttribute('aria-label', '上个月'); nx.setAttribute('aria-label', '下个月');
-      pv.disabled = mi <= 0; nx.disabled = mi >= months.length - 1;
-      pv.onclick = () => { shown = months[mi - 1]; paintCal(); };
-      nx.onclick = () => { shown = months[mi + 1]; paintCal(); };
-      const title = T.el('div', 'dp-title');
-      title.append(T.el('b', null, String(mo)), T.el('span', null, '月'), T.el('i', null, y + ' · ' + ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'][mo - 1]));
-      head.append(pv, title, nx);
-      const grid = T.el('div', 'dp-grid');
-      '一二三四五六日'.split('').forEach((c) => grid.appendChild(T.el('span', 'dp-wd', c)));
-      const first = new Date(Date.UTC(y, mo - 1, 1)).getUTCDay(), off = (first + 6) % 7, n = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-      for (let i = 0; i < off; i++) grid.appendChild(T.el('span'));
-      const iv = pageInView(), now = iv >= 0 && pages[iv] && pages[iv].date;
-      for (let d = 1; d <= n; d++) {
-        const day = y + '-' + pad(mo) + '-' + pad(d);
-        if (!have.has(day)) { grid.appendChild(T.el('span', 'dp-off', String(d))); continue; }
-        const b = T.el('button', 'dp-day' + (day === now ? ' dp-now' : ''), String(d)); b.type = 'button';
-        b.setAttribute('aria-label', mo + '月' + d + '日');
-        if (day === now) b.setAttribute('aria-current', 'date');
-        b.onclick = () => { close(); openDay(day); };
-        grid.appendChild(b);
-      }
-      pop.append(head, grid, T.el('div', 'dp-foot', '点有小圆点的日子翻过去'));
-    }
-    const onDoc = (e) => { if (!box.contains(e.target)) close(); };
-    const onKey = (e) => { if (e.key === 'Escape') { close(); cal.focus(); } };
-    function open() {
-      const iv = pageInView(), now = iv >= 0 && pages[iv] && pages[iv].date;
-      shown = now ? now.slice(0, 7) : months[months.length - 1];
-      paintCal(); pop.hidden = false; cal.setAttribute('aria-expanded', 'true');
-      document.addEventListener('pointerdown', onDoc, true); document.addEventListener('keydown', onKey);
-      const f = pop.querySelector('.dp-now') || pop.querySelector('.dp-day'); if (f) f.focus({ preventScroll: true });
-    }
-    function close() {
-      pop.hidden = true; cal.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('pointerdown', onDoc, true); document.removeEventListener('keydown', onKey);
-    }
-    cal.onclick = () => (pop.hidden ? open() : close());
-    const box = T.el('span', 'calbox'); box.append(cal, pop);
-    nav.insertBefore(box, $('next').nextSibling);
-  }
+  { const pick = T.dayPicker(dated.map((d) => d.date), () => { const i = pageInView(); return (i >= 0 && pages[i] && pages[i].date) || null; }, openDay);
+    if (pick) nav.insertBefore(pick, $('next').nextSibling); }
   // the page in view, for the link: on a phone the one looked at, otherwise the spread's dated page
   function pageInView() {
     if (cur <= 0 || cur >= S) return -1;
@@ -726,7 +701,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   // #contact: the 写信给我 page (linked from the 404 page)
   const contactPage = pages.findIndex((p) => p.node.querySelector && p.node.querySelector('#mail'));
   // #timeline: the 时间线 pages after the flyleaf
-  const timelinePage = pages.findIndex((p) => p.node.classList.contains('tlp'));
+  const timelinePage = pages.findIndex((p, i) => isTimeline(i));
   const openHash = () => {
     const d = hashDay();
     if (d) openDay(d);
@@ -738,9 +713,9 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   function chrome() {
     T.dragNote(dragnote, cur === 0 && !fit.portrait);
     restart.hidden = cur < S;
+    const shown = shownPages();
     [...dots.children].forEach((b) => {
-      const pg = +b.dataset.page;
-      const on = sheetOf(pg) === cur && (!fit.portrait || cur <= 0 || cur >= S || (pg % 2 ? 'L' : 'R') === side);
+      const on = +b.dataset.page === 0 ? cur === 0 : shown.some(isTimeline);
       b.setAttribute('aria-current', on ? 'true' : 'false');
       if (on && dots.scrollWidth > dots.clientWidth) dots.scrollLeft = b.offsetLeft - dots.clientWidth / 2 + b.offsetWidth / 2;
     });
@@ -748,10 +723,9 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     syncLink();
   }
   // 放大看: the page(s) open now, big enough to read on a phone
-  function readerPages() {
-    const list = cur <= 0 ? [0] : cur >= S ? [N - 1] : fit.portrait ? [pageInView()] : [2 * cur - 1, 2 * cur];
-    return list.map((i) => pages[i] && pages[i].node);
-  }
+  // the pages in view: the shut cover, the page looked at on a phone, or the open spread
+  const shownPages = () => (cur <= 0 ? [0] : cur >= S ? [N - 1] : fit.portrait ? [side === 'L' ? 2 * cur - 1 : 2 * cur] : [2 * cur - 1, 2 * cur]);
+  const readerPages = () => shownPages().map((i) => pages[i] && pages[i].node);
   $('next').after(T.readerButton(readerPages));
   $('prev').onclick = prev; $('next').onclick = next;
   const sound = T.el('button', 'arrow sound');
