@@ -226,6 +226,12 @@ html{scrollbar-gutter:stable}
 .adminlink{position:relative;z-index:2;display:table;margin:10px auto 0;padding:6px 12px;border-radius:999px;color:var(--desk-ink);font:400 12px/1 var(--print);text-decoration:none;opacity:.55;transition:opacity .2s}
 .adminlink:hover{opacity:1;text-decoration:underline;text-underline-offset:3px}
 .adminlink:focus-visible{opacity:1;outline:2px solid var(--red);outline-offset:2px}
+/* under the book: the timeline (for readers), then the owner's quiet link */
+.desklinks{position:relative;z-index:2;display:flex;justify-content:center;align-items:center;gap:2px;margin-top:10px}
+.desklinks .adminlink{display:inline-block;margin:0}
+.desklink{padding:6px 12px;border-radius:999px;color:var(--desk-ink);font:400 12px/1 var(--print);text-decoration:none;opacity:.85;transition:opacity .2s}
+.desklink:hover{opacity:1;text-decoration:underline;text-underline-offset:3px}
+.desklink:focus-visible{opacity:1;outline:2px solid var(--red);outline-offset:2px}
 
 /* ================= nav ================= */
 .stage{z-index:1}

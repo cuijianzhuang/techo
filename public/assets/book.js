@@ -124,7 +124,19 @@
   pf.on('update',scale);
   window.addEventListener('resize',()=>requestAnimationFrame(scale));
   new ResizeObserver(()=>scale()).observe(bookEl);
-  scale();setShift(0);chrome(0);
+  /* #2026-09-27 opens that day's page (the timeline links here), #contact the 写信给我 page — like the 3D book */
+  const dated=pages.map((p,i)=>({i,date:p.date})).filter(d=>d.date);
+  const pageFor=day=>(dated.find(d=>d.date>=day)||dated[dated.length-1]||{}).i;
+  const contactPage=pages.findIndex(p=>p.node.querySelector&&p.node.querySelector('#mail'));
+  function hashPage(){
+    const m=/^#(\d{4}-\d{2}-\d{2})$/.exec(location.hash);
+    if(m)return pageFor(m[1]);
+    return location.hash==='#contact'&&contactPage>=0?contactPage:null;
+  }
+  window.addEventListener('hashchange',()=>{const i=hashPage();if(i!=null)pf.flip(i);});
+  const start=hashPage()||0;
+  if(start)pf.turnToPage(start);   // arrived by a link: open straight there
+  scale();setShift(start);chrome(start);if(start)reveal(start);
   nav.hidden=false;
 
   // 放大看: the page(s) open now, big enough to read on a phone

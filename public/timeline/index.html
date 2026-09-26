@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>时间线 · Cuijianzhuang 手帐</title>
+<meta name="description" content="手帐里写下的每一天，按时间排好。">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<!-- Every diary page on one strip of desk, newest first: the book's paper, grid, fonts and colours. Each day
+     opens the book at that page (/#YYYY-MM-DD). Filled by /assets/timeline.js. -->
+<style>
+:root{
+  --desk:#e8e6e1;--desk-ink:#6d6a63;--desk-strong:#2a2724;
+  --paper:#fbf8ee;--grid:rgba(128,140,112,.17);--grid-strong:rgba(128,140,112,.3);
+  --ink:#2a2724;--ink-soft:#5a544c;--olive:#8a9a2b;--red:#d9573b;--tape:rgba(236,214,150,.72);
+  --hand:"Long Cang","Ma Shan Zheng","Kaiti SC","STKaiti","KaiTi",cursive;
+  --title:"Ma Shan Zheng","Long Cang","Kaiti SC","STKaiti","KaiTi",cursive;
+  --latin:"Caveat","Segoe Print","Comic Sans MS",cursive;
+  --print:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{--desk:#1e1f22;--desk-ink:#9c988f;--desk-strong:#ebe6da;color-scheme:dark}}
+html,body{margin:0}
+body{min-height:100vh;box-sizing:border-box;padding:28px 16px 56px;
+  background-color:var(--desk);color:var(--ink);font:400 15px/1.6 var(--print);
+  background-image:repeating-linear-gradient(0deg,rgba(120,110,90,.035) 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,rgba(120,110,90,.03) 0 1px,transparent 1px 4px)}
+a{color:inherit}
+a:focus-visible{outline:2px solid var(--red);outline-offset:3px;border-radius:3px}
+
+/* ---------- the top: what this is, and how much of it there is ---------- */
+.tl-top,.tl{max-width:680px;margin:0 auto}
+.tl-top{margin-bottom:10px}
+.tl-back{display:inline-block;padding:4px 0;color:var(--desk-ink);font:400 13px/1 var(--print);text-decoration:none}
+.tl-back:hover{text-decoration:underline;text-underline-offset:3px}
+h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-spacing:3px}
+.tl-sub{margin:4px 0 0;color:var(--desk-ink);font:500 21px/1.1 var(--latin)}
+.tl-stat{margin:10px 0 0;min-height:1.5em;color:var(--desk-ink);font:400 12.5px/1.5 var(--print);font-variant-numeric:tabular-nums}
+
+/* ---------- a month: its heading stays up while its days scroll by ---------- */
+.tl-month{position:relative;padding-left:34px}
+.tl-month::before{content:"";position:absolute;left:11px;top:54px;bottom:0;border-left:2px dashed var(--desk-ink);opacity:.35}
+.tl-mh{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:3px;margin:0 0 6px -34px;padding:18px 0 10px;
+  color:var(--olive);font-weight:400;background:linear-gradient(var(--desk) 78%,transparent)}
+.tl-mh b{font:600 42px/1 var(--latin)}
+.tl-mh span{font:500 13px/1 var(--print)}
+.tl-mh i{margin-left:8px;color:var(--desk-ink);font:500 18px/1 var(--latin);font-style:normal}
+.tl-mh em{margin-left:auto;color:var(--desk-ink);font:normal 400 12px/1 var(--print)}
+
+/* ---------- a day: a slip of the journal's paper, pinned to the line by a dot ---------- */
+.tl-days{list-style:none;margin:0;padding:6px 0 26px;display:grid;gap:16px}
+.tl-days>li{position:relative;animation:tl-in .5s cubic-bezier(.2,.8,.25,1) both;animation-delay:calc(var(--i,0) * 45ms)}
+.tl-days>li::before{content:"";position:absolute;left:-28px;top:24px;width:10px;height:10px;border-radius:50%;
+  background:var(--paper);border:2px solid var(--olive);z-index:1}
+.tl-days>li.we::before{border-color:var(--red)}
+.tl-days>li.today::before{background:var(--red);border-color:var(--red);box-shadow:0 0 0 4px rgba(217,87,59,.18)}
+@keyframes tl-in{from{opacity:0;transform:translateY(10px)}}
+@media (prefers-reduced-motion:reduce){.tl-days>li{animation:none}.tl-card{transition:none}}
+
+.tl-card{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:0 14px;align-items:start;
+  padding:16px 16px 14px;border-radius:3px;color:var(--ink);text-decoration:none;
+  background-color:var(--paper);background-size:14px 14px;background-position:-1px -1px;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  box-shadow:0 1px 2px rgba(40,30,10,.16),0 8px 20px rgba(40,30,10,.12);
+  transform:rotate(var(--r,0deg));transition:transform .25s ease,box-shadow .25s ease}
+.tl-days>li:nth-child(odd) .tl-card{--r:-.35deg}
+.tl-days>li:nth-child(even) .tl-card{--r:.3deg}
+.tl-card:hover{transform:translateY(-2px);box-shadow:0 2px 3px rgba(40,30,10,.16),0 14px 28px rgba(40,30,10,.16)}
+.tl-card:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+
+/* the date, like the head of a page: the day, and the little weekday box */
+.tl-date{display:grid;justify-items:center;min-width:46px;padding-right:13px;border-right:1px solid var(--grid-strong);color:var(--olive)}
+.tl-date b{font:400 32px/1 var(--print);letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.tl-date .wd{margin-top:7px;padding:2px 5px;border-radius:3px 3px 0 0;background:var(--olive);color:#fff;font:500 11px/1 var(--print)}
+.tl-date i{padding:2px 4px;border:1px solid var(--olive);border-top:0;border-radius:0 0 3px 3px;font:normal 500 8px/1 var(--print);letter-spacing:.6px}
+.tl-date.we{color:var(--red)}
+.tl-date.we .wd{background:var(--red)}
+.tl-date.we i{border-color:var(--red)}
+
+.tl-main{min-width:0}
+.tl-main h3{margin:0;color:var(--ink);font:400 25px/1.15 var(--title);letter-spacing:.5px;text-wrap:balance}
+.tl-stamp{display:inline-block;width:24px;height:24px;margin-left:8px;border:1.5px solid var(--red);border-radius:50%;color:var(--red);
+  font:400 15px/22px var(--title);text-align:center;letter-spacing:0;vertical-align:4px;transform:rotate(-8deg);opacity:.85}
+.tl-today{display:inline-block;margin-left:8px;padding:2px 6px;border-radius:3px;background:var(--red);color:#fff;font:500 11px/1.2 var(--print);letter-spacing:0;vertical-align:5px}
+.tl-latin{margin-top:2px;color:var(--ink-soft);font:600 17px/1.2 var(--latin)}
+.tl-ex{margin:6px 0 0;color:var(--ink-soft);font:400 17px/1.5 var(--hand);overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tl-stk{display:flex;gap:4px;margin-top:6px}
+.tl-stk svg{width:30px;height:30px}
+
+/* a photo: a little print taped on */
+.tl-ph{position:relative;margin:2px 2px 0 0;width:84px;height:84px;padding:4px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.16);transform:rotate(3deg)}
+.tl-ph img{display:block;width:100%;height:100%;object-fit:cover;background:#eee}
+.tl-ph::before{content:"";position:absolute;left:50%;top:-8px;width:42px;height:14px;margin-left:-21px;background:var(--tape);transform:rotate(-5deg);z-index:1}
+
+/* a locked day: only its date, sealed */
+.tl-card.locked .tl-main h3{color:var(--ink-soft)}
+.tl-seal{align-self:center;width:40px;height:40px;border:2px solid var(--red);border-radius:50%;color:var(--red);
+  font:400 22px/36px var(--title);text-align:center;transform:rotate(-8deg);opacity:.8;
+  box-shadow:inset 0 0 0 2px var(--paper),inset 0 0 0 3px rgba(217,87,59,.5)}
+
+/* the end of the line: where it all started */
+.tl-end{position:relative;margin:0 auto;max-width:680px;padding:4px 0 0 34px;color:var(--desk-ink);font:400 18px/1.4 var(--hand)}
+.tl-end::before{content:"";position:absolute;left:7px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--desk-ink);opacity:.5}
+.tl-msg{margin:40px 0;color:var(--desk-ink);font:400 20px/1.5 var(--hand);text-align:center}
+.tl-msg a{color:var(--olive)}
+
+@media (max-width:520px){
+  h1{font-size:40px}
+  .tl-month{padding-left:28px}
+  .tl-month::before{left:8px}
+  .tl-mh{margin-left:-28px}
+  .tl-days>li::before{left:-25px}
+  .tl-card{gap:0 11px;padding:14px 12px 12px}
+  .tl-date{min-width:40px;padding-right:10px}
+  .tl-date b{font-size:28px}
+  .tl-main h3{font-size:21px}
+  .tl-ex{font-size:16px}
+  .tl-ph{width:62px;height:62px;padding:3px}
+  .tl-end{padding-left:28px}
+  .tl-end::before{left:4px}
+}
+</style>
+</head>
+<body>
+<header class="tl-top">
+  <a class="tl-back" href="/">← 回到手帐</a>
+  <h1>时间线</h1>
+  <p class="tl-sub">every day I wrote down</p>
+  <p class="tl-stat" id="stat"></p>
+</header>
+<main class="tl" id="tl" aria-live="polite"><p class="tl-msg">正在翻手帐……</p></main>
+<script src="/assets/render.js"></script>
+<script src="/assets/timeline.js"></script>
+</body>
+</html>
