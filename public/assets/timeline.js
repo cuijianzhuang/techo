@@ -39,7 +39,7 @@
   const today=T.todayStr();
   function card(en){
     const d=parseDate(en.date),we=d.wd===0||d.wd===6;
-    const a=el('a','tl-card'+(en.locked?' locked':''));a.href='/#'+en.date;
+    const a=el('a','tl-card'+(en.locked?' locked':''));a.href='/#e-'+en.id;   // that very page, even on a day with several
     const date=el('div','tl-date'+(we?' we':''));
     date.append(el('b',null,String(d.d).padStart(2,'0')),el('span','wd',WD[d.wd]),el('i',null,WDE[d.wd]));
     const main=el('div','tl-main'),h=el('h3');

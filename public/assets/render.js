@@ -558,7 +558,7 @@
         }
         const d=parseDate(r.date),we=d.wd===0||d.wd===6;
         const a=el('a','tlp-row'+(we?' we':'')+(r.date===today?' today':'')+(r.locked?' locked':''));
-        a.href='#'+r.date;
+        a.href=r.id?'#e-'+r.id:'#'+r.date;      // that very page, even on a day with several
         a.append(el('span','tlp-d',String(d.mo).padStart(2,'0')+'.'+String(d.d).padStart(2,'0')),el('span','tlp-w',WD[d.wd]),el('span','tlp-t',r.title),el('span','tlp-go','›'));
         a.setAttribute('aria-label',d.mo+'月'+d.d+'日 '+r.title+'，翻到这一天');
         list.appendChild(a);
@@ -678,10 +678,11 @@
     if(showSamples)days.forEach((p,i)=>p!==contact&&push(p,{label:i%2===0?p.dataset.label:null,date:p===contact?null:sampleDate(days[i-i%2].dataset.label,i%2),sample:true}));
     sortEntries(entries).forEach(en=>{
       const side=leftNext()?'l':'r',d=parseDate(en.date);
-      push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null});
+      // id: the diary page's own link (#e-<id>), for a day with more than one page
+      push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null,id:en.id});
     });
     // the timeline, after the flyleaf: its pages come in pairs, so every page after it keeps its side
-    const dated=pages.slice(tlAt).map((p,i)=>p.date&&!p.sample&&{date:p.date,order:i,locked:p.node.classList.contains('locked'),
+    const dated=pages.slice(tlAt).map((p,i)=>p.date&&!p.sample&&{date:p.date,id:p.id,order:i,locked:p.node.classList.contains('locked'),
       title:p.node.classList.contains('locked')?'上了锁的一页':((p.node.querySelector('h2')||{}).textContent||'（无题）').replace(/\s+/g,'')}).filter(Boolean);
     if(dated.length){
       const tl=timelinePages(dated).map((node,k)=>({node,label:k===0?'时间线':null}));
