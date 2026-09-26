@@ -264,5 +264,17 @@ html{scrollbar-gutter:stable}
 .restart[hidden]{display:none}
 @media (max-width:640px){.restart{padding:6px 4px;font-size:12px}}
 
+/* phones: the 3D book shows one page at a time (book3d.js: spanW), so the loading note holds that room; the
+   drag note would hang off the screen edge; the nav gets tighter so all of it fits */
+@media (max-width:639.98px){
+  .loading{height:min(calc(100vh - 140px),100cqw * 792 / 572)}
+  .dragnote{display:none}
+  .nav{gap:2px}
+  .nav button{padding:8px 7px}
+  .nav .sound{margin-left:0}
+}
+/* the page-flip book's desk shadow has nothing to sit under until that book is built */
+.bookwrap:has(#book:empty)::before{display:none}
+
 [hidden]{display:none!important}
 #static{position:absolute;left:-99999px;top:0;width:530px}

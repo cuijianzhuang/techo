@@ -15,6 +15,7 @@ import {
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import { rasterize, PAGE_W as W, PAGE_H as H } from './raster.js';
 import { boardHeight, spreadCenter } from './motion.mjs';
+import { foldOf, constrain, cornerPath, foldPoint } from './curl.mjs';
 import { unlock, soundOn, setSound, paperTurn, boardTurn, fallBack } from './sound.js';
 
 const OH = 6;          // boards overhang the pages
@@ -46,7 +47,8 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
     uniforms: {
       map: { value: map }, useMap: { value: map ? 1 : 0 }, color: { value: color.clone() },
       flipU: { value: flipU ? 1 : 0 }, stripes: { value: stripes ? 1 : 0 }, stripeGap: { value: SHEET },
-      shadow: { value: new Vector3(0, 0, 0) }, // x0, x1 (world x of the shade's fade), strength
+      shadow: { value: new Vector4(0, 0, 0, 0) }, // crease n·xy = c (world), strength: the shade by a fold
+      shadowW: { value: 70 },                      // how far from the crease it fades
       uvRect: { value: uvRect || new Vector4(0, 0, 1, 1) },   // where the page sits on this face
       // three.js draws a BackSide material by swapping which winding counts as front, so gl_FrontFacing is
       // true on the faces it draws: turn the normal round ourselves or the back of a sheet is lit as if
@@ -62,7 +64,7 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
     fragmentShader: `
-      uniform sampler2D map; uniform float useMap, flipU, stripes, stripeGap; uniform vec3 color, shadow; uniform vec4 uvRect; uniform float backSide;
+      uniform sampler2D map; uniform float useMap, flipU, stripes, stripeGap; uniform vec3 color; uniform vec4 shadow, uvRect; uniform float shadowW; uniform float backSide;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW;
       void main(){
         vec2 uv = vUv; if (flipU > 0.5) uv.x = 1.0 - uv.x;
@@ -75,21 +77,21 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
         vec3 L = normalize(vec3(-0.25, 0.3, 1.0));
         float shade = min(0.7 + 0.3 * max(dot(n, L), 0.0) / L.z, 1.05);
         if (stripes > 0.5 && abs(n.z) < 0.5) base *= mix(0.84, 1.0, smoothstep(0.0, 0.45, fract(vW.z / stripeGap)));
-        if (shadow.z > 0.0) shade *= 1.0 - shadow.z * (1.0 - clamp((vW.x - shadow.x) / (shadow.y - shadow.x), 0.0, 1.0));
+        if (shadow.w > 0.0) { float d = dot(shadow.xy, vW.xy) - shadow.z; if (d > 0.0) shade *= 1.0 - shadow.w * exp(-d / shadowW); }
         gl_FragColor = vec4(base * shade, 1.0);
       }`,
   });
 }
 
-/* a sheet of paper as a strip from the spine (s=0) to the fore-edge (s=W), bent each frame */
-const SEG = 40;
+/* a sheet of paper as a grid, spine (u=0) to fore-edge (u=1), folded each frame (curl.mjs) */
+const GX = 44, GY = 30;
 function sheetGeometry() {
-  const g = new BufferGeometry();
-  const pos = new Float32Array((SEG + 1) * 2 * 3), nor = new Float32Array(pos.length), uv = new Float32Array((SEG + 1) * 2 * 2);
-  const idx = [];
-  for (let i = 0; i <= SEG; i++) {
-    uv.set([i / SEG, 0, i / SEG, 1], i * 4);
-    if (i < SEG) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  const g = new BufferGeometry(), n = (GX + 1) * (GY + 1);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), idx = [];
+  for (let j = 0; j <= GY; j++) for (let i = 0; i <= GX; i++) {
+    const k = j * (GX + 1) + i;
+    uv.set([i / GX, j / GY], k * 2);
+    if (i < GX && j < GY) { const b = k + GX + 1; idx.push(k, k + 1, b, k + 1, b + 1, b); }
   }
   g.setAttribute('position', new BufferAttribute(pos, 3));
   g.setAttribute('normal', new BufferAttribute(nor, 3));
@@ -97,37 +99,26 @@ function sheetGeometry() {
   g.setIndex(idx);
   return g;
 }
-/* phi: 0 lying on the right … PI lying on the left. The shape depends only on phi, never on the direction:
-   turning back is exactly turning forward played in reverse, so both look the same (on a phone too).
-   Lifting off a stack the fore-edge leads, bowing the sheet up like a page raised by its edge; over the top
-   it trails, the sheet falling through the air and landing spine side first. The bottom corner runs a little
-   ahead of the top one, so the sheet turns on a slight diagonal. curl: how strong the bend is; z0: height
-   of the spine end. The two long edges are bent separately; the sheet between them is straight lines. */
-const TWIST = 0.14;
-function bendSheet(g, phi, curl, z0) {
-  const pos = g.attributes.position.array, nor = g.attributes.normal.array, ds = W / SEG;
-  const bow = curl * (0.75 * Math.cos(phi) - 0.3) * Math.sin(phi), tw = TWIST * Math.sin(phi);
-  const ang = (s, row) => clamp(phi + bow * s * s - row * tw * s, 0, Math.PI);   // row -1 bottom, +1 top
-  const xb = [0, 0], zb = [z0, z0];
-  let edge = 0;
-  for (let i = 0; i <= SEG; i++) {
-    const s = i / SEG, sp = (i - 0.5) / SEG;
-    for (let r = 0; r < 2; r++) {
-      if (i > 0) { const th = ang(sp, r ? 1 : -1); xb[r] += Math.cos(th) * ds; zb[r] += Math.sin(th) * ds; }
-    }
-    pos.set([xb[0], -H / 2, zb[0], xb[1], H / 2, zb[1]], i * 6);
-    // normal: along the sheet × across it
-    const t0 = ang(s, -1), t1 = ang(s, 1), tx = (Math.cos(t0) + Math.cos(t1)) / 2, tz = (Math.sin(t0) + Math.sin(t1)) / 2;
-    const ax = xb[1] - xb[0], az = zb[1] - zb[0];
-    let nx = -tz * H, ny = tz * ax - tx * az, nz = tx * H;
-    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-    nor.set([nx, ny, nz, nx, ny, nz], i * 6);
-    edge = (xb[0] + xb[1]) / 2;
+/* Fold the sheet: `f` from foldOf (in the page's own coordinates, page on x 0…W). mirror: the page is the
+   left one being turned back, so everything is reflected about the spine (and the faces swap: reflecting
+   turns the paper over). height(x, z): world height of a point at world x folded up by z, so every part of
+   the sheet rests on or above what it lies over. view {cx, cz, zref}: the camera (x, distance) and the height
+   of the page the sheet lies on: a raised part is drawn where it would appear if it lay on that page, as in
+   the page-flip book, so a curl stands up in light and shade but never swells past the page's outline.
+   zref(x): the height of the page under world x. */
+function foldSheet(g, f, mirror, height, view) {
+  const pos = g.attributes.position.array, nor = g.attributes.normal.array;
+  for (let j = 0; j <= GY; j++) for (let i = 0; i <= GX; i++) {
+    const k = j * (GX + 1) + i;
+    const [x, y, z, nx, ny, nz] = foldPoint((i / GX) * W, (j / GY - 0.5) * H, f);
+    const X = mirror ? -x : x, Z = height(X, z), s = (view.cz - Z) / (view.cz - view.zref(X));
+    pos[k * 3] = view.cx + (X - view.cx) * s; pos[k * 3 + 1] = y * s; pos[k * 3 + 2] = Z;
+    if (mirror) { nor[k * 3] = nx; nor[k * 3 + 1] = -ny; nor[k * 3 + 2] = -nz; }
+    else { nor[k * 3] = nx; nor[k * 3 + 1] = ny; nor[k * 3 + 2] = nz; }
   }
   g.attributes.position.needsUpdate = true;
   g.attributes.normal.needsUpdate = true;
   g.computeBoundingSphere();
-  return { edgeX: edge };
 }
 
 export async function start() {
@@ -145,8 +136,10 @@ export async function start() {
   host.append(gl.domElement, css.domElement);
   // Take the book's final place at once, before any content has loaded: the stage doesn't change height as
   // the book arrives (no jump of everything below it), and the book fades in only once it's complete.
-  const SPAN_W = 2 * (W + OH) + 30, SPAN_H = H + 2 * OH + 40;
-  const bookHeight = (width) => Math.max(200, Math.round(Math.min(window.innerHeight - 140, width * SPAN_H / SPAN_W)));
+  // A phone (narrow stage) shows one page at a time, big enough to read; wider screens show the spread.
+  const PORTRAIT = 640, SPAN_H = H + 2 * OH + 40;
+  const spanW = (width) => (width < PORTRAIT ? W + 2 * OH + 30 : 2 * (W + OH) + 30);
+  const bookHeight = (width) => Math.max(200, Math.round(Math.min(window.innerHeight - 140, width * SPAN_H / spanW(width))));
   host.style.height = bookHeight(stage.getBoundingClientRect().width) + 'px';
   document.body.classList.add('is-3d');
   stage.appendChild(host);
@@ -285,8 +278,6 @@ export async function start() {
       // (even the inside of a board) until covered
       topL: fwd ? leftPage(from) : leftPage(to), topR: fwd ? rightPage(to) : rightPage(from),
     };
-    const zR = BT + blockDepth(st.nr), zL = BT + blockDepth(st.nl);
-    st.spineZ = lerp(zR, zL, (1 - Math.cos(phi)) / 2) + 0.12;
     return st;
   }
   function restState(c) {
@@ -302,13 +293,15 @@ export async function start() {
 
   /* ---------- camera framing ---------- */
   const fit = { px: 1, portrait: false, tx: 0, pitch: VIEW.front.pitch, yaw: VIEW.front.yaw, w: 0, h: 0 };
-  const targetX = (c) => spreadCenter(c, S, W);
+  // which page of an open spread a phone is looking at: 'L' or 'R'
+  let side = 'R';
+  const targetX = (c, sd = side) => (!fit.portrait || c <= 0 || c >= S ? spreadCenter(c, S, W) : sd === 'L' ? -W / 2 : W / 2);
   const viewOf = (c) => (c <= 0 ? VIEW.front : c >= S ? VIEW.back : VIEW.open);
   function frame() {
     const r = stage.getBoundingClientRect();
-    fit.portrait = r.width < 640;
+    fit.portrait = r.width < PORTRAIT;
     const w = Math.round(r.width), h = bookHeight(r.width);
-    fit.px = Math.min(w / SPAN_W, h / SPAN_H);
+    fit.px = Math.min(w / spanW(r.width), h / SPAN_H);
     fit.w = w; fit.h = h;
     host.style.height = fit.h + 'px';
     gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -386,47 +379,80 @@ export async function start() {
   const FLIP_MS = 900, BOARD_MS = 1000;
   async function ready(list) { await Promise.all([...new Set(list.filter((i) => i != null && i >= 0 && i < N))].map((i) => texture(i))); }
 
+  /* A paper sheet on its way from `from` to `to`, its corner (pulled from C0) now at C — both in the turning
+     page's own coordinates (see curl.mjs). The stacks hand the sheet over as it goes (paperState); the part
+     still lying down rests on the stack it came from, the part folded over rides above both stacks while it
+     crosses and settles onto the one it lands on. The page it uncovers darkens along the crease. */
+  const LIFT = 0.25 * H, ROLL = 40;
+  const progOf = (C) => clamp((W - C.x) / (2 * W), 0, 1);
+  function paperFrame(from, to, C0, C) {
+    const fwd = to > from, q = progOf(C);
+    const st = paperState(from, to, Math.PI * (fwd ? q : 1 - q));
+    layout(st);
+    const zR = BT + blockDepth(st.nr) + 0.12, zL = BT + blockDepth(st.nl) + 0.12;
+    const src = fwd ? zR : zL, dst = fwd ? zL : zR;
+    const flap = lerp(lerp(src, Math.max(zR, zL), smooth(q / 0.15)), dst, smooth((q - 0.85) / 0.15));
+    // the roll is widest mid-turn and tightens as the sheet lifts off and settles, so it lands flat
+    const f = foldOf(C0, C, 0.6 + ROLL * Math.sin(Math.PI * q) ** 2, H);
+    const R = f ? Math.max(f.R, 0.3) : 1;
+    // height of a point folded up by z: resting on its stack, then lifted onto the flap's level over the roll
+    foldSheet(sheetGeo, f, !fwd, (X, z) => src + z + (flap - src) * smooth(z / (2 * R)),
+      // (over the side it's landing on, the page there: so it has landed exactly where that page lies)
+      { cx: camera.position.x, cz: camera.position.z, zref: (X) => lerp(src, dst, smooth((fwd ? -X : X) / 40)) });
+    // shadows as in StPageFlip: an outer one on the page being uncovered, spreading as the sheet lifts
+    // further, and an inner one on the folded-over flap along its crease (the unfolded part under the
+    // flap gets it too, unseen)
+    const m = fwd ? topR.material : topL.material, o = fwd ? topL.material : topR.material;
+    o.uniforms.shadow.value.set(0, 0, 0, 0);
+    const lift = Math.sin(Math.PI * q), wnx = fwd ? (f ? f.nx : 0) : -(f ? f.nx : 0);
+    for (const mat of [m, sheetFront.material, sheetBack.material]) mat.uniforms.shadow.value.set(0, 0, 0, 0);
+    if (f) {
+      m.uniforms.shadow.value.set(wnx, f.ny, f.c, 0.12 + 0.33 * lift);
+      m.uniforms.shadowW.value = 30 + 150 * lift;
+      for (const mat of [sheetFront.material, sheetBack.material]) {
+        mat.uniforms.shadow.value.set(-wnx, -f.ny, -f.c, 0.08 + 0.2 * lift);
+        mat.uniforms.shadowW.value = 20 + 50 * lift;
+      }
+    }
+  }
+
   // turn one sheet from `from` to `to` (to = from±1 normally; further for a jump, where the pages in between
-  // just move with it). Boards turn rigid; paper bends.
-  async function turn(to, fromPhi = null, soft = false) {
+  // just move with it). Boards turn rigid; paper is pulled over by its corner. `held`: a drag let go past
+  // halfway, carried on from where the hand left it.
+  async function turn(to, held = null) {
     const from = cur, fwd = to > from;
     const isFront = fwd ? from === 0 : to === 0, isBack = fwd ? to === S : from === S;
     const faceF = fwd ? 2 * from : 2 * to, faceB = fwd ? 2 * to - 1 : 2 * from - 1;   // what the moving sheet shows
     await ready([faceF, faceB, 2 * to - 1, 2 * to, 2 * from - 1, 2 * from, 0, 1, N - 2, N - 1]);
     hideDom();
     const a = restState(from), b = restState(to);
+    side = fwd ? 'L' : 'R';
     const tx0 = fit.tx, tx1 = targetX(to), v0 = { pitch: fit.pitch, yaw: fit.yaw }, v1 = viewOf(to);
-    const phi0 = fromPhi != null ? fromPhi : fwd ? 0 : Math.PI, phi1 = fwd ? Math.PI : 0;
-    const dur = (isFront || isBack ? BOARD_MS : FLIP_MS) * Math.max(0.3, Math.abs(phi1 - phi0) / Math.PI);
     const board = isFront ? front : isBack ? back : null;
-    if (board) boardTurn(dur); else paperTurn(dur, fromPhi != null);
+    const phi0 = held ? held.phi : fwd ? 0 : Math.PI, phi1 = fwd ? Math.PI : 0;
+    // paper: the corner's start and where it is now (a click pulls the bottom corner over an arc)
+    const C0 = held && held.C0 ? held.C0 : { x: W, y: -H / 2 }, Cs = held && held.C ? held.C : null;
+    const Ce = { x: -W, y: C0.y };
+    const left = board ? Math.abs(phi1 - phi0) / Math.PI : Cs ? 1 - progOf(Cs) : 1;
+    const dur = (board ? BOARD_MS : FLIP_MS) * Math.max(0.3, left);
+    if (board) boardTurn(dur); else paperTurn(dur, !!held);
     if (!board) { setMap(sheetFront.material, faceF); setMap(sheetBack.material, faceB); }
     sheetFront.visible = sheetBack.visible = !board;
     await animate(dur, (e) => {
-      const phi = lerp(phi0, phi1, e), q = fwd ? phi / Math.PI : 1 - phi / Math.PI;   // q: how far the sheet has gone
-      const st = board
-        ? { nl: a.nl, nr: a.nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
-          topL: fwd ? a.topL : b.topL, topR: fwd ? b.topR : a.topR }
-        : paperState(from, to, phi);
       if (board) {
+        const phi = lerp(phi0, phi1, e);
+        const st = { nl: a.nl, nr: a.nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
+          topL: fwd ? a.topL : b.topL, topR: fwd ? b.topR : a.topR };
         const z0 = boardHeight(board === front ? 'front' : 'back', phi, BT, blockDepth(P));
         if (board === front) { st.frontPhi = phi; st.frontZ = z0; } else { st.backPhi = phi; st.backZ = z0; }
-      }
-      layout(st);
-      if (!board) {
-        const { edgeX } = bendSheet(sheetGeo, phi, soft ? 0.5 : 0.85, st.spineZ);
-        // the sheet's shadow on the page it uncovers
-        const m = fwd ? topR.material : topL.material, o = fwd ? topL.material : topR.material;
-        o.uniforms.shadow.value.set(0, 0, 0);
-        const lift = Math.sin(phi) * 0.35;
-        if (fwd) m.uniforms.shadow.value.set(Math.max(edgeX, 0) - 40, Math.max(edgeX, 0) + 120, lift);
-        else m.uniforms.shadow.value.set(Math.min(edgeX, 0) + 40, Math.min(edgeX, 0) - 120, lift);
+        layout(st);
       }
       aim(lerp(tx0, tx1, e), lerp(v0.pitch, v1.pitch, e), lerp(v0.yaw, v1.yaw, e));
-    }, fromPhi != null ? easeOut : board ? ease : easePaper);
+      if (!board) paperFrame(from, to, C0, Cs ? { x: lerp(Cs.x, Ce.x, e), y: lerp(Cs.y, Ce.y, e) } : cornerPath(e, W, H, LIFT));
+    }, held ? easeOut : board ? ease : easePaper);
     cur = to;
     sheetFront.visible = sheetBack.visible = false;
-    topL.material.uniforms.shadow.value.set(0, 0, 0); topR.material.uniforms.shadow.value.set(0, 0, 0);
+    topL.material.uniforms.shadow.value.set(0, 0, 0, 0); topR.material.uniforms.shadow.value.set(0, 0, 0, 0);
     layout(restState(cur));
     showDom(cur); chrome(); warm(2 * cur);
   }
@@ -437,7 +463,7 @@ export async function start() {
     while (queue.length) { const job = queue.shift(); busy = true; try { await job(); } catch (e) {
       console.error('techo: page turn failed', e);
       sheetFront.visible = sheetBack.visible = false;
-      topL.material.uniforms.shadow.value.set(0, 0, 0); topR.material.uniforms.shadow.value.set(0, 0, 0);
+      topL.material.uniforms.shadow.value.set(0, 0, 0, 0); topR.material.uniforms.shadow.value.set(0, 0, 0, 0);
       layout(restState(cur)); const v = viewOf(cur); aim(targetX(cur), v.pitch, v.yaw); showDom(cur);
     } busy = false; }
     running = false; lastTurnEnd = performance.now();
@@ -460,8 +486,20 @@ export async function start() {
       }
     });
   }
-  const next = () => { if (!queue.length && !busy) goTo(cur + 1); };
-  const prev = () => { if (!queue.length && !busy) goTo(cur - 1); };
+  // on a phone, move the view across the open spread to the other page
+  function pan(sd) {
+    enqueue(async () => {
+      if (side === sd) return;
+      side = sd;
+      const tx0 = fit.tx, tx1 = targetX(cur);
+      paperTurn(360, true);
+      await animate(420, (e) => aim(lerp(tx0, tx1, e), fit.pitch, fit.yaw), ease);
+      chrome();
+    });
+  }
+  const opened = () => fit.portrait && cur >= 1 && cur <= S - 1;
+  const next = () => { if (queue.length || busy) return; if (opened() && side === 'L') pan('R'); else goTo(cur + 1); };
+  const prev = () => { if (queue.length || busy) return; if (opened() && side === 'R') pan('L'); else goTo(cur - 1); };
 
   /* ---------- pointer: click a side to turn, or drag a page by its edge ---------- */
   const ray = new Raycaster(), ndc = new Vector2(), plane = new Plane(new Vector3(0, 0, 1), 0), hit = new Vector3();
@@ -478,18 +516,36 @@ export async function start() {
     if (ev.target.closest && ev.target.closest('a,button,input,textarea,select,label,[contenteditable]')) return;
     const x = worldX(ev);
     if (Math.abs(x) > W + OH || Math.abs(hit.y) > H / 2 + OH) return;
-    const fwd = x > 0;
-    if ((fwd && cur >= S) || (!fwd && cur <= 0)) return;
-    // a page is dragged by its outer edge; pressing further in leaves the text free to select
-    const edge = Math.abs(x) / W > 0.78 || !ev.target.closest('.book3d-slot');
-    drag = { x0: ev.clientX, fwd, edge, moved: false, id: ev.pointerId, phi: fwd ? 0 : Math.PI };
+    const r = host.getBoundingClientRect(), right = (ev.clientX - r.left) / r.width > 0.5;
+    // on a phone the page in view is pulled by a finger anywhere on it, in the direction the finger goes;
+    // elsewhere a page is dragged by its outer edge, and pressing further in leaves the text free to select
+    const phone = fit.portrait, touch = ev.pointerType !== 'mouse';
+    const fwd = phone ? right : x > 0;
+    if (!phone && ((fwd && cur >= S) || (!fwd && cur <= 0))) return;
+    const edge = (phone && touch) || Math.abs(x) / W > 0.78 || !ev.target.closest('.book3d-slot');
+    drag = { x0: ev.clientX, fwd, edge, phone, moved: false, id: ev.pointerId, phi: fwd ? 0 : Math.PI, gx: x, gy: hit.y };
   });
+  // start pulling: paper by the nearer corner of its outer edge, which then moves with the hand
+  function grabPage(d) {
+    const C0 = { x: W, y: d.gy > 0 ? H / 2 : -H / 2 };
+    Object.assign(d, { C0, C: { ...C0 }, grab: { x: d.fwd ? d.gx : -d.gx, y: d.gy }, phi: d.fwd ? 0 : Math.PI });
+  }
   host.addEventListener('pointermove', (ev) => {
     if (!drag || ev.pointerId !== drag.id) return;
     if (!drag.moved && Math.abs(ev.clientX - drag.x0) < 8) return;
     if (!drag.edge) { drag = null; return; }          // selecting text, not turning
+    if (!drag.moved && drag.phone) {
+      // a phone: the finger's direction says which way; the page in view goes if it can, otherwise the view
+      // just moves across the spread when the finger lets go
+      drag.fwd = ev.clientX < drag.x0;
+      const canPull = drag.fwd ? cur < S && (cur === 0 || side === 'R' || !opened()) : cur > 0 && (cur === S || side === 'L' || !opened());
+      if (!canPull) { drag.moved = true; drag.swipe = true; host.setPointerCapture(ev.pointerId); return; }
+    }
+    if (drag.swipe) return;
     const to = drag.fwd ? cur + 1 : cur - 1;
     if (!drag.moved) {
+      if (to < 0 || to > S) { drag = null; return; }
+      grabPage(drag);
       drag.moved = true; host.setPointerCapture(ev.pointerId);
       const d = drag; d.to = to; busy = true;
       d.board = (d.fwd ? cur === 0 : cur === 1) ? 'front' : (d.fwd ? to === S : cur === S) ? 'back' : null;
@@ -499,28 +555,28 @@ export async function start() {
         setMap(sheetFront.material, d.fwd ? 2 * cur : 2 * to);
         setMap(sheetBack.material, d.fwd ? 2 * to - 1 : 2 * cur - 1);
         d.ready = true;
-        renderDrag(d, d.phi);
+        renderDrag(d);
       }).catch((error) => {
         console.error('techo: drag textures failed', error);
         if (drag === d) { drag = null; busy = false; layout(restState(cur)); showDom(cur); }
       });
     }
-    drag.phi = Math.acos(clamp(worldX(ev) / W, -1, 1));
-    if (drag.ready) renderDrag(drag, drag.phi);
+    // a phone shows one page, so the finger's travel counts double: a swipe across the screen turns it
+    const wx = worldX(ev), k = drag.phone ? 2 : 1, lx = drag.fwd ? wx : -wx;
+    drag.C = constrain({ x: drag.C0.x + k * (lx - drag.grab.x), y: drag.C0.y + hit.y - drag.grab.y }, drag.C0, W, H);
+    drag.phi = Math.acos(clamp((drag.fwd ? 1 : -1) * (drag.C0.x + k * (lx - drag.grab.x)) / W, -1, 1));
+    if (drag.ready) renderDrag(drag);
   });
-  function renderDrag(d, phi) {
-    const a = restState(cur), b = restState(d.to);
-    const st = d.board
-      ? { nl: a.nl, nr: a.nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
-        topL: d.fwd ? a.topL : b.topL, topR: d.fwd ? b.topR : a.topR }
-      : paperState(cur, d.to, phi);
+  function renderDrag(d, phi = d.phi, C = d.C) {
+    sheetFront.visible = sheetBack.visible = !d.board;
     if (d.board) {
+      const a = restState(cur), b = restState(d.to);
+      const st = { nl: a.nl, nr: a.nr, frontPhi: a.frontPhi, frontZ: a.frontZ, backPhi: a.backPhi, backZ: a.backZ,
+        topL: d.fwd ? a.topL : b.topL, topR: d.fwd ? b.topR : a.topR };
       st[d.board + 'Phi'] = phi;
       st[d.board + 'Z'] = boardHeight(d.board, phi, BT, blockDepth(P));
-    }
-    layout(st);
-    sheetFront.visible = sheetBack.visible = !d.board;
-    if (!d.board) bendSheet(sheetGeo, phi, 0.5, st.spineZ);
+      layout(st);
+    } else paperFrame(cur, d.to, d.C0, C);
     invalidate();
   }
   const endDrag = (ev) => {
@@ -528,23 +584,24 @@ export async function start() {
     const d = drag; drag = null; busy = false;
     if (host.hasPointerCapture(ev.pointerId)) host.releasePointerCapture(ev.pointerId);
     const cancelled = ev.type === 'pointercancel';
+    if (d.swipe) { if (!cancelled) d.fwd ? next() : prev(); return; }
     if (!d.moved) {
       if (cancelled) return;
       const sel = window.getSelection && window.getSelection();
       if (sel && !sel.isCollapsed) return;               // a click that ends a text selection doesn't turn
       d.fwd ? next() : prev(); return;
     }
-    const done = !cancelled && (d.fwd ? d.phi > Math.PI / 2 : d.phi < Math.PI / 2);
+    const done = !cancelled && (d.board ? (d.fwd ? d.phi > Math.PI / 2 : d.phi < Math.PI / 2) : progOf(d.C) > 0.5);
     if (!d.ready) { if (done) goTo(d.to); return; }
     // past halfway it goes over; otherwise it falls back where it came from
-    enqueue(() => (done ? turn(d.to, d.phi, true) : turnBack(d)));
+    enqueue(() => (done ? turn(d.to, d) : turnBack(d)));
   };
   async function turnBack(d) {
-    const phi0 = d.phi, phi1 = d.fwd ? 0 : Math.PI, ms = Math.max(220, 600 * Math.abs(phi1 - phi0) / Math.PI);
+    const phi0 = d.phi, phi1 = d.fwd ? 0 : Math.PI, C1 = { ...d.C };
+    const ms = Math.max(220, 600 * (d.board ? Math.abs(phi1 - phi0) / Math.PI : 2 * progOf(C1) + 0.15));
     fallBack(ms);
     await animate(ms, (e) => {
-      const phi = lerp(phi0, phi1, e);
-      renderDrag(d, phi);
+      renderDrag(d, lerp(phi0, phi1, e), { x: lerp(C1.x, d.C0.x, e), y: lerp(C1.y, d.C0.y, e) });
     }, easeOut);
     sheetFront.visible = sheetBack.visible = false;
     layout(restState(cur)); showDom(cur);
@@ -575,13 +632,18 @@ export async function start() {
   const sheetOf = (page) => (page === 0 ? 0 : Math.ceil(page / 2));
   chips.forEach((c) => {
     const b = T.el('button', null, c.label); b.type = 'button'; b.dataset.page = c.page;
-    b.onclick = () => goTo(sheetOf(c.page)); dots.appendChild(b);
+    b.onclick = () => {
+      const t = sheetOf(c.page), sd = c.page % 2 ? 'L' : 'R';
+      goTo(t); if (fit.portrait) pan(sd);                 // turn there, then look at that page
+    };
+    dots.appendChild(b);
   });
   function chrome() {
     dragnote.hidden = cur !== 0 || fit.portrait;
     restart.hidden = cur < S;
     [...dots.children].forEach((b) => {
-      const on = sheetOf(+b.dataset.page) === cur;
+      const pg = +b.dataset.page;
+      const on = sheetOf(pg) === cur && (!fit.portrait || cur <= 0 || cur >= S || (pg % 2 ? 'L' : 'R') === side);
       b.setAttribute('aria-current', on ? 'true' : 'false');
       if (on && dots.scrollWidth > dots.clientWidth) dots.scrollLeft = b.offsetLeft - dots.clientWidth / 2 + b.offsetWidth / 2;
     });

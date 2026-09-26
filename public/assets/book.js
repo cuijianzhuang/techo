@@ -27,7 +27,8 @@
   const pf=new St.PageFlip(bookEl,{
     width:530,height:740,size:'stretch',minWidth:240,maxWidth:600,minHeight:335,maxHeight:838,
     showCover:true,usePortrait:true,autoSize:true,drawShadow:true,maxShadowOpacity:0.45,
-    flippingTime:reduced?1:1000,   // keep in step with FLIP_MS and .shift's transitionmobileScrollSupport:true,swipeDistance:24,showPageCorners:true,
+    flippingTime:reduced?1:1000,   // keep in step with FLIP_MS and .shift's transition
+    mobileScrollSupport:true,swipeDistance:24,showPageCorners:true,
     clickEventForward:true,startZIndex:2
   });
   pf.loadFromHTML(bookEl.querySelectorAll('.pf'));
