@@ -19,7 +19,7 @@
   "vars": {
     // admin login: a GitHub OAuth App whose callback is <site>/api/auth/github/callback (see README);
     // its client secret goes in with `npx wrangler secret put GITHUB_CLIENT_SECRET`
-    "GITHUB_CLIENT_ID": "",
+    "GITHUB_CLIENT_ID": "Ov23limOXh1mfeDH8JJ5",
     "ADMIN_GITHUB_LOGIN": "cuijianzhuang",
     // the journal's days follow this zone (nightly draft, "today")
     "TIMEZONE": "Asia/Shanghai"
