@@ -8,7 +8,7 @@
    page (odd index). Sheet 0 is the front board (cover / inside cover), the last sheet the back board.
    `cur` = sheets turned to the left: 0 shut on the cover, S shut on the back. */
 import {
-  WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, BoxGeometry, PlaneGeometry, BufferGeometry,
+  WebGLRenderer, Scene, PerspectiveCamera, Group, Mesh, PlaneGeometry, BufferGeometry,
   BufferAttribute, ShaderMaterial, Vector4, CanvasTexture, Vector2, Vector3, Raycaster, Plane, FrontSide, BackSide,
   LinearMipmapLinearFilter, LinearFilter, NoColorSpace, LinearSRGBColorSpace, Color, Shape, ExtrudeGeometry,
 } from 'three';
@@ -22,6 +22,7 @@ const OH = 6;          // boards overhang the pages
 const BT = 7;          // board thickness
 const SHEET = 2.4;     // one paper sheet in the page block
 const MIN_BLOCK = 28;  // the page block never looks thinner than this
+const PAGE_R = 6;      // a paper page's fore-edge corners (.page.l / .page.r border-radius)
 const FOV = 18, DEG = Math.PI / 180;
 /* The camera faces the book square on and never swings: the book lies straight, like the page-flip book.
    (Only the slide that centres a shut book moves it.) */
@@ -41,7 +42,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 /* ---------- one shader for paper, boards and blocks: flat towards the viewer is exactly the texture
    (so a rasterised page matches the live page it replaces), tilting away darkens it. ---------- */
-function material({ map = null, color = PAPER, flipU = false, stripes = false, side = FrontSide, uvRect = null } = {}) {
+function material({ map = null, color = PAPER, flipU = false, stripes = false, side = FrontSide, uvRect = null, fore = 0 } = {}) {
   return new ShaderMaterial({
     side,
     uniforms: {
@@ -57,6 +58,9 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
       // a turning sheet is drawn as two flat pieces cut along the crease (in the page's own coordinates,
       // n·p = c): keep the side where d <= 0 (w > 0: the part still lying down) or d > 0 (w < 0: the flap)
       clip: { value: new Vector4(0, 0, 0, 0) },
+      // a paper page's fore-edge corners are round, as the live page's are (PAGE_R): 1 the fore-edge is at
+      // u = 1, -1 at u = 0, 0 square
+      fore: { value: fore },
     },
     vertexShader: `
       varying vec2 vUv; varying vec3 vN; varying vec3 vW;
@@ -67,12 +71,16 @@ function material({ map = null, color = PAPER, flipU = false, stripes = false, s
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
     fragmentShader: `
-      uniform sampler2D map; uniform float useMap, flipU, stripes, stripeGap; uniform vec3 color; uniform vec4 shadow, uvRect, clip; uniform float shadowW; uniform float backSide;
+      uniform sampler2D map; uniform float useMap, flipU, stripes, stripeGap; uniform vec3 color; uniform vec4 shadow, uvRect, clip; uniform float shadowW; uniform float backSide; uniform float fore;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW;
       void main(){
         if (clip.w != 0.0) {
           float d = vUv.x * ${W.toFixed(1)} * clip.x + (vUv.y - 0.5) * ${H.toFixed(1)} * clip.y - clip.z;
           if (clip.w > 0.0 ? d > 0.0 : d <= 0.0) discard;
+        }
+        if (fore != 0.0) {
+          float fx = (fore > 0.0 ? 1.0 - vUv.x : vUv.x) * ${W.toFixed(1)}, fy = min(vUv.y, 1.0 - vUv.y) * ${H.toFixed(1)};
+          if (fx < ${PAGE_R.toFixed(1)} && fy < ${PAGE_R.toFixed(1)} && length(vec2(${PAGE_R.toFixed(1)} - fx, ${PAGE_R.toFixed(1)} - fy)) > ${PAGE_R.toFixed(1)}) discard;
         }
         vec2 uv = vUv; if (flipU > 0.5) uv.x = 1.0 - uv.x;
         uv = (uv - uvRect.xy) / uvRect.zw;
@@ -247,16 +255,18 @@ export async function start() {
   const front = board(), back = board();
   // page blocks (the paper between the boards), and the top page lying on each
   const blockMat = material({ color: PAPER, stripes: true });
-  const blockL = new Mesh(new BoxGeometry(1, 1, 1), blockMat), blockR = new Mesh(new BoxGeometry(1, 1, 1), blockMat);
+  // round at the fore-edge like the pages on them: the right block as made, the left one mirrored (layout)
+  const blockGeo = boardGeometry(W, H, 1, 1, PAGE_R);
+  const blockL = new Mesh(blockGeo, blockMat), blockR = new Mesh(blockGeo, blockMat);
   book.add(blockL, blockR);
-  const topL = new Mesh(new PlaneGeometry(W, H), material()), topR = new Mesh(new PlaneGeometry(W, H), material());
+  const topL = new Mesh(new PlaneGeometry(W, H), material({ fore: -1 })), topR = new Mesh(new PlaneGeometry(W, H), material({ fore: 1 }));
   topL.position.x = -W / 2; topR.position.x = W / 2; book.add(topL, topR);
   // the turning sheet: one bent strip, drawn twice (front and back faces)
   const baseGeo = quadGeometry(), flapGeo = quadGeometry();
-  const sheetFront = new Mesh(baseGeo, material({ side: FrontSide }));
-  const sheetBack = new Mesh(baseGeo, material({ side: BackSide, flipU: true }));
-  const flapFront = new Mesh(flapGeo, material({ side: FrontSide }));
-  const flapBack = new Mesh(flapGeo, material({ side: BackSide, flipU: true }));
+  const sheetFront = new Mesh(baseGeo, material({ side: FrontSide, fore: 1 }));
+  const sheetBack = new Mesh(baseGeo, material({ side: BackSide, flipU: true, fore: 1 }));
+  const flapFront = new Mesh(flapGeo, material({ side: FrontSide, fore: 1 }));
+  const flapBack = new Mesh(flapGeo, material({ side: BackSide, flipU: true, fore: 1 }));
   const sheets = [sheetFront, sheetBack, flapFront, flapBack];
   const showSheet = (v) => { for (const m of sheets) m.visible = v; };
   // the sheet's two pages: front (its right-hand page) and back (its left-hand page), on both pieces
@@ -285,8 +295,8 @@ export async function start() {
     // state: {nl, nr (paper sheets each side, may be fractional mid-turn), frontPhi, frontZ, backPhi, backZ, topL, topR}
     const dl = blockDepth(state.nl), dr = blockDepth(state.nr);
     blockL.visible = dl > 0.01; blockR.visible = dr > 0.01;
-    blockL.scale.set(W, H, Math.max(dl, 0.01)); blockL.position.set(-W / 2, 0, BT + dl / 2);
-    blockR.scale.set(W, H, Math.max(dr, 0.01)); blockR.position.set(W / 2, 0, BT + dr / 2);
+    blockL.scale.set(-1, 1, Math.max(dl, 0.01)); blockL.position.set(-W / 2, 0, BT + dl / 2);
+    blockR.scale.set(1, 1, Math.max(dr, 0.01)); blockR.position.set(W / 2, 0, BT + dr / 2);
     topL.visible = state.topL != null && dl > 0.01; topL.position.z = BT + dl + 0.04; setMap(topL.material, state.topL);
     topR.visible = state.topR != null && dr > 0.01; topR.position.z = BT + dr + 0.04; setMap(topR.material, state.topR);
     placeBoard(front, state.frontPhi, state.frontZ);
