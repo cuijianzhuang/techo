@@ -739,6 +739,12 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     $('prev').disabled = cur === 0; $('next').disabled = cur >= S;
     syncLink();
   }
+  // 放大看: the page(s) open now, big enough to read on a phone
+  function readerPages() {
+    const list = cur <= 0 ? [0] : cur >= S ? [N - 1] : fit.portrait ? [pageInView()] : [2 * cur - 1, 2 * cur];
+    return list.map((i) => pages[i] && pages[i].node);
+  }
+  $('next').after(T.readerButton(readerPages));
   $('prev').onclick = prev; $('next').onclick = next;
   const sound = T.el('button', 'arrow sound');
   sound.type = 'button';

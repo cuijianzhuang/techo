@@ -117,7 +117,7 @@ const SETTING_DEFAULTS: Record<string, string> = {
   readmeSince: "2026-09", readmeSign: "小咖在旁边看着",
   backTitle: "EOF", backImprint: "cui.log · build 2026.09.25\ndeployed on the edge",
   samples: "show",
-  bookMode: "3d",       // how the home page turns: "3d" (the three.js book) or "flip" (the flat page-flip book)
+  bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
 };
 /** max length (characters) per text setting */
 const SETTING_MAX: Record<string, number> = {
@@ -158,7 +158,7 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
     if (keys.some((k) => !PHOTO_KEY.test(k))) return { ok: false, error: "封面图片无效" };
   }
   if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
-  if (v.bookMode !== undefined && v.bookMode !== "3d" && v.bookMode !== "flip") return { ok: false, error: "bookMode 只能是 3d / flip" };
+  if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
   return { ok: true, value: v };
 }
 

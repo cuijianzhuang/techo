@@ -414,9 +414,9 @@
   }
   function bookModeField(){
     const w=el('div');
-    [['3d','立体的书','有厚度和光影，纸从页角卷起翻过去（默认）'],['flip','平面翻页','轻一些的翻页效果；不支持立体效果的设备也会用它']].forEach(([v,name,hint])=>{
+    [['auto','自动','手机用平面翻页（翻动时和静止时一模一样，也更省内存），平板和电脑用立体的书（默认）'],['3d','立体的书','有厚度和光影，纸从页角卷起翻过去；手机上也用它'],['flip','平面翻页','轻一些的翻页效果；不支持立体效果的设备也会用它']].forEach(([v,name,hint])=>{
       const l=el('label','check1');
-      const r=el('input');r.type='radio';r.name='f-bookmode';r.value=v;r.checked=(draft.bookMode||'3d')===v;
+      const r=el('input');r.type='radio';r.name='f-bookmode';r.value=v;r.checked=(draft.bookMode||'auto')===v;
       r.onchange=()=>{if(r.checked){draft.bookMode=v;changed();}};
       l.append(r,el('span',null,name));w.append(l,el('div','hintx',hint));
     });

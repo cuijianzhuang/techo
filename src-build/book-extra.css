@@ -246,3 +246,26 @@ html{scrollbar-gutter:stable}
 @media (prefers-reduced-motion:reduce){.lockask-back,.lockask.shake{animation:none}}
 .relock{appearance:none;border:0;background:none;margin-left:10px;padding:2px 4px;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .relock:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:4px}
+
+/* ================= 放大看: the open page(s), big, over the desk (Techo.reader) ================= */
+.nav .zoomin{display:inline-flex;align-items:center}
+html.reading{overflow:hidden}
+.reader{position:fixed;inset:0;z-index:50;background-color:var(--desk);display:flex;flex-direction:column;animation:rd-in .18s ease-out}
+@keyframes rd-in{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){.reader{animation:none}}
+/* touch-action: pans and the browser's pinch, but its double-tap zoom is ours */
+.rd-scroll{flex:1;overflow:auto;overscroll-behavior:contain;touch-action:manipulation;outline:none}
+.rd-pages{display:flex;flex-direction:column;align-items:center;gap:14px;box-sizing:border-box;width:max-content;min-width:100%;
+  padding:max(12px,env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom))}
+.rd-sheet{position:relative;flex:none;border-radius:6px;box-shadow:0 1px 2px rgba(40,30,10,.18),0 10px 26px rgba(40,30,10,.22)}
+.rd-sheet>.page{position:absolute;left:0;top:0;transform-origin:0 0}
+.rd-bar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:2px;padding:4px;
+  border-radius:999px;background:var(--paper);box-shadow:0 1px 2px rgba(40,30,10,.2),0 6px 18px rgba(40,30,10,.22)}
+.rd-btn{appearance:none;border:0;background:transparent;color:var(--ink);font:400 20px/1 var(--print);width:42px;height:42px;border-radius:50%;cursor:pointer}
+.rd-btn:not(:disabled):hover{background:rgba(138,154,43,.14)}
+.rd-btn:disabled{opacity:.3;cursor:default}
+.rd-btn:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.rd-x{font-size:24px;margin-left:4px}
+.rd-tip{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;pointer-events:none;
+  color:var(--desk-ink);font:400 12px/1 var(--print);animation:rd-tip 3.5s ease-in forwards}
+@keyframes rd-tip{0%,70%{opacity:.9}100%{opacity:0;visibility:hidden}}
