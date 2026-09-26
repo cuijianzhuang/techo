@@ -38,13 +38,27 @@ body{
    antialiased line at the hinge) whenever the board lay flat or nearly so. The artwork is stretched to the board
    (--kx/--ky), so its own edge, corners and page-edge stripe sit on the board's real edge. */
 .leaf .face{position:absolute;inset:-4px -4px -4px -1px;background:#2b454b;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
-.leaf .face.front{transform:translateZ(.5px);border-radius:3px 12px 12px 3px}
-.leaf .face.back{transform:rotateY(180deg) translateZ(.5px);border-radius:12px 3px 3px 12px}
+/* faces 5px apart = the board's thickness (--bt). Corners only just rounded, like a real board, so the square-ended
+   edge strips below meet them cleanly. */
+.leaf{--bt:5px}
+.leaf .face.front{transform:translateZ(calc(var(--bt) / 2));border-radius:2px 4px 4px 2px}
+.leaf .face.back{transform:rotateY(180deg) translateZ(calc(var(--bt) / 2));border-radius:4px 2px 2px 4px}
+.leaf .face>.page.cover,.leaf .face>.page.backcover{border-radius:0}
 .leaf .face>.page{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--kx,1),var(--ky,1))}
 .leaf .shade{position:absolute;inset:0;background:#0b0f10;opacity:0;pointer-events:none}
-/* a hard cover is a couple of millimetres: two faces a pixel apart, with a fine dark rim instead of 3D edge strips
-   (square-ended strips never met the rounded corners cleanly and stood off the board like a separate bar) */
-.leaf .face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(10,20,22,.35);pointer-events:none;z-index:10}
+.leaf .face::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(10,20,22,.3);pointer-events:none;z-index:10}
+/* Edge strips, cloth like the faces. Each spans the face's full length and is 1px thicker than --bt so it overlaps
+   both faces by half a pixel: no seam of page showing between board and edge. Faces reach -4px/-1px past the leaf
+   (the overhang), so the strips are placed on those lines. */
+.leaf .edge{position:absolute;pointer-events:none;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 3px),linear-gradient(#34525a,#284047)}
+.leaf .edge.fore{top:-4px;height:calc(100% + 8px);width:calc(var(--bt) + 1px);left:calc(100% + 4px - (var(--bt) + 1px) / 2);transform:rotateY(90deg)}
+.leaf .edge.head,.leaf .edge.tail{left:-1px;width:calc(100% + 5px);height:calc(var(--bt) + 1px);transform:rotateX(90deg);
+  background:linear-gradient(90deg,#2a434a,#34525a)}   /* no weave here: seen edge-on it turned into a dashed line */
+.leaf .edge.head{top:calc(-4px - (var(--bt) + 1px) / 2)}
+.leaf .edge.tail{top:calc(100% + 4px - (var(--bt) + 1px) / 2)}
+/* lying flat you can't see an edge head-on, so show the board's tail edge as if from a touch above */
+.bookwrap.shut .leaf .face{box-shadow:0 1px 0 #2d484e,0 3px 0 #1c3034,0 6px 10px -2px rgba(20,16,8,.28)}
 .undershade{position:absolute;top:0;height:100%;width:50%;pointer-events:none;z-index:25;opacity:0}
 /* the page a board lifts from sits in the board's shadow, right out to the fore-edge (a bright hairline showed there) */
 .undershade.r{left:50%;background:linear-gradient(90deg,rgba(25,18,6,.6),rgba(25,18,6,.34) 55%,rgba(25,18,6,.26))}

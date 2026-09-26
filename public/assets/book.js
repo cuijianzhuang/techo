@@ -99,7 +99,8 @@
     const leaf=el('div','leaf '+cls);leaf.hidden=true;
     const front=el('div','face front'),back=el('div','face back');
     front.appendChild(el('div','shade'));back.appendChild(el('div','shade'));
-    leaf.append(front,back);
+    // the board's thickness: fore-edge, head and tail (the hinge side is hidden in the spine)
+    leaf.append(front,back,el('div','edge fore'),el('div','edge head'),el('div','edge tail'));
     wrap.appendChild(leaf);
     return {leaf,front,back,fs:front.lastChild,bs:back.lastChild};
   }
