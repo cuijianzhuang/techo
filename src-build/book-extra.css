@@ -132,6 +132,10 @@ html{scrollbar-gutter:stable}
 #dots::-webkit-scrollbar{display:none}
 .nav[hidden]{display:flex;visibility:hidden}
 .nav .sound{margin-left:4px}
+.nav .calbox{position:relative;display:inline-flex}
+.nav .daypick{display:inline-flex;align-items:center}
+/* the date input only lends its picker to the calendar button */
+.calpick{position:absolute;left:50%;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .nav .sound[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .nav .arrow{flex:none}
 .nav button{white-space:nowrap;flex:none}
