@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       # generated pages must match their sources in src-build/
-      - run: python3 src-build/build.py && git diff --exit-code -- public
+      - run: python3 src-build/build.py && npm run build:3d && git diff --exit-code -- public
 
   deploy:
     needs: check

@@ -177,7 +177,7 @@ app.get("/", async (c) => {
   const res = new HTMLRewriter()
     .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
     .on('meta[name="description"]', { element: (e) => { e.setAttribute("content", settings.siteDesc); } })
-    .on('script[src="/assets/book.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
+    .on('script[src="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
     .transform(page);
   const h = new Headers(res.headers);
   h.set("Cache-Control", "no-cache");

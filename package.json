@@ -9,7 +9,8 @@
     "db:init:local": "wrangler d1 execute techo-db --local --file=schema.sql",
     "db:init:remote": "wrangler d1 execute techo-db --remote --file=schema.sql",
     "typecheck": "tsc --noEmit",
-    "build:pages": "python3 src-build/build.py"
+    "build:pages": "python3 src-build/build.py",
+    "build:3d": "esbuild src-build/book3d/index.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=public/assets/book3d.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -17,6 +18,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260925.1",
+    "esbuild": "^0.28.1",
+    "three": "^0.186.1",
     "typescript": "^5.9.0",
     "wrangler": "^4.140.0"
   }

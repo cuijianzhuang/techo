@@ -241,5 +241,14 @@ html{scrollbar-gutter:stable}
 
 
 
+/* ================= the three.js book (book3d.js) ================= */
+.is-3d #shift{display:none}
+.book3d{position:relative;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none;cursor:pointer}
+.book3d>canvas{position:absolute;inset:0;display:block}
+/* the live pages at rest, laid over the 3D ones by CSS3DRenderer with the same camera */
+.book3d-dom{position:absolute!important;inset:0;overflow:hidden;pointer-events:none}
+.book3d-slot{width:530px;height:740px;pointer-events:auto;-webkit-user-select:text;user-select:text;cursor:auto}
+.book3d-slot>.page{position:relative}
+
 [hidden]{display:none!important}
 #static{position:absolute;left:-99999px;top:0;width:530px}
