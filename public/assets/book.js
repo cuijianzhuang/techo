@@ -99,7 +99,7 @@
     const leaf=el('div','leaf '+cls);leaf.hidden=true;
     const front=el('div','face front'),back=el('div','face back');
     front.appendChild(el('div','shade'));back.appendChild(el('div','shade'));
-    leaf.append(front,back,el('div','edge'),el('div','edge top'),el('div','edge bottom'));
+    leaf.append(front,back);
     wrap.appendChild(leaf);
     return {leaf,front,back,fs:front.lastChild,bs:back.lastChild};
   }
@@ -138,7 +138,7 @@
     wrap.style.setProperty('--kx',((r.pageWidth+BOARD_X)/530).toFixed(4));
     wrap.style.setProperty('--ky',((r.height+BOARD_Y)/740).toFixed(4));
     // gentle perspective: the lifting board should not balloon over the page
-    wrap.style.setProperty('--persp',Math.round(r.pageWidth*(landscape()?16:10))+'px');
+    wrap.style.setProperty('--persp',Math.round(r.pageWidth*(landscape()?26:20))+'px');
     wrap.classList.toggle('portrait',!landscape());
   }
 
@@ -170,8 +170,9 @@
     const angle=(which==='front'||!land)?180*p:180*(1-p);
     const lift=Math.sin(angle*Math.PI/180);
     L.leaf.style.transform='rotateY('+(-angle).toFixed(2)+'deg)';
-    L.fs.style.opacity=angle<90?(0.42*lift).toFixed(3):'0';
-    L.bs.style.opacity=angle>=90?(0.34*lift).toFixed(3):'0';
+    // light shading only: the endpaper side stays a light paper, not a grey slab
+    L.fs.style.opacity=angle<90?(0.24*lift).toFixed(3):'0';
+    L.bs.style.opacity=angle>=90?(0.14*lift).toFixed(3):'0';
     L.leaf.style.opacity=(!land&&angle>120)?Math.max(0,(180-angle)/60).toFixed(3):'1';
     // shadow thrown on the page the board is lifting from / landing on
     under.r.style.opacity=under.l.style.opacity='0';
