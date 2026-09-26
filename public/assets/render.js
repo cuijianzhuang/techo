@@ -258,6 +258,19 @@
     // book's last page: every newly published diary page goes in before it
     const days=[...src.querySelectorAll('.day')],showSamples=settings.samples!=='hide';
     const contact=days.find(p=>p.querySelector('#mail'));
+    // 写信给我 is the book's last page, written today: its date, month tab and little calendar are today's
+    if(contact){
+      const t=parseDate(todayStr()),h=contact.querySelector('.head');
+      if(h){
+        h.textContent='';
+        const m=el('span','m');m.append(t.mo+'月',el('br'),MOE[t.mo-1]);
+        const wd=el('span','wd'+(t.wd===0||t.wd===6?' we':''));wd.append(el('b',null,WD[t.wd]),el('i',null,WDE[t.wd]));
+        const note=el('span','note');note.append('今天',el('br'),String(t.y));
+        h.append(m,el('span','d',String(t.d)),wd,note);
+      }
+      const tab=contact.querySelector('.tab');if(tab)tab.textContent=String(t.mo);
+      const oc=contact.querySelector('.cal');if(oc)oc.replaceWith(makeCal(t.y,t.mo,t.d));
+    }
     // the samples are dated by their spread's label (9/25 …) in the year the journal began
     // (a spread holds two days: the label's on the left, the next on the right)
     const sampleDate=(l,plus)=>{const m=/^(\d+)\/(\d+)$/.exec(l||'');if(!m)return null;
