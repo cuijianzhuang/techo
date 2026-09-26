@@ -4,7 +4,8 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[],bookLocked=false;
+  let entries=[],settings={},jots=[],bookLocked=false,newLock=null;
+  const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
@@ -68,7 +69,7 @@
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':''));
+      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+(en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':dayLocks.has(en.date)?' · 🔒 这一天上锁':''));
       const gist=String(en.body||'').replace(/\s+/g,' ').trim();
       it.append(t,meta);
       if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
@@ -104,7 +105,7 @@
     sel=id;
     if(id==='settings'){draft=Object.assign({},settings);}
     else if(id==='jots'){draft=null;}
-    else if(id==='new'){draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',stickers:[],status:'published'};}
+    else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
     drawList();drawForm();
@@ -193,7 +194,17 @@
       field('小咖','mood','select',{options:[['mug','醒着'],['sleep','睡着'],['none','不出场']]}));
     const r4=el('div','row');r4.append(field('印章（一个字）','stamp','text',{ph:'记',max:2}),field('页脚引文','quote','text',{ph:'一句喜欢的话',max:120}));
     f.append(r3,r4,field('引文出处','quoteSrc','text',{ph:'作者《书名》',max:60}));
-    if(sel!=='new'){const h=el('h3','fsect','单独上锁');h.style.fontSize='18px';f.append(h,lockField(sel));}
+    {const h=el('h3','fsect','单独上锁');h.style.fontSize='18px';f.appendChild(h);}
+    if(sel!=='new'){
+      if(dayLocks.has(draft.date)){
+        // locked as a whole day from 随手记: say so, and let it be taken off here too
+        const n=el('div','lockf');n.appendChild(el('div','hintx','🔒 这一天在随手记里上了锁：这一天的页都要用那个口令打开（这一页若再单独上锁，就用它自己的口令）。'));
+        const bar=el('div','bar'),off=el('button','b small warn','取消这一天的锁');off.type='button';
+        off.onclick=async()=>{if(busy)return;busy=true;try{await sendJson('PUT','/api/admin/locks/'+encodeURIComponent('d-'+draft.date),{password:null});dayLocks.delete(draft.date);drawList();drawForm();status('这一天不上锁了。','ok');}catch(e){status(e.message||'没有保存成功','err');}finally{busy=false;}};
+        bar.appendChild(off);n.appendChild(bar);f.appendChild(n);
+      }
+      f.appendChild(lockField(sel));
+    }else f.appendChild(newLockField());
     const b=el('div','bar');
     const isDraft=draft.status==='draft';
     const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
@@ -344,13 +355,15 @@
   /* a password for the whole book ('book') or this one day (its id). Saved at once, apart from the form:
      only a hash is kept, so a forgotten password is simply set again here */
   function lockField(scope){
-    const book=scope==='book',en=book?null:entries.find(e=>e.id===scope);
-    const on=book?bookLocked:!!(en&&en.locked);
+    const book=scope==='book',day=/^d-/.test(scope)?scope.slice(2):null,en=book||day?null:entries.find(e=>e.id===scope);
+    const on=book?bookLocked:day?dayLocks.has(day):!!(en&&en.locked);
     const w=el('div','lockf');
     w.appendChild(el('div','hintx',on
       ?(book?'🔒 整本已上锁：主页上的日记只露出日期，读者输入口令才能看（单独上锁的那几天仍要用各自的口令）。'
+        :day?'🔒 今天写成的那一页会上锁：不管是你点「现在就写一页」，还是每晚自动写的，都要用这个口令打开。'
             :'🔒 这一页已单独上锁：只露出日期，要用这里的口令打开，整本的口令打不开它。')
       :(book?'上锁后，主页上所有日记只露出日期，读者在封面输入口令才能看；示例页也会收起来。'
+        :day?'今天用随手记写成的那一页要不要上锁？设了口令，写好发布后读者只看得到日期。'
             :'单独上锁后，这一页只露出日期，要用这里设的口令打开（和整本的口令分开）。')));
     const row=el('div','row');
     const mk=(ph,id)=>{const i=el('input');i.type='password';i.autocomplete='new-password';i.placeholder=ph;i.id=id;i.maxLength=128;return i;};
@@ -359,14 +372,14 @@
     const l2=el('label','fld');l2.append(el('span',null,'确认'),p2);
     row.append(l1,l2);w.appendChild(row);
     const bar=el('div','bar');
-    const go=el('button','b small',on?'改口令':(book?'给整本上锁':'给这一页上锁'));go.type='button';
+    const go=el('button','b small',on?'改口令':(book?'给整本上锁':day?'今天这一页上锁':'给这一页上锁'));go.type='button';
     const send=async(password,done)=>{
       if(busy)return;busy=true;status('正在保存……');
       try{
         await sendJson('PUT','/api/admin/locks/'+encodeURIComponent(scope),{password});
         const now=password!==null;
-        if(book)bookLocked=now;else if(en)en.locked=now;
-        drawList();drawForm();status(done,'ok');
+        if(book)bookLocked=now;else if(day){if(now)dayLocks.add(day);else dayLocks.delete(day);}else if(en)en.locked=now;
+        drawList();if(sel==='jots')drawJots(true);else drawForm();status(done,'ok');
       }catch(e){status(e.message||'没有保存成功','err');}
       finally{busy=false;}
     };
@@ -378,10 +391,25 @@
     bar.appendChild(go);
     if(on){
       const off=el('button','b small warn','取消上锁');off.type='button';
-      off.onclick=()=>send(null,book?'整本已取消上锁。':'这一页已取消上锁。');
+      off.onclick=()=>send(null,book?'整本已取消上锁。':day?'今天这一页不上锁了。':'这一页已取消上锁。');
       bar.appendChild(off);
     }
     w.appendChild(bar);
+    return w;
+  }
+  /* a new page can be locked as it's saved: the password waits here until the page exists */
+  function newLockField(){
+    const w=el('div','lockf');
+    w.appendChild(el('div','hintx','想让这一页只给知道口令的人看，就在这里设口令；不填就不上锁。保存时一起生效。'));
+    const row=el('div','row');
+    const mk=(ph,id)=>{const i=el('input');i.type='password';i.autocomplete='new-password';i.placeholder=ph;i.id=id;i.maxLength=128;return i;};
+    const p1=mk('口令（至少 4 个字符，可不填）','nl1'),p2=mk('再输一遍','nl2');
+    if(newLock){p1.value=newLock.p1;p2.value=newLock.p2;}
+    const upd=()=>{newLock=p1.value||p2.value?{p1:p1.value,p2:p2.value}:null;};
+    p1.oninput=p2.oninput=upd;
+    const l1=el('label','fld');l1.append(el('span',null,'口令'),p1);
+    const l2=el('label','fld');l2.append(el('span',null,'确认'),p2);
+    row.append(l1,l2);w.appendChild(row);
     return w;
   }
   function bookModeField(){
@@ -426,7 +454,9 @@
   }
 
   /* ---------- jots: loose lines for tonight's page ---------- */
-  function drawJots(){
+  let jotsToday=null;
+  function drawJots(again){
+    if(again){main.textContent='';statusEl=el('div','status');}
     const f=el('form','form');f.noValidate=true;
     f.append(el('h2',null,'随手记'),el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。'));
     const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
@@ -466,8 +496,14 @@
       }catch(e){status(e.message||'没写成，稍后再试。','err');}
       finally{busy=false;cw.disabled=false;}
     }
-    f.append(l,b,statusEl,ul);main.appendChild(f);paint();
-    (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];paint();}catch(e){status(e.message||'加载失败','err');}})();
+    // today's page, written from these, can be locked before it's written
+    const lk=el('div');
+    const paintLock=()=>{lk.textContent='';if(!jotsToday)return;
+      const h=el('h3','fsect','今天这一页上锁');h.style.fontSize='18px';lk.append(h,lockField('d-'+jotsToday));};
+    f.append(l,b,statusEl,lk,ul);main.appendChild(f);paint();paintLock();
+    (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];
+      if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
+      paint();paintLock();}catch(e){status(e.message||'加载失败','err');}})();
     setTimeout(()=>ta.focus(),0);
   }
 
@@ -517,6 +553,10 @@
   /* ---------- save / delete ---------- */
   async function save(){
     if(busy||!draft)return false;
+    if(sel==='new'&&newLock){
+      if([...newLock.p1].length<4){status('口令至少 4 个字符（不想上锁就清空）。','err');const i=$('nl1');if(i)i.focus();return false;}
+      if(newLock.p1!==newLock.p2){status('两次输入的口令不一样。','err');const i=$('nl2');if(i)i.focus();return false;}
+    }
     if(sel!=='settings'){
       if(!T.parseDate(draft.date)){status('请填日期。','err');return false;}
       if(!String(draft.title||'').trim()){status('标题不能为空。','err');const t=$('f-title');if(t)t.focus();return false;}
@@ -531,12 +571,18 @@
         const body=stripLocal(draft);
         const r=sel==='new'?await sendJson('POST','/api/admin/entries',body):await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(sel),body);
         const en=r.entry;const i=entries.findIndex(e=>e.id===en.id);
+        let lockNote='';
+        if(sel==='new'&&newLock){
+          try{await sendJson('PUT','/api/admin/locks/'+encodeURIComponent(en.id),{password:newLock.p1});en.locked=true;lockNote='，并已上锁';}
+          catch(e){lockNote='，但上锁没成功：'+(e.message||'稍后在下面「单独上锁」里再设');}
+          newLock=null;
+        }
         if(i>=0)en.locked=entries[i].locked;          // the lock is kept apart from the page's fields
         if(i>=0)entries[i]=en;else entries.push(en);
         const keepUrl=draft.photoUrl;
         sel=en.id;draft=Object.assign({},en);if(keepUrl&&draft.photoKey)draft.photoUrl=keepUrl;
         base=JSON.stringify(stripLocal(draft));
-        drawList();drawForm();status(en.status==='draft'?'已存为草稿，主页上还看不到。':'已发布，主页刷新就能看到。','ok');
+        drawList();drawForm();status((en.status==='draft'?'已存为草稿，主页上还看不到':'已发布，主页刷新就能看到')+lockNote+'。',lockNote.includes('没成功')?'err':'ok');
       }
       return true;
     }catch(e){
@@ -565,6 +611,7 @@
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/settings')]);
       entries=e.entries||[];settings=s.settings||{};bookLocked=!!e.bookLocked;
+      entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();
     }catch(err){
       // not signed in, or the Worker can't do sign-in yet (e.g. GitHub app not configured): either way, the login sheet says why

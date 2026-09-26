@@ -164,8 +164,10 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
 
 /* ---------------- locks: the whole book, or one day, behind a password ----------------
    A 口令 gate, checked here: a locked page leaves the Worker only as its date until the reader has given the
-   password. Passwords are kept as PBKDF2 hashes in `locks` (scope 'book', or an entry id for a day locked on
-   its own — that day then needs its own password even when the book is open). Giving the right password
+   password. Passwords are kept as PBKDF2 hashes in `locks`, by scope: an entry id (that page, locked on its
+   own), 'd-YYYY-MM-DD' (every page of that day — set from 随手记 before the day's page is even written) or
+   'book'. A page is kept by the first of those it has; a page with its own or its day's lock needs that
+   password even when the book is open. Giving the right password
    earns a signed token, keyed by the lock's hash (so changing the password retires it); the reader's tab
    keeps it in sessionStorage and sends it back in X-Techo-Keys (or ?k= for a photo). */
 
@@ -210,18 +212,20 @@ async function openScopes(locks: Map<string, string>, tokens: string[]): Promise
   return open;
 }
 const keysOf = (c: C) => (c.req.header("x-techo-keys") || "").split(/[\s,]+/).filter(Boolean);
-/** which lock keeps this entry: its own, else the book's */
-const lockOf = (locks: Map<string, string>, id: string) => (locks.has(id) ? id : locks.has("book") ? "book" : null);
+/** which lock keeps this entry: its own, else its day's, else the book's */
+const dayScope = (date: string) => "d-" + date;
+const lockOf = (locks: Map<string, string>, e: { id: string; date: string }) =>
+  locks.has(e.id) ? e.id : locks.has(dayScope(e.date)) ? dayScope(e.date) : locks.has("book") ? "book" : null;
 
-type LockedStub = { id: string; date: string; locked: "book" | "day" };
+type LockedStub = { id: string; date: string; locked: "book" | "day"; scope: string };
 /** published pages as a reader may see them: a locked page they haven't opened is only its date */
 async function readerEntries(env: Env, tokens: string[]) {
   const [entries, locks] = await Promise.all([loadPublished(env), loadLocks(env)]);
   const open = await openScopes(locks, tokens);
   const out: (Entry & { lock?: string } | LockedStub)[] = entries.map((e) => {
-    const scope = lockOf(locks, e.id);
+    const scope = lockOf(locks, e);
     if (!scope) return e;
-    if (!open.has(scope)) return { id: e.id, date: e.date, locked: scope === "book" ? "book" : "day" };
+    if (!open.has(scope)) return { id: e.id, date: e.date, locked: scope === "book" ? "book" : "day", scope };
     return { ...e, lock: scope };       // open: the page says which key opened it (for its photo)
   });
   return { entries: out, lock: { book: locks.has("book"), open: [...open] } };
@@ -279,8 +283,8 @@ app.get("/img/:dir/:name", async (c) => {
   let locked = false;
   const locks = await loadLocks(c.env);
   if (locks.size) {
-    const row = await c.env.DB.prepare("SELECT id FROM entries WHERE photo_key=?").bind(key).first<{ id: string }>();
-    const scope = row && lockOf(locks, row.id);
+    const row = await c.env.DB.prepare("SELECT id, date FROM entries WHERE photo_key=?").bind(key).first<{ id: string; date: string }>();
+    const scope = row && lockOf(locks, row);
     if (scope) {
       locked = true;
       const admin = !authProblem(c.env) && (await sessionLogin(c.env, getCookie(c, SESSION_COOKIE)));
@@ -408,13 +412,17 @@ app.get("/api/admin/entries", async (c) => {
   const [{ results }, locks] = await Promise.all([
     c.env.DB.prepare("SELECT * FROM entries ORDER BY date ASC, created_at ASC").all(), loadLocks(c.env)]);
   c.header("Cache-Control", "no-store");
-  return c.json({ entries: results.map((r) => ({ ...rowToEntry(r), locked: locks.has(String(r.id)) })), bookLocked: locks.has("book") });
+  return c.json({
+    entries: results.map((r) => ({ ...rowToEntry(r), locked: locks.has(String(r.id)), dayLocked: locks.has(dayScope(String(r.date))) })),
+    bookLocked: locks.has("book"),
+  });
 });
 
-/* set, change or take off a password: scope 'book' or an entry id; password null takes the lock off */
+/* set, change or take off a password: scope 'book', 'd-YYYY-MM-DD' or an entry id; password null takes the
+   lock off */
 app.put("/api/admin/locks/:scope", async (c) => {
   const scope = c.req.param("scope");
-  if (scope !== "book") {
+  if (scope !== "book" && !/^d-\d{4}-\d{2}-\d{2}$/.test(scope)) {
     const row = await c.env.DB.prepare("SELECT id FROM entries WHERE id=?").bind(scope).first();
     if (!row) return bad(c, 404, "这一页不存在");
   }
@@ -498,7 +506,10 @@ app.get("/api/admin/jots", async (c) => {
     "SELECT id, text, created_at, used_in FROM jots ORDER BY created_at DESC LIMIT 100",
   ).all<{ id: string; text: string; created_at: number; used_in: string }>();
   c.header("Cache-Control", "no-store");
-  return c.json({ jots: results.map((r) => ({ id: r.id, text: r.text, createdAt: r.created_at, usedIn: r.used_in })) });
+  // today's date where the journal lives, and whether today's page (written from these) will be locked
+  const today = localDay(c.env.TIMEZONE || "Asia/Shanghai").date;
+  const locks = await loadLocks(c.env);
+  return c.json({ jots: results.map((r) => ({ id: r.id, text: r.text, createdAt: r.created_at, usedIn: r.used_in })), today, todayLocked: locks.has(dayScope(today)) });
 });
 
 app.post("/api/admin/jots", async (c) => {

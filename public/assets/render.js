@@ -76,7 +76,7 @@
     box.append(art,el('div','seal-t',book?'这本手帐上了锁':'这一页上了锁'),
       el('div','seal-s',book?'在封面输入口令，整本都能看':'只给知道口令的人看'));
     const btn=el('button','lockbtn','输入口令');btn.type='button';
-    btn.dataset.scope=book?'book':en.id;btn.dataset.date=en.date;
+    btn.dataset.scope=book?'book':(en.scope||en.id);btn.dataset.date=en.date;
     box.appendChild(btn);b.appendChild(box);
     p.append(dateHead(dt,''),b,el('footer','foot'));
     if(side==='r'){p.appendChild(el('div','tab',String(dt.mo)));p.appendChild(makeCal(dt.y,dt.mo,dt.d));}
