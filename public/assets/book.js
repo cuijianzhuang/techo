@@ -182,6 +182,7 @@
   const zoom=T.readerButton(inView);$('next').after(zoom);
   shareBtn=T.shareButton(inView);zoom.after(shareBtn);shareBtn.sync();
   nav.appendChild(T.soundButton());
+  {const t=T.themeButton();if(t)nav.appendChild(t);}   // ☾/☀
   $('prev').onclick=()=>pf.flipPrev();
   $('next').onclick=()=>pf.flipNext();
   document.addEventListener('keydown',e=>{

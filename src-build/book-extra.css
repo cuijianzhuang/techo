@@ -387,14 +387,20 @@ html.reading{overflow:hidden}
   padding:max(12px,env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom))}
 .rd-sheet{position:relative;flex:none;border-radius:6px;box-shadow:0 1px 2px rgba(40,30,10,.18),0 10px 26px rgba(40,30,10,.22)}
 .rd-sheet>.page{position:absolute;left:0;top:0;transform-origin:0 0}
-.rd-bar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:2px;padding:4px;
-  border-radius:999px;background:var(--paper);box-shadow:0 1px 2px rgba(40,30,10,.2),0 6px 18px rgba(40,30,10,.22)}
-.rd-btn.rd-share{width:auto;padding:0 14px;border-radius:21px;font-size:14px}
-.rd-btn{appearance:none;border:0;background:transparent;color:var(--ink);font:400 20px/1 var(--print);width:42px;height:42px;border-radius:50%;cursor:pointer}
-.rd-btn:not(:disabled):hover{background:rgba(138,154,43,.14)}
+.rd-bar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px;
+  border-radius:999px;background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(40,30,10,.2),0 6px 18px rgba(40,30,10,.22)}
+/* the bar's buttons: one set of line icons; the zoom (–, how big, +), then 分享 and close after a rule */
+.rd-btn{appearance:none;border:0;background:transparent;color:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  width:42px;height:42px;padding:0;border-radius:21px;font:500 13px/1 var(--print);cursor:pointer;flex:none}
+.rd-btn svg{display:block}
+.rd-btn:not(:disabled):hover{background:rgba(138,154,43,.16)}
 .rd-btn:disabled{opacity:.3;cursor:default}
 .rd-btn:focus-visible{outline:2px solid var(--red);outline-offset:1px}
-.rd-x{font-size:24px;margin-left:4px}
+.rd-lvl{width:auto;min-width:40px;padding:0 4px;font-variant-numeric:tabular-nums;color:var(--ink-soft)}
+.rd-lvl:disabled{opacity:.55}
+.rd-btn.rd-share{width:auto;padding:0 14px 0 12px}
+.rd-sep{width:1px;height:22px;margin:0 4px;background:currentColor;opacity:.18}
+@media (max-width:420px){.rd-btn{width:40px;height:40px}.rd-btn.rd-share{padding:0 10px}}
 .rd-tip{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;pointer-events:none;
   color:var(--desk-ink);font:400 12px/1 var(--print);animation:rd-tip 3.5s ease-in forwards}
 @keyframes rd-tip{0%,70%{opacity:.9}100%{opacity:0;visibility:hidden}}
@@ -427,3 +433,7 @@ html.reading{overflow:hidden}
 .tlp-n{font-variant-numeric:tabular-nums}
 .tlp-all{color:var(--teal-deep);text-decoration:underline;text-decoration-style:wavy;text-decoration-thickness:1px;text-underline-offset:3px}
 .tlp-all:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:2px}
+
+/* a phone: ten buttons in a row (← 封面 时间线 📍 → 🔍 分享 📅 ♪ ☾), a little closer together */
+@media (max-width:430px){.nav{gap:0}.nav button{padding:8px 7px}#dots{gap:0!important}#dots .chip{padding:7px 9px}}
+@media (max-width:350px){.nav button{padding:8px 4px}#dots .chip{padding:7px 5px}}

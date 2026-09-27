@@ -240,7 +240,9 @@ export async function start() {
   // boards: a box on a hinge group (the group turns about the spine; the box sits above the hinge)
   // the boards' cloth and edges: the cover style's (--cv-rim, --cv-edge in book-extra.css)
   const cvStyle = getComputedStyle(pages[0].node);
-  const cloth = (name, fallback) => new Color(cvStyle.getPropertyValue(name).trim() || fallback).convertLinearToSRGB();
+  // (at night the cloth is under a dimmer light, as the covers are: paper.css shades them by .34)
+  const cloth = (name, fallback) => new Color(cvStyle.getPropertyValue(name).trim() || fallback).convertLinearToSRGB()
+    .multiplyScalar(document.documentElement.getAttribute('data-theme') === 'dark' ? 0.66 : 1);
   const CLOTH = cloth('--cv-rim', '#2b454b'), CLOTH_EDGE = cloth('--cv-edge', '#314d53');
   // and the paper's (纸张: the page edges, a sheet before its picture is ready)
   { const e = getComputedStyle(pages[2].node).getPropertyValue('--pp-edge').trim(); if (e) PAPER = new Color(e).convertLinearToSRGB(); }
@@ -259,7 +261,7 @@ export async function start() {
     const mesh = new Mesh(boardGeometry(w, h, BT, 3, 11), [edge, top, bottom]);
     mesh.position.set(w / 2 - 1, 0, BT / 2);
     const hinge = new Group(); hinge.add(mesh); book.add(hinge);
-    return { hinge, top, bottom };
+    return { hinge, top, bottom, edge };
   }
   const front = board(true), back = board(false);   // the front board's cover is on top, the back's underneath
   // page blocks (the paper between the boards), and the top page lying on each
@@ -761,6 +763,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   shareBtn = T.shareButton(readerPages); zoom.after(shareBtn);
   $('prev').onclick = prev; $('next').onclick = next;
   nav.appendChild(T.soundButton());
+  { const t = T.themeButton(); if (t) nav.appendChild(t); }   // ☾/☀
   document.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
@@ -782,8 +785,19 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   new ResizeObserver(() => { frame(); invalidate(); }).observe(stage);
   warm(0);
   if (arrivalHash) { history.replaceState(null, '', location.pathname + location.search + arrivalHash); openHash(); }   // arrived by a link: open the book there
-  // 夜间书页 switching while the book is open: its page pictures are of the other paper, so draw it afresh
-  // (the address keeps the page, so it opens where it was)
-  document.addEventListener('techo-theme', () => location.reload());
+  // 夜间书页 switching (☾/☀, or the system) while the book is open: the live pages follow by themselves; the
+  // boards and page edges take the new colours, and the page pictures are drawn again (the old ones show
+  // until then), the ones around here first
+  document.addEventListener('techo-theme', async () => {
+    const c = cloth('--cv-rim', '#2b454b'), e = cloth('--cv-edge', '#314d53');
+    for (const b of [front, back]) { b.top.uniforms.color.value.copy(c); b.bottom.uniforms.color.value.copy(c); b.edge.uniforms.color.value.copy(e); }
+    const pe = getComputedStyle(pages[2].node).getPropertyValue('--pp-edge').trim();
+    if (pe) blockMat.uniforms.color.value.copy(new Color(pe).convertLinearToSRGB());
+    for (const t of tex.values()) t.state = 'stale';
+    invalidate();
+    await ready([0, 1, N - 2, N - 1, ...shownPages()]).catch(() => {});
+    if (!busy && !drag) layout(restState(cur));
+    invalidate(); warm(cur ? 2 * cur - 1 : 0);
+  });
   window.__book3d = { goTo, get cur() { return cur; }, S, invalidate, scene, camera, gl, slots: [slotL, slotR], parts: { front, back, blockL, blockR, topL, topR, sheetFront } };   // for debugging
 }

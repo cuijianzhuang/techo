@@ -23,7 +23,12 @@
   --latin:"Caveat","Segoe Print","Comic Sans MS",cursive;
   --print:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
 }
-@media (prefers-color-scheme:dark){:root{--desk:#1e1f22;--desk-ink:#9c988f;--desk-strong:#ebe6da;color-scheme:dark}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--desk:#1e1f22;--desk-ink:#9c988f;--desk-strong:#ebe6da;color-scheme:dark}}
+:root[data-theme="dark"]{--desk:#1e1f22;--desk-ink:#9c988f;--desk-strong:#ebe6da;color-scheme:dark}
+/* ☾/☀ (Techo.themeButton), top right */
+.theme-sw{position:absolute;top:22px;right:max(16px,calc(50% - 490px));appearance:none;border:0;background:transparent;color:var(--desk-ink);width:38px;height:38px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+.theme-sw:hover{background:rgba(128,128,120,.15)}
+.theme-sw:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 html,body{margin:0}
 body{min-height:100vh;box-sizing:border-box;padding:28px 16px 32px;display:flex;flex-direction:column;
   background-color:var(--desk);color:var(--ink);font:400 15px/1.6 var(--print);

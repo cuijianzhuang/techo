@@ -30,6 +30,8 @@
     return;
   }
   if(settings.siteTitle)document.title='足迹 · '+settings.siteTitle;
+  T.nightTheme(settings);
+  {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}   // ☾/☀ (the map redraws in the other style)
   if(!settings.mapboxToken){say('这本手帐还没有接上地图。','看看时间线','/timeline/');return;}
   if(!entries.length){say('还没有写下地点的日子。','去手帐看看');return;}
 
@@ -48,9 +50,10 @@
   try{gl=await T.mapbox(settings.mapboxToken);}
   catch(err){say(err.message||'地图没加载上','回到手帐');return;}
   box.textContent='';
-  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
-  const map=new gl.Map({container:box,style:'mapbox://styles/mapbox/'+(dark?'dark-v11':'light-v11'),center:[all[0].lo,all[0].la],zoom:10,language:'zh-Hans',cooperativeGestures:matchMedia('(pointer: coarse)').matches});
+  const styleNow=()=>'mapbox://styles/mapbox/'+(document.documentElement.getAttribute('data-theme')==='dark'||(matchMedia('(prefers-color-scheme: dark)').matches&&document.documentElement.getAttribute('data-theme')!=='light')?'dark-v11':'light-v11');
+  const map=new gl.Map({container:box,style:styleNow(),center:[all[0].lo,all[0].la],zoom:10,language:'zh-Hans',cooperativeGestures:matchMedia('(pointer: coarse)').matches});
   map.addControl(new gl.NavigationControl({showCompass:false}),'top-right');
+  document.addEventListener('techo-theme',()=>map.setStyle(styleNow()));
 
   // a place's slip: where, then its pages
   function slip(pl){
