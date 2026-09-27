@@ -157,7 +157,11 @@ const SETTING_DEFAULTS: Record<string, string> = {
   samples: "show",
   paperStyle: "grid",   // the paper's pattern: grid / lined / dots / plain
   paperTone: "cream",   // and its colour: cream / white / aged / mint
-  coverStyle: "slate",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
+  nightPaper: "auto",   // 夜间书页: "auto" the paper darkens with the system's dark mode, "off" it stays as by day
+  coverStyle: "slate",
+  // Mapbox: a public token (pk.…, restricted to this site's URL in the Mapbox account) for the map page
+  // (/map/), the little maps on the pages, the admin's map and its place names. Empty: no maps.
+  mapboxToken: "", mapOnPage: "show",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
   // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
@@ -180,7 +184,7 @@ async function aiConfig(env: Env): Promise<AiConfig> {
 const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
   readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
-  aiBaseUrl: 200, aiModel: 80,
+  aiBaseUrl: 200, aiModel: 80, mapboxToken: 300,
 };
 const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
 const MAX_COVER_PHOTOS = 4;
@@ -217,7 +221,10 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   }
   if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
   if (v.paperStyle !== undefined && !PAPER_STYLES.includes(v.paperStyle)) return { ok: false, error: "paperStyle 只能是 " + PAPER_STYLES.join(" / ") };
+  if (v.nightPaper !== undefined && v.nightPaper !== "auto" && v.nightPaper !== "off") return { ok: false, error: "nightPaper 只能是 auto / off" };
   if (v.paperTone !== undefined && !PAPER_TONES.includes(v.paperTone)) return { ok: false, error: "paperTone 只能是 " + PAPER_TONES.join(" / ") };
+  if (v.mapboxToken && !/^pk\.[\w.-]+$/.test(v.mapboxToken)) return { ok: false, error: "Mapbox token 要用公开的那种（pk. 开头）" };
+  if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
   if (v.aiFormat !== undefined && !["anthropic", "openai"].includes(v.aiFormat)) return { ok: false, error: "aiFormat 只能是 anthropic / openai" };
@@ -340,12 +347,77 @@ app.get("/", async (c) => {
   const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings: publicSettings(settings) }).replace(/</g, "\\u003c");
   const res = new HTMLRewriter()
     .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
-    .on('meta[name="description"]', { element: (e) => { e.setAttribute("content", settings.siteDesc); } })
+    .on('meta[name="description"]', { element: (e) => {
+      e.setAttribute("content", settings.siteDesc);
+      // shared as it is: the journal's name, its line, the default picture (a page is shared as /p/<id>)
+      const o = new URL(c.req.url).origin, m = (k: string, v: string) => `<meta property="${k}" content="${escHtml(v)}">`;
+      e.after(m("og:type", "website") + m("og:title", settings.siteTitle || SETTING_DEFAULTS.siteTitle) + m("og:description", settings.siteDesc) +
+        m("og:image", o + "/og.png") + m("og:image:width", "1200") + m("og:image:height", "630") + '<meta name="twitter:card" content="summary_large_image">', { html: true });
+    } })
     .on('script[src="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
     .transform(page);
   const h = new Headers(res.headers);
   h.set("Cache-Control", "no-cache");
   return new Response(res.body, { status: res.status, headers: h });
+});
+
+/* ---------------- sharing a page ----------------
+   /p/<id> is a page's link for sharing: chat apps and social sites read its title, words and picture from
+   the Open Graph tags (the book's own links are #e-<id>, which never reach the server), and a reader is sent
+   straight on to the book at that page. The picture is the page's card (/card/<id>.jpg, drawn by the admin
+   when the page is published), else its first photo, else /og.png. A locked page shares nothing but that
+   it is one. */
+const CARD_KEY = (id: string) => `cards/${id}.jpg`;
+const ENTRY_ID = /^[\w-]{1,64}$/;
+const escHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+/** Markdown → a line of plain words (render.js plainText) */
+const plainText = (md: string) => md.replace(/```[\s\S]*?```/g, " ").replace(/^\s*\+{3,}\s*$/gm, " ")
+  .replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm, "")
+  .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|==|`|\*)/g, "").replace(/[#＃][a-z]+/g, "").replace(/\s+/g, " ").trim();
+/** a published page that isn't locked (the only kind with a card or a preview), or null */
+async function sharedEntry(env: Env, id: string) {
+  if (!ENTRY_ID.test(id)) return null;
+  const row = await env.DB.prepare("SELECT * FROM entries WHERE id=? AND status='published'").bind(id).first<Record<string, unknown>>();
+  if (!row) return null;
+  const locked = !!lockOf(await loadLocks(env), { id, date: String(row.date) });
+  return { entry: rowToEntry(row), locked };
+}
+app.get("/p/:id", async (c) => {
+  const id = c.req.param("id"), settings = await loadSettings(c.env), origin = new URL(c.req.url).origin;
+  const found = await sharedEntry(c.env, id);
+  const site = settings.siteTitle || SETTING_DEFAULTS.siteTitle;
+  let title = site, desc = settings.siteDesc, image = origin + "/og.png";
+  if (found && !found.locked) {
+    const en = found.entry, d = en.date.replace(/-/g, ".");
+    title = `${en.title || "（无题）"} · ${d}`;
+    const words = [...plainText(en.body || "")];
+    desc = [[en.place, en.weather].filter(Boolean).join(" · "), words.slice(0, 110).join("") + (words.length > 110 ? "…" : "")].filter(Boolean).join("｜") || desc;
+    const card = await c.env.PHOTOS.head(CARD_KEY(id));
+    if (card) image = `${origin}/card/${id}.jpg?v=${card.etag}`;
+    else if (en.photos.length) image = `${origin}/img/${en.photos[0].key}`;
+  } else if (found) title = `上了锁的一页 · ${site}`;
+  const to = found ? `/#e-${id}` : "/";
+  const m = (k: string, v: string) => `<meta property="${k}" content="${escHtml(v)}">`;
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escHtml(title)}</title><meta name="description" content="${escHtml(desc)}">
+${m("og:type", "article")}${m("og:site_name", site)}${m("og:title", title)}${m("og:description", desc)}${m("og:url", `${origin}/p/${id}`)}
+${m("og:image", image)}${image.includes("/card/") || image.endsWith("/og.png") ? m("og:image:width", "1200") + m("og:image:height", "630") : ""}
+<meta name="twitter:card" content="summary_large_image"><link rel="canonical" href="${escHtml(origin + to)}">
+<meta http-equiv="refresh" content="0;url=${escHtml(to)}"><script>location.replace(${JSON.stringify(to).replace(/</g, "\\u003c")})</script>
+</head><body><p><a href="${escHtml(to)}">翻开这一页</a></p></body></html>`;
+  return c.html(html, 200, { "Cache-Control": "public, max-age=300" });
+});
+app.get("/card/:file", async (c) => {
+  const m = /^([\w-]{1,64})\.jpg$/.exec(c.req.param("file"));
+  const found = m && (await sharedEntry(c.env, m[1]));
+  if (!found || found.locked) return c.notFound();
+  const obj = await c.env.PHOTOS.get(CARD_KEY(m[1]));
+  if (!obj) return c.notFound();
+  const h = new Headers();
+  obj.writeHttpMetadata(h);
+  h.set("ETag", obj.httpEtag);
+  h.set("Cache-Control", "public, max-age=3600");
+  return new Response(obj.body, { headers: h });
 });
 
 /* Photos from R2. Keys are random UUIDs and never reused, so they cache forever — except a locked page's:
@@ -567,13 +639,26 @@ app.put("/api/admin/entries/:id", async (c) => {
   return c.json({ entry: rowToEntry(row!) });
 });
 
+/* a page's share card (drawn in the admin's browser: 1200×630 JPEG) */
+app.put("/api/admin/entries/:id/card", async (c) => {
+  const id = c.req.param("id");
+  if (!ENTRY_ID.test(id)) return bad(c, 404, "这一页不存在");
+  if ((c.req.header("content-type") || "") !== "image/jpeg") return bad(c, 415, "分享图要是 JPEG");
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength > 1_500_000) return bad(c, 413, "分享图太大了");
+  const row = await c.env.DB.prepare("SELECT id FROM entries WHERE id=?").bind(id).first();
+  if (!row) return bad(c, 404, "这一页不存在");
+  await c.env.PHOTOS.put(CARD_KEY(id), body, { httpMetadata: { contentType: "image/jpeg" } });
+  return c.json({ ok: true });
+});
+
 app.delete("/api/admin/entries/:id", async (c) => {
   const id = c.req.param("id");
   const old = await c.env.DB.prepare("SELECT photo_key FROM entries WHERE id=?").bind(id).first<{ photo_key: string }>();
   if (!old) return bad(c, 404, "这一页不存在");
   await c.env.DB.prepare("DELETE FROM entries WHERE id=?").bind(id).run();
   await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(id).run().catch(() => {});
-  if (old.photo_key) c.executionCtx.waitUntil(c.env.PHOTOS.delete(photoKeys(old.photo_key)));
+  c.executionCtx.waitUntil(c.env.PHOTOS.delete([...(old.photo_key ? photoKeys(old.photo_key) : []), CARD_KEY(id)]));
   return c.json({ ok: true });
 });
 

@@ -7,3 +7,26 @@
 .pt-white{--paper:#fffefa;--grid:rgba(110,125,140,.15);--grid-strong:rgba(110,125,140,.28);--pp-edge:#f3f2ee}
 .pt-aged{--paper:#f5e9ca;--grid:rgba(150,115,60,.17);--grid-strong:rgba(150,115,60,.32);--pp-edge:#eadcb7}
 .pt-mint{--paper:#eef4ea;--grid:rgba(80,130,110,.16);--grid-strong:rgba(80,130,110,.3);--pp-edge:#e2eadd}
+
+/* 夜间书页 (手帐设置 → 纸张): with the system in dark mode the paper goes dark too, like paper under a desk lamp.
+   Techo.nightTheme puts data-theme="dark" on the page only then (and not when switched off), and the 3D book's
+   page pictures carry it (raster.js), so the pages it turns match the pages lying still. The covers and
+   endpapers keep their colours; each paper colour has its evening version. */
+[data-theme="dark"] :is(.page:not(.cover):not(.backcover):not(.inside),.tl-card,.daypop,.lockask,.pf:not(.hard)){
+  --paper:#23221e;--paper-edge:#2d2b26;--grid:rgba(235,225,195,.07);--grid-strong:rgba(235,225,195,.15);
+  --ink:#e6e0d2;--ink-soft:#b3ac9d;--olive:#b6c552;--red:#e8765a;--red-deep:#ef8a70;--teal:#8fbcc6;--teal-deep:#9cc8d2;
+  --kraft:#5b5040;--tape:rgba(236,214,150,.42);--pp-edge:#3b3831;
+  color:var(--ink);
+}
+[data-theme="dark"] :is(.page.pt-white:not(.cover):not(.backcover):not(.inside),.pt-white .tl-card){--paper:#1f2125;--grid:rgba(205,218,235,.07);--grid-strong:rgba(205,218,235,.15);--pp-edge:#36393e}
+[data-theme="dark"] :is(.page.pt-aged:not(.cover):not(.backcover):not(.inside),.pt-aged .tl-card){--paper:#2a251b;--grid:rgba(235,205,150,.08);--grid-strong:rgba(235,205,150,.17);--pp-edge:#41392b}
+[data-theme="dark"] :is(.page.pt-mint:not(.cover):not(.backcover):not(.inside),.pt-mint .tl-card){--paper:#1d2521;--grid:rgba(190,230,210,.07);--grid-strong:rgba(190,230,210,.15);--pp-edge:#323d37}
+/* line drawings inked in the day's ink (the doodles, the sample pages' sketches) take the evening's; shapes
+   filled with the paper's own colour stay the paper's */
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg [stroke="#2a2724"]{stroke:var(--ink)}
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg :is(g,text)[fill="#2a2724"]{fill:var(--ink)}
+/* what's stuck on the paper keeps its own colour and the day's ink on it: photos, speech bubbles, the comic
+   strips' time tabs, tickets */
+[data-theme="dark"] .page:not(.cover):not(.backcover) :is(.jph,.photo,.bub,.panel .time,.jcomic .time,.ticket,[style*="#f2e3b0"]){
+  --ink:#2a2724;--ink-soft:#5a544c;color:var(--ink)}
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg [fill="#fbf8ee"]{fill:var(--paper)}

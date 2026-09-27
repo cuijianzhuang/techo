@@ -366,6 +366,11 @@ html{scrollbar-gutter:stable}
 .jp .jtext>:not(:first-child){margin-top:10px}
 .jp .jtext>.jph{float:right;margin:8px 6px 10px 18px}
 .jp .jtext>.jph+*{margin-top:0}
+/* the little map (手帐设置 → 地图): a smaller snapshot, under the photo if there is one; Mapbox's credit on it */
+.jp .jtext>.jmap{clear:right;width:150px;padding:6px 6px 22px;transform:rotate(var(--tilt,2.5deg))}
+.jp .jtext>.jmap img{width:138px;height:104px}
+.jp .jtext>.jmap .tape{left:44px;width:52px}
+.jmap-by{position:absolute;right:9px;bottom:25px;font:400 6.5px/1 var(--print);color:rgba(40,40,40,.75);background:rgba(255,255,255,.6);padding:1px 2px}
 .jp .jtext .check li{font-size:calc(var(--jfs,19px) - 2px)}
 .jp .jtext .jnote{display:table}
 /* Markdown (render.js bodyBlocks), in the journal's own hand: headings in the title brush, lists and quotes on
@@ -485,6 +490,7 @@ html.reading{overflow:hidden}
 .rd-sheet>.page{position:absolute;left:0;top:0;transform-origin:0 0}
 .rd-bar{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;gap:2px;padding:4px;
   border-radius:999px;background:var(--paper);box-shadow:0 1px 2px rgba(40,30,10,.2),0 6px 18px rgba(40,30,10,.22)}
+.rd-btn.rd-share{width:auto;padding:0 14px;border-radius:21px;font-size:14px}
 .rd-btn{appearance:none;border:0;background:transparent;color:var(--ink);font:400 20px/1 var(--print);width:42px;height:42px;border-radius:50%;cursor:pointer}
 .rd-btn:not(:disabled):hover{background:rgba(138,154,43,.14)}
 .rd-btn:disabled{opacity:.3;cursor:default}
@@ -531,6 +537,29 @@ html.reading{overflow:hidden}
 .pt-white{--paper:#fffefa;--grid:rgba(110,125,140,.15);--grid-strong:rgba(110,125,140,.28);--pp-edge:#f3f2ee}
 .pt-aged{--paper:#f5e9ca;--grid:rgba(150,115,60,.17);--grid-strong:rgba(150,115,60,.32);--pp-edge:#eadcb7}
 .pt-mint{--paper:#eef4ea;--grid:rgba(80,130,110,.16);--grid-strong:rgba(80,130,110,.3);--pp-edge:#e2eadd}
+
+/* 夜间书页 (手帐设置 → 纸张): with the system in dark mode the paper goes dark too, like paper under a desk lamp.
+   Techo.nightTheme puts data-theme="dark" on the page only then (and not when switched off), and the 3D book's
+   page pictures carry it (raster.js), so the pages it turns match the pages lying still. The covers and
+   endpapers keep their colours; each paper colour has its evening version. */
+[data-theme="dark"] :is(.page:not(.cover):not(.backcover):not(.inside),.tl-card,.daypop,.lockask,.pf:not(.hard)){
+  --paper:#23221e;--paper-edge:#2d2b26;--grid:rgba(235,225,195,.07);--grid-strong:rgba(235,225,195,.15);
+  --ink:#e6e0d2;--ink-soft:#b3ac9d;--olive:#b6c552;--red:#e8765a;--red-deep:#ef8a70;--teal:#8fbcc6;--teal-deep:#9cc8d2;
+  --kraft:#5b5040;--tape:rgba(236,214,150,.42);--pp-edge:#3b3831;
+  color:var(--ink);
+}
+[data-theme="dark"] :is(.page.pt-white:not(.cover):not(.backcover):not(.inside),.pt-white .tl-card){--paper:#1f2125;--grid:rgba(205,218,235,.07);--grid-strong:rgba(205,218,235,.15);--pp-edge:#36393e}
+[data-theme="dark"] :is(.page.pt-aged:not(.cover):not(.backcover):not(.inside),.pt-aged .tl-card){--paper:#2a251b;--grid:rgba(235,205,150,.08);--grid-strong:rgba(235,205,150,.17);--pp-edge:#41392b}
+[data-theme="dark"] :is(.page.pt-mint:not(.cover):not(.backcover):not(.inside),.pt-mint .tl-card){--paper:#1d2521;--grid:rgba(190,230,210,.07);--grid-strong:rgba(190,230,210,.15);--pp-edge:#323d37}
+/* line drawings inked in the day's ink (the doodles, the sample pages' sketches) take the evening's; shapes
+   filled with the paper's own colour stay the paper's */
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg [stroke="#2a2724"]{stroke:var(--ink)}
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg :is(g,text)[fill="#2a2724"]{fill:var(--ink)}
+/* what's stuck on the paper keeps its own colour and the day's ink on it: photos, speech bubbles, the comic
+   strips' time tabs, tickets */
+[data-theme="dark"] .page:not(.cover):not(.backcover) :is(.jph,.photo,.bub,.panel .time,.jcomic .time,.ticket,[style*="#f2e3b0"]){
+  --ink:#2a2724;--ink-soft:#5a544c;color:var(--ink)}
+[data-theme="dark"] .page:not(.cover):not(.backcover) svg [fill="#fbf8ee"]{fill:var(--paper)}
 
 [hidden]{display:none!important}
 #static{position:absolute;left:-99999px;top:0;width:530px}

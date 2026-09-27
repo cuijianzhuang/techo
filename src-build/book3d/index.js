@@ -777,5 +777,8 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   new ResizeObserver(() => { frame(); invalidate(); }).observe(stage);
   warm(0);
   if (arrivalHash) { history.replaceState(null, '', location.pathname + location.search + arrivalHash); openHash(); }   // arrived by a link: open the book there
+  // 夜间书页 switching while the book is open: its page pictures are of the other paper, so draw it afresh
+  // (the address keeps the page, so it opens where it was)
+  document.addEventListener('techo-theme', () => location.reload());
   window.__book3d = { goTo, get cur() { return cur; }, S, invalidate, scene, camera, gl, slots: [slotL, slotR], parts: { front, back, blockL, blockR, topL, topR, sheetFront } };   // for debugging
 }
