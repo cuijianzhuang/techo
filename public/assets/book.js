@@ -80,9 +80,11 @@
     const l=i%2===1?i:i-1;return[l,l+1];
   }
   function reveal(i){visible(i).forEach(k=>{const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);});}
+  let shareBtn=null;
   function chrome(i){
     T.dragNote(dragnote,i===0&&landscape());
-    [...dots.children].forEach(b=>{
+    if(shareBtn)shareBtn.sync();
+    [...dots.children].filter(b=>'page' in b.dataset).forEach(b=>{
       const on=+b.dataset.page===0?i===0:visible(i).some(isTimeline);
       b.setAttribute('aria-current',on?'true':'false');
       if(on&&dots.scrollWidth>dots.clientWidth)dots.scrollLeft=b.offsetLeft-dots.clientWidth/2+b.offsetWidth/2;
@@ -95,6 +97,7 @@
   const chips=[{label:'封面',icon:'cover',page:0}];
   {const t=pages.findIndex((p,k)=>isTimeline(k));if(t>=0)chips.push({label:'时间线',icon:'timeline',page:t});}
   chips.forEach(c=>{const b=T.chipButton(c.label,c.icon,c.page);b.onclick=()=>pf.flip(c.page);dots.appendChild(b);});
+  {const m=T.mapChip();if(m)dots.appendChild(m);}      // 足迹地图, with a Mapbox token
 
   pf.on('flip',e=>{setShift(e.data);chrome(e.data);reveal(e.data);});
   /* page sounds (Techo.sound, as in the 3D book): a turn clicked or keyed rustles and lands; a sheet let go
@@ -174,8 +177,12 @@
   nav.hidden=false;
 
   // 放大看: the page(s) open now, big enough to read on a phone
-  $('next').after(T.readerButton(()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].node)));
+  // 放大看 and 分享: the page(s) open now
+  const inView=()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].node);
+  const zoom=T.readerButton(inView);$('next').after(zoom);
+  shareBtn=T.shareButton(inView);zoom.after(shareBtn);shareBtn.sync();
   nav.appendChild(T.soundButton());
+  {const t=T.themeButton();if(t)nav.appendChild(t);}   // ☾/☀
   $('prev').onclick=()=>pf.flipPrev();
   $('next').onclick=()=>pf.flipNext();
   document.addEventListener('keydown',e=>{
