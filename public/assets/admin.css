@@ -14,7 +14,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .item[aria-current="true"]{background:var(--paper);border-color:var(--olive)}
 .admin .item.new b{color:var(--red-deep)}
 .admin .sect{font:500 11px/1 var(--print);letter-spacing:1.2px;color:var(--olive);padding:16px 10px 6px}
-.admin .main{padding:22px 24px 40px;display:grid;grid-template-columns:minmax(0,560px) auto;gap:28px;align-content:start}
+.admin .main{padding:22px 24px 0;display:grid;grid-template-columns:minmax(0,620px) auto;gap:28px;align-content:start}
 .admin .form{display:grid;gap:13px;min-width:0}
 .admin .form h2{margin:0 0 4px;font:400 34px/1 var(--title)}
 .admin .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -44,7 +44,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .pvcap{font:400 11.5px/1.4 var(--print);color:var(--desk-ink);margin-top:8px;text-align:center}
 .admin .empty-state{padding:40px 0;color:var(--ink-soft);font-size:20px}
 .admin .unsaved{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#f7ecc9;border:1px solid #e0cf98;border-radius:8px;padding:8px 10px;font:400 13px/1.3 var(--print)}
-@media (max-width:1060px){.admin .main{grid-template-columns:1fr}.admin .pv{position:static;order:-1;justify-self:center}}
+@media (max-width:1060px){.admin .main{grid-template-columns:1fr}.admin .pv{display:none}}
 @media (max-width:700px){
   .admin .wrap{grid-template-columns:1fr}
   .admin .side{border-right:0;border-bottom:1px solid rgba(120,110,90,.2)}
@@ -58,7 +58,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .item.draft b{color:var(--ink-soft)}
 .admin .item .tag{font:normal 500 10px/1 var(--print);color:var(--red-deep);border:1px solid var(--red);border-radius:3px;padding:2px 4px;margin-left:6px;vertical-align:3px}
 /* doodle picker */
-.admin .stkpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px}
+.admin .stkpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px}
 .admin .stkpick button{appearance:none;display:grid;justify-items:center;gap:2px;padding:6px 2px 5px;border:1.5px solid transparent;border-radius:8px;background:#fffdf8;cursor:pointer;color:var(--ink-soft);font:400 11px/1.2 var(--print)}
 .admin .stkpick button:hover{border-color:#cfc8b3}
 .admin .stkpick button[aria-pressed="true"]{border-color:var(--ink);background:var(--paper);color:var(--ink)}
@@ -183,3 +183,58 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .place-row{align-items:end}
 /* fields side by side: a taller neighbour (a two-line hint) mustn't stretch this one's input */
 .admin .row>label{align-content:start}
+
+/* ================= the admin, tidied: cards, a bar that stays in reach, one thing at a time on a phone ================= */
+.admin .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.admin .fhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.admin .fhead h2{margin:0}
+.admin .back{display:none}
+.admin .tagd{font:500 12px/1 var(--print);color:var(--red-deep);border:1px solid var(--red);border-radius:999px;padding:5px 10px}
+/* a group of fields */
+.admin .card{display:grid;gap:12px;min-width:0;background:rgba(255,253,248,.6);border:1px solid rgba(120,110,90,.2);border-radius:12px;padding:14px 16px 16px}
+.admin .ctitle{margin:0;display:flex;align-items:baseline;gap:10px;font:400 21px/1.1 var(--title);color:var(--ink)}
+.admin .csum{margin-left:auto;font:400 12px/1.3 var(--print);color:var(--ink-soft);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin summary.ctitle{cursor:pointer;list-style:none;border-radius:6px}
+.admin summary.ctitle::-webkit-details-marker{display:none}
+.admin summary.ctitle::before{content:"›";flex:none;width:12px;font:400 20px/.8 var(--print);color:var(--ink-soft);transition:transform .15s ease;transform-origin:40% 55%}
+.admin details.card[open]>summary.ctitle::before{transform:rotate(90deg)}
+.admin details.card:not([open]){gap:0;background:transparent}
+.admin summary.ctitle:focus-visible{outline:2px solid var(--red);outline-offset:4px}
+@media (prefers-reduced-motion:reduce){.admin summary.ctitle::before{transition:none}}
+/* the bar at the foot: always in reach while the form scrolls */
+.admin .actbar{position:sticky;bottom:0;z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px;
+  padding:12px 2px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(rgba(232,230,225,0),var(--desk) 14px);border-top:0}
+.admin .actbar .status{order:-1;flex:1 1 200px;min-height:0}
+.admin .actbar.dirty .status::before{content:"";display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:var(--red);vertical-align:1px}
+.admin .actbar .confirm{flex-wrap:wrap}
+.admin .pvbtn{display:none}
+/* settings: chips that go to a section */
+.admin .secnav{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:8px 0;background:var(--desk)}
+.admin .secnav .chip{text-decoration:none;color:var(--ink);padding:6px 11px}
+.admin .secnav .chip:hover{border-color:var(--ink)}
+.admin .card[id]{scroll-margin-top:56px}
+/* 今天 */
+.admin .today .card .item{background:#fffdf8;border-color:rgba(120,110,90,.2)}
+.admin .today .card textarea{min-height:0}
+.admin .drow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.admin .today>.status{min-height:0}
+/* compact doodle picker */
+.admin .stkpick button{padding:5px 2px 4px;font-size:10.5px}
+@media (max-width:1060px){.admin .pvbtn{display:inline-block}}
+@media (max-width:700px){
+  .admin .top{flex-wrap:nowrap;gap:10px;padding:12px 14px}
+  .admin .top h1{font-size:24px}
+  .admin .who{display:none}
+  .admin .home{white-space:nowrap}
+  /* the list, or the thing picked from it */
+  .admin.detail .side{display:none}
+  .admin.detail .back{display:inline-block}
+  .admin:not(.detail) .wrap{display:flex;flex-direction:column}
+  .admin:not(.detail) .main{order:-1;padding-bottom:8px}
+  .admin .list{max-height:none}
+  .admin .card{padding:12px 12px 14px}
+  .admin .actbar .b{padding:10px 13px}
+}
+.admin .main>.form:not(:has(.actbar)){padding-bottom:40px}
+.admin .danger:empty{display:none}
+.admin .danger{padding-top:2px}

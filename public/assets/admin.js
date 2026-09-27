@@ -114,6 +114,8 @@
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
     drawList();drawForm();
+    // a phone shows one thing at a time: start it from the top
+    if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);
   }
 
   /* ---------- form ---------- */
@@ -137,7 +139,9 @@
   }
   function changed(){
     drawPreview();
-    status(dirty()?'有改动还没保存。':'');
+    const d=dirty();
+    status(d?'有改动还没保存（⌘/Ctrl+S 保存）':'');
+    const a=main.querySelector('.actbar');if(a)a.classList.toggle('dirty',!!d);
   }
   function drawPreview(){
     if(!pvbox||!draft||sel==='settings')return;
@@ -145,82 +149,115 @@
     const p=T.fitText(T.entryPage(draft,'r'));
     pvbox.appendChild(p);
   }
+  /* a group of fields: a card with a title. fold: folded away until opened, its title saying what's in it */
+  function card(title,nodes,opt){
+    opt=opt||{};
+    const c=el(opt.fold?'details':'section','card');
+    if(opt.fold&&opt.open)c.open=true;
+    const h=el(opt.fold?'summary':'h3','ctitle');h.append(title);
+    if(opt.sum)h.appendChild(el('span','csum',opt.sum));
+    c.appendChild(h);
+    if(opt.hint)c.appendChild(el('div','hintx',opt.hint));
+    nodes.forEach(n=>{if(n)c.appendChild(n);});
+    return c;
+  }
+  /* the bar at the foot of a form, always in reach: what happened, and what to do (buttons) */
+  function actBar(buttons){
+    const a=el('div','actbar');a.appendChild(statusEl);buttons.forEach(x=>a.appendChild(x));
+    return a;
+  }
+  /* on a phone the list and a page take turns: this goes back to the list */
+  function backBtn(){const b=el('button','b small back','← 列表');b.type='button';b.onclick=()=>select(null);return b;}
+  function head(title,extra){
+    const h=el('div','fhead');h.append(backBtn(),el('h2',null,title));
+    if(extra)h.appendChild(extra);
+    return h;
+  }
   function drawForm(){
     main.textContent='';pvbox=null;statusEl=el('div','status');
+    document.body.classList.toggle('detail',!!sel);
     if(sel==='jots'){drawJots();return;}
-    if(!sel||!draft){
-      const d=el('div','form');
-      d.append(el('h2',null,'今天写点什么？'),el('div','hand','点左边「新写一页」开始写，或者选一页已经写过的来改。保存后主页马上就能看到。'));
-      main.appendChild(d);return;
-    }
+    if(!sel||!draft){drawHome();return;}
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
     if(sel==='settings'){
-      const sect=(t,hint)=>{const h=el('h3','fsect',t);return hint?[h,el('div','hintx',hint)]:[h];};
-      f.append(el('h2',null,'手帐设置'),
-        ...sect('网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。'),
-        field('网站标题','siteTitle','text',{max:40}),
-        field('一句介绍','siteDesc','text',{max:120}),
-        ...sect('封面'),
-        field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
-        field('大字下面的一行','coverSub','text',{max:40}),
-        coverStickerField(),
-        coverPhotoField(),
-        ...sect('扉页','翻开封面后第一页的 README。'),
-        field('whoami（名字）','readmeName','text',{max:30}),
-        field('cat role（在做什么）','readmeRole','text',{max:40}),
-        field('ls ~/life（生活里有什么）','readmeLife','text',{max:60}),
-        field('从哪天开始记','readmeSince','text',{max:20,ph:'2026-09'}),
-        field('小咖旁边那句话','readmeSign','text',{max:30}),
-        ...sect('封底'),
-        field('封底大字','backTitle','text',{max:12}),
-        field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'}),
-        ...sect('加密','给整本手帐设一个口令。'),
-        lockField('book'),
-        ...sect('翻页方式','首页的书怎么翻。'),
-        bookModeField(),
-        ...sect('示例页'),
-        samplesField(),
-        ...sect('AI','写草稿用的模型：「随手记」里的「现在就写一页」和每晚的自动草稿。只给后台看，不会出现在主页上。'),
-        aiField(),
-        ...sect('联系方式','显示在「写信给我」那一页。'),
-        field('邮箱','email','email',{ph:'you@example.com',max:120}),
-        field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
-        field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60}));
-      const b=el('div','bar');const s=el('button','b pri','保存设置');s.type='submit';b.appendChild(s);
-      f.append(b,statusEl);main.appendChild(f);return;
+      // each section a card; the chips at the top go straight to one
+      const nav=el('nav','secnav');nav.setAttribute('aria-label','设置分区');
+      const cards=[];
+      const sect=(t,hint,nodes)=>{
+        const c=card(t,nodes,{hint});c.id='set-'+cards.length;cards.push(c);
+        const b=el('button','chip on',t);b.type='button';b.onclick=()=>c.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b);
+        return c;
+      };
+      f.append(head('手帐设置'),nav,
+        sect('网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。',[
+          field('网站标题','siteTitle','text',{max:40}),
+          field('一句介绍','siteDesc','text',{max:120})]),
+        sect('封面',null,[
+          field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
+          field('大字下面的一行','coverSub','text',{max:40}),
+          coverStickerField(),
+          coverPhotoField()]),
+        sect('扉页','翻开封面后第一页的 README。',[
+          field('whoami（名字）','readmeName','text',{max:30}),
+          field('cat role（在做什么）','readmeRole','text',{max:40}),
+          field('ls ~/life（生活里有什么）','readmeLife','text',{max:60}),
+          field('从哪天开始记','readmeSince','text',{max:20,ph:'2026-09'}),
+          field('小咖旁边那句话','readmeSign','text',{max:30})]),
+        sect('封底',null,[
+          field('封底大字','backTitle','text',{max:12}),
+          field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]),
+        sect('加密','给整本手帐设一个口令。',[lockField('book')]),
+        sect('翻页方式','首页的书怎么翻。',[bookModeField()]),
+        sect('示例页',null,[samplesField()]),
+        sect('AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]),
+        sect('联系方式','显示在「写信给我」那一页。',[
+          field('邮箱','email','email',{ph:'you@example.com',max:120}),
+          field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
+          field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60})]));
+      const s=el('button','b pri','保存设置');s.type='submit';
+      f.append(actBar([s]));main.appendChild(f);return;
     }
-    f.appendChild(el('h2',null,sel==='new'?'新的一页':draft.status==='draft'?'草稿':'编辑这一页'));
-    if(draft.status==='draft')f.appendChild(el('div','hintx','这一页还是草稿，主页上看不到。看过没问题就点「发布这一页」。'));
+    const isDraft=draft.status==='draft';
+    f.appendChild(head(sel==='new'?'新的一页':isDraft?'草稿':'编辑这一页',isDraft?el('span','tagd','草稿 · 主页上看不到'):null));
     const r1=el('div','row');r1.append(dateField(),field('页眉小字','aside','text',{ph:'比如：下了一整天雨',max:30}));
     const r2=el('div','row');r2.append(field('标题（手写大字）','title','text',{ph:'今天的标题',max:30,hint:'8 个字以内最好看'}),field('英文小注','latin','text',{ph:'a small note in English',max:60}));
-    f.append(r1,r2,suggestField(),placeField(),mdField());
-    f.appendChild(photoField());
-    f.appendChild(stickerField());
-    const r3=el('div','row');r3.append(field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60}),
+    const r3=el('div','row');r3.append(field('印章（一个字）','stamp','text',{ph:'记',max:2}),
       field('小咖','mood','select',{options:[['mug','醒着'],['sleep','睡着'],['none','不出场']]}));
-    const r4=el('div','row');r4.append(field('印章（一个字）','stamp','text',{ph:'记',max:2}),field('页脚引文','quote','text',{ph:'一句喜欢的话',max:120}));
-    f.append(r3,r4,field('引文出处','quoteSrc','text',{ph:'作者《书名》',max:60}));
-    {const h=el('h3','fsect','单独上锁');h.style.fontSize='18px';f.appendChild(h);}
+    const r4=el('div','row');r4.append(field('页脚引文','quote','text',{ph:'一句喜欢的话',max:120}),field('引文出处','quoteSrc','text',{ph:'作者《书名》',max:60}));
+    // 上锁: the day's lock (from 随手记), this page's own, or one for a new page
+    const locks=[];let locked=false;
     if(sel!=='new'){
       if(dayLocks.has(draft.date)){
-        // locked as a whole day from 随手记: say so, and let it be taken off here too
+        locked=true;
         const n=el('div','lockf');n.appendChild(el('div','hintx','🔒 这一天在随手记里上了锁：这一天的页都要用那个口令打开（这一页若再单独上锁，就用它自己的口令）。'));
         const bar=el('div','bar'),off=el('button','b small warn','取消这一天的锁');off.type='button';
         off.onclick=async()=>{if(busy)return;busy=true;try{await sendJson('PUT','/api/admin/locks/'+encodeURIComponent('d-'+draft.date),{password:null});dayLocks.delete(draft.date);drawList();drawForm();status('这一天不上锁了。','ok');}catch(e){status(e.message||'没有保存成功','err');}finally{busy=false;}};
-        bar.appendChild(off);n.appendChild(bar);f.appendChild(n);
+        bar.appendChild(off);n.appendChild(bar);locks.push(n);
       }
-      f.appendChild(lockField(sel));
-    }else f.appendChild(newLockField());
-    const b=el('div','bar');
-    const isDraft=draft.status==='draft';
+      const en=entries.find(e=>e.id===sel);if(en&&en.locked)locked=true;
+      locks.push(lockField(sel));
+    }else{locks.push(newLockField());locked=!!newLock;}
+    const pw=[draft.place,draft.weather].filter(Boolean).join(' · ');
+    f.append(
+      card('这一页',[r1,r2,suggestField()]),
+      card('正文',[mdField()]),
+      card('照片',[photoField()]),
+      card('插画和小物',[stickerField(),r3,field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60})]),
+      card('页脚引文',[r4],{fold:true,open:!!draft.quote,sum:draft.quote?'「'+([...draft.quote].length>12?[...draft.quote].slice(0,12).join('')+'…':draft.quote)+'」':'可空'}),
+      card('地点和天气',[placeField()],{fold:true,open:!!pw,sum:pw||'可空，写在页眉右上角'}),
+      card('上锁',locks,{fold:true,open:locked,sum:locked?'🔒 已上锁':'不上锁'}));
     const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
     s.onclick=()=>{draft.status='published';save();};
     const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';
     s2.onclick=()=>{draft.status='draft';save();};
-    b.append(s,s2);
+    // on a narrow screen the page isn't beside the form: open it big (Techo.reader)
+    const see=el('button','b pvbtn','预览');see.type='button';
+    see.onclick=()=>{const p=T.fitText(T.entryPage(draft,'r'));T.reader([p]);p.remove();};
+    // deleting is rare: at the foot of the page, not in the bar
+    const danger=el('div','bar danger');
     if(sel!=='new'){
-      const del=el('button','b warn','删除这一页');del.type='button';
+      const del=el('button','b warn small','删除这一页');del.type='button';
       del.onclick=()=>{
         const c=el('span','confirm','删除后不能恢复，确定？');
         const yes=el('button','b warn small','删除');yes.type='button';
@@ -229,13 +266,75 @@
         no.onclick=()=>c.replaceWith(del);
         yes.onclick=remove;
       };
-      b.appendChild(del);
+      danger.appendChild(del);
     }
-    f.append(b,statusEl);
+    f.append(danger,actBar([s,s2,see]));
     const pv=el('div','pv');pvbox=el('div','pvbox');
     pv.append(pvbox,el('div','pvcap','预览 · 保存后会按日期排进手帐'));
     main.append(f,pv);drawPreview();
     if(sel==='new')setTimeout(()=>{const t=$('f-title');if(t)t.focus();},0);
+  }
+
+  /* ---------- 今天: what's there to do ----------
+     Today's page (or a way to start it), a line for 随手记, the drafts waiting to be published (one tap each),
+     and how much has been written. */
+  const WDN='日一二三四五六';
+  function drawHome(){
+    const f=el('div','form today'),today=T.todayStr(),t=T.parseDate(today);
+    const month=today.slice(0,7),pub=entries.filter(e=>e.status!=='draft');
+    const drafts=T.sortEntries(entries.filter(e=>e.status==='draft')).reverse();
+    f.append(el('h2',null,'今天'),
+      el('div','hintx',t.y+' 年 '+t.mo+' 月 '+t.d+' 日 · 周'+WDN[t.wd]+'　·　已发布 '+pub.length+' 页，这个月 '+pub.filter(e=>e.date.slice(0,7)===month).length+' 页'+(drafts.length?'，草稿 '+drafts.length+' 页':'')));
+    // today's page
+    const mine=entries.filter(e=>e.date===today);
+    const pageNodes=mine.map(en=>{
+      const b=el('button','item'+(en.status==='draft'?' draft':''));b.type='button';
+      b.append(el('b',null,en.title||'（无题）'),el('span',null,en.status==='draft'?'草稿，还没发布':'已发布'));
+      b.onclick=()=>select(en.id);return b;
+    });
+    const nb=el('button','b '+(mine.length?'':'pri'),mine.length?'再写一页':'新写一页');nb.type='button';nb.onclick=()=>select('new');
+    const bar1=el('div','bar');bar1.appendChild(nb);
+    f.appendChild(card('今天这一页',[mine.length?null:el('div','hand','今天还没写。'),...pageNodes,bar1]));
+    // 随手记
+    const ta=el('textarea');ta.rows=2;ta.maxLength=1000;ta.placeholder='想到什么就记一句，今晚会写成一页草稿';ta.id='f-jot-home';ta.setAttribute('aria-label','记一句');
+    const add=el('button','b pri small','记下');add.type='button';
+    const more=el('button','b small','全部随手记');more.type='button';more.onclick=()=>select('jots');
+    const said=el('span','hintx');
+    const bar2=el('div','bar');bar2.append(add,more,said);
+    const count=el('span');
+    add.onclick=async()=>{
+      const text=ta.value.trim();if(!text){ta.focus();return;}
+      if(busy)return;busy=true;add.disabled=true;
+      try{const r=await sendJson('POST','/api/admin/jots',{text});jots.unshift(r.jot);ta.value='';said.textContent='记下了。';paintCount();}
+      catch(e){said.textContent=e.message||'没记上，稍后再试。';}
+      finally{busy=false;add.disabled=false;}
+    };
+    const paintCount=()=>{const n=jots.filter(j=>!j.usedIn&&new Date(j.createdAt).toDateString()===new Date().toDateString()).length;count.textContent=n?'今天记了 '+n+' 句':'';};
+    const jc=card('随手记',[ta,bar2]);jc.querySelector('.ctitle').appendChild(el('span','csum',''));jc.querySelector('.csum').appendChild(count);
+    f.appendChild(jc);
+    api('/api/admin/jots').then(r=>{jots=r.jots||[];paintCount();}).catch(()=>{});
+    // drafts waiting
+    if(drafts.length){
+      const rows=drafts.map(en=>{
+        const r=el('div','drow'),d=T.parseDate(en.date);
+        const open=el('button','item');open.type='button';open.append(el('b',null,en.title||'（无题）'),el('span',null,d?d.mo+'/'+d.d:en.date));open.onclick=()=>select(en.id);
+        const go=el('button','b small','发布');go.type='button';go.onclick=()=>publish(en,go);
+        r.append(open,go);return r;
+      });
+      f.appendChild(card('等着发布的草稿',rows,{hint:'看过没问题就发布；想改就点标题打开。'}));
+    }
+    f.appendChild(statusEl);
+    main.appendChild(f);
+  }
+  /* publish a draft from the list of them, as it is */
+  async function publish(en,btn){
+    if(busy)return;busy=true;btn.disabled=true;status('正在发布……');
+    try{
+      const r=await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(en.id),stripLocal(Object.assign({},en,{status:'published'})));
+      const i=entries.findIndex(e=>e.id===en.id);r.entry.locked=en.locked;if(i>=0)entries[i]=r.entry;
+      busy=false;drawList();drawForm();status('「'+(r.entry.title||'（无题）')+'」已发布，主页刷新就能看到。','ok');
+    }catch(e){btn.disabled=false;status(e.message||'没发布成功','err');}
+    finally{busy=false;}
   }
 
   /* ---------- date: a paper calendar instead of the browser's picker ---------- */
@@ -471,13 +570,13 @@
   function stickerField(){
     const wrap=el('div');
     const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';
-    l.textContent='小插画（最多两个，翻到这页时会一笔一笔画出来）';
+    l.textContent='小插画：最多两个，翻到这页时会一笔一笔画出来';
     const grid=el('div','stkpick');grid.setAttribute('role','group');grid.setAttribute('aria-label','小插画');
     const cur=()=>Array.isArray(draft.stickers)?draft.stickers:[];
     const paint=()=>grid.querySelectorAll('button').forEach(bt=>bt.setAttribute('aria-pressed',cur().includes(bt.dataset.k)?'true':'false'));
     T.stickerList.forEach(({key,label})=>{
       const bt=el('button');bt.type='button';bt.dataset.k=key;bt.title=label;
-      bt.append(T.stickerSvg(key,34),el('span',null,label));
+      bt.append(T.stickerSvg(key,26),el('span',null,label));
       bt.onclick=()=>{
         let a=cur().slice();
         if(a.includes(key))a=a.filter(k=>k!==key);
@@ -494,7 +593,7 @@
   function drawJots(again){
     if(again){main.textContent='';statusEl=el('div','status');}
     const f=el('form','form');f.noValidate=true;
-    f.append(el('h2',null,'随手记'),el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。'));
+    const hint=el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。');
     const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
     const l=el('label');l.append('新的一句',ta);
     const b=el('div','bar');const s=el('button','b pri','记下');s.type='submit';b.appendChild(s);
@@ -535,8 +634,9 @@
     // today's page, written from these, can be locked before it's written
     const lk=el('div');
     const paintLock=()=>{lk.textContent='';if(!jotsToday)return;
-      const h=el('h3','fsect','今天这一页上锁');h.style.fontSize='18px';lk.append(h,lockField('d-'+jotsToday));};
-    f.append(l,b,statusEl,lk,ul);main.appendChild(f);paint();paintLock();
+      const on=dayLocks.has(jotsToday);
+      lk.appendChild(card('今天这一页上锁',[lockField('d-'+jotsToday)],{fold:true,open:on,sum:on?'🔒 已上锁':'不上锁'}));};
+    f.append(head('随手记'),hint,l,b,statusEl,ul,lk);main.appendChild(f);paint();paintLock();
     (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];
       if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
       paint();paintLock();}catch(e){status(e.message||'加载失败','err');}})();
@@ -600,7 +700,7 @@
   });
   function placeField(){
     const wrap=el('div','placefield');
-    const h=el('div','hintx');h.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';h.textContent='地点和天气（可空，写在页眉右上角）';
+    const h=el('div','hintx');h.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';h.textContent='写在页眉右上角。';
     const row=el('div','row');row.append(field('地点','place','text',{ph:'上海 · 徐汇',max:30}),field('天气','weather','text',{ph:'多云 18~25°',max:20}));
     const r2=el('div','row place-row');
     r2.appendChild(field('坐标（纬度,经度）','geo','text',{ph:'31.23,121.47',max:24}));
@@ -637,7 +737,7 @@
      insertText, so ⌘/Ctrl+Z undoes them. The page beside the form is the preview. */
   function mdField(){
     const wrap=el('div','mdfield');
-    const lab=el('label',null,'正文');lab.htmlFor='f-body';
+    const lab=el('label','sr',null);lab.textContent='正文';lab.htmlFor='f-body';
     const ta=el('textarea');ta.id='f-body';ta.rows=12;ta.maxLength=4000;ta.value=draft.body||'';ta.spellcheck=false;
     const on=()=>{draft.body=ta.value;changed();};
     ta.addEventListener('input',on);
@@ -735,7 +835,7 @@
   function photoField(){
     const wrap=el('div'),list=photoList();
     const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';
-    l.textContent='照片（可空，最多 '+MAX_PHOTOS+' 张，像拍立得一样贴在页上：一张放在字旁边，两三张在标题下面排一排）';
+    l.textContent='可空，最多 '+MAX_PHOTOS+' 张，像拍立得一样贴在页上：一张放在字旁边，两三张在标题下面排一排。';
     wrap.appendChild(l);
     list.forEach((ph,i)=>{
       const row=el('div','photo-field');
