@@ -795,7 +795,11 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     if (pe) blockMat.uniforms.color.value.copy(new Color(pe).convertLinearToSRGB());
     for (const t of tex.values()) t.state = 'stale';
     invalidate();
-    await ready([0, 1, N - 2, N - 1, ...shownPages()]).catch(() => {});
+    // The pages at rest are live, already in the new colours: their pictures (only needed to turn them) are
+    // redrawn a moment later, while nothing's happening, not in the middle of the switch; a turn before then
+    // waits for the ones it needs (ready).
+    await new Promise((r) => setTimeout(r, 900));
+    await ready(shownPages()).catch(() => {});
     if (!busy && !drag) layout(restState(cur));
     invalidate(); warm(cur ? 2 * cur - 1 : 0);
   });
