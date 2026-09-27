@@ -704,6 +704,15 @@
     }
     const bookShut=lock.book&&!(lock.open||[]).includes('book');
     const mail=src.querySelector('#mail');if(mail&&settings.email)mail.textContent=settings.email;
+    // 复制 on 写信给我: the address to the clipboard, in either book (放大看's copy presses this one); where the
+    // clipboard is refused, the address is selected for Ctrl+C
+    const copyBtn=src.querySelector('#copyBtn');
+    if(copyBtn&&mail)copyBtn.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const done=()=>{copyBtn.textContent='已复制';setTimeout(()=>{copyBtn.textContent='复制';},1600);};
+      const sel=()=>{const r=document.createRange();r.selectNodeContents(mail);const s=getSelection();s.removeAllRanges();s.addRange(r);copyBtn.textContent='已选中，按 Ctrl+C';};
+      try{navigator.clipboard.writeText(mail.textContent.trim()).then(done,sel);}catch(err){sel();}
+    });
     const gh=src.querySelector('#gh');
     if(gh){const ok=/^https:\/\//i.test(settings.github||'');gh.href=ok?settings.github:'https://github.com/';
       gh.textContent=settings.githubText||(ok?settings.github.replace(/^https:\/\//i,''):'github.com/你的用户名');}
