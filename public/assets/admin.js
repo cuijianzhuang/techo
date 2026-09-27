@@ -271,9 +271,27 @@
     f.append(danger,actBar([s,s2,see]));
     const pv=el('div','pv');pvbox=el('div','pvbox');
     pv.append(pvbox,el('div','pvcap','预览 · 保存后会按日期排进手帐'));
-    main.append(f,pv);drawPreview();
+    main.append(f,pv);drawPreview();fitPreview(pv);
     if(sel==='new')setTimeout(()=>{const t=$('f-title');if(t)t.focus();},0);
   }
+
+  /* The preview is as big as its column and the screen allow: the whole page in view beside the form (it
+     stays put as the form scrolls), from half its size up to a little over its own. The column is never
+     narrower than 300px: the form gives way first. */
+  let pvWatch=null;
+  function fitPreview(pv){
+    if(pvWatch)pvWatch.disconnect();
+    const fit=()=>{
+      if(!pv.isConnected)return;
+      // all of it on screen before the page is scrolled too: below the header, with its caption under it
+      const top=pv.getBoundingClientRect().top+scrollY,w=pv.clientWidth,h=innerHeight-Math.min(top,100)-44;
+      const k=Math.max(.5,Math.min(1.25,w/530,h/740));
+      pv.style.setProperty('--pvk',k.toFixed(3));
+    };
+    pvWatch=new ResizeObserver(fit);pvWatch.observe(pv);
+    fit();
+  }
+  addEventListener('resize',()=>{const pv=main.querySelector('.pv');if(pv)fitPreview(pv);});
 
   /* ---------- 今天: what's there to do ----------
      Today's page (or a way to start it), a line for 随手记, the drafts waiting to be published (one tap each),
