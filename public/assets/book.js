@@ -93,9 +93,9 @@
   }
   // the nav: 封面 and 时间线 between the arrows (any day is a line on the 时间线)
   const isTimeline=k=>!!(pages[k]&&pages[k].node.classList.contains('tlp'));
-  const chips=[{label:'封面',page:0}];
-  {const t=pages.findIndex((p,k)=>isTimeline(k));if(t>=0)chips.push({label:'时间线',page:t});}
-  chips.forEach(c=>{const b=el('button',null,c.label);b.type='button';b.dataset.page=c.page;b.onclick=()=>pf.flip(c.page);dots.appendChild(b);});
+  const chips=[{label:'封面',icon:'cover',page:0}];
+  {const t=pages.findIndex((p,k)=>isTimeline(k));if(t>=0)chips.push({label:'时间线',icon:'timeline',page:t});}
+  chips.forEach(c=>{const b=T.chipButton(c.label,c.icon,c.page);b.onclick=()=>pf.flip(c.page);dots.appendChild(b);});
 
   pf.on('flip',e=>{setShift(e.data);chrome(e.data);reveal(e.data);});
   /* page sounds (Techo.sound, as in the 3D book): a turn clicked or keyed rustles and lands; a sheet let go

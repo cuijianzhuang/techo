@@ -599,6 +599,17 @@
   }
 
   /* the nav's button for it; pages(): the page nodes open now */
+  // the nav's 封面 and 时间线: a closed book and a line of days, named for screen readers and on hover
+  const CHIP_ICONS={
+    cover:'<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 1.8h8.1a1.4 1.4 0 0 1 1.4 1.4v9.6a1.4 1.4 0 0 1-1.4 1.4H4.2a1.9 1.9 0 0 1-1.9-1.9V3.7a1.9 1.9 0 0 1 1.9-1.9Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.3 2v12.2M7.6 5.4h3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    timeline:'<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.6 2v12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 2"/><circle cx="3.6" cy="3.6" r="1.7" fill="currentColor"/><circle cx="3.6" cy="8" r="1.7" fill="currentColor"/><circle cx="3.6" cy="12.4" r="1.7" fill="currentColor"/><path d="M7.4 3.6h6.2M7.4 8h4.6M7.4 12.4h5.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  };
+  function chipButton(label,icon,page){
+    const b=el('button','chip');b.type='button';b.dataset.page=page;
+    b.innerHTML=CHIP_ICONS[icon]||'';if(!CHIP_ICONS[icon])b.textContent=label;
+    b.setAttribute('aria-label',label);b.title=label;
+    return b;
+  }
   function readerButton(pages){
     const b=el('button','arrow zoomin');b.type='button';
     b.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.4 10.4 14.5 14.5M4.6 6.8h4.4M6.8 4.6v4.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
@@ -794,14 +805,11 @@
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
   /* the "drag the corner" note beside the cover: fades and drifts away when the book opens (or a corner is
      taken), and once the reader has opened the book it has done its job: it doesn't come back on the cover */
-  let noteDone=false;
   function dragNote(el,show){
     if(!el)return;
-    if(!show&&!el.hidden&&el.dataset.shown==='1')noteDone=true;
-    show=show&&!noteDone;
     clearTimeout(el.__t);
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();

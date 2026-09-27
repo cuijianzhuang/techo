@@ -684,13 +684,13 @@ const LIFT = 0.25 * H, CREASE = 2.5;
 
   /* ---------- chrome: the arrows, 封面 and 时间线 (any day is a line on the 时间线), restart, drag hint ---------- */
   const isTimeline = (i) => !!(pages[i] && pages[i].node.classList.contains('tlp'));
-  const chips = [{ label: '封面', page: 0 }];
-  { const t = pages.findIndex((p, i) => isTimeline(i)); if (t >= 0) chips.push({ label: '时间线', page: t }); }
+  const chips = [{ label: '封面', icon: 'cover', page: 0 }];
+  { const t = pages.findIndex((p, i) => isTimeline(i)); if (t >= 0) chips.push({ label: '时间线', icon: 'timeline', page: t }); }
   const sheetOf = (page) => (page === 0 ? 0 : Math.ceil(page / 2));
   // open the book at page i: turn there, then (on a phone) look at that page
   function openPage(i) { goTo(sheetOf(i)); if (fit.portrait) pan(i % 2 ? 'L' : 'R'); }
   chips.forEach((c) => {
-    const b = T.el('button', null, c.label); b.type = 'button'; b.dataset.page = c.page;
+    const b = T.chipButton(c.label, c.icon, c.page);
     b.onclick = () => openPage(c.page);
     dots.appendChild(b);
   });
