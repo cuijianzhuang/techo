@@ -803,10 +803,35 @@
     b.onclick=()=>{
       const want=night()?'light':'dark';
       try{if((want==='dark')===sysDark())localStorage.removeItem(THEME_KEY);else localStorage.setItem(THEME_KEY,want);}catch(e){}
-      applyTheme();paint();
+      themeSwitch(b,()=>{applyTheme();paint();const i=b.querySelector('svg');if(i)i.classList.add('th-in');});
     };
     document.addEventListener('techo-theme',paint);
     paint();return b;
+  }
+  /* The switch, animated: the other hour spreads out from the button in a widening circle, like a lamp
+     switched on or off (a view transition); where there are none, the colours ease across; with reduced
+     motion, it's simply done. The icon turns as it changes. */
+  const THEME_CSS='::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}'+
+    '::view-transition-new(root){z-index:2}::view-transition-old(root){z-index:1}'+
+    '.th-in{animation:th-in .55s cubic-bezier(.3,1.4,.5,1) both}@keyframes th-in{from{transform:rotate(-100deg) scale(.3);opacity:0}}'+
+    'html.th-fade,html.th-fade *{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease,stroke .45s ease!important}'+
+    '@media (prefers-reduced-motion:reduce){.th-in{animation:none}}';
+  function themeSwitch(from,change){
+    if(!document.getElementById('th-css')){const st=document.createElement('style');st.id='th-css';st.textContent=THEME_CSS;document.head.appendChild(st);}
+    const root=document.documentElement;
+    if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){change();return;}
+    if(!document.startViewTransition){
+      root.classList.add('th-fade');change();
+      clearTimeout(themeSwitch.t);themeSwitch.t=setTimeout(()=>root.classList.remove('th-fade'),500);
+      return;
+    }
+    const r=from.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+    const R=Math.hypot(Math.max(x,innerWidth-x),Math.max(y,innerHeight-y));
+    const vt=document.startViewTransition(change);
+    vt.ready.then(()=>{
+      root.animate({clipPath:['circle(0px at '+x+'px '+y+'px)','circle('+R+'px at '+x+'px '+y+'px)']},
+        {duration:650,easing:'cubic-bezier(.45,0,.2,1)',pseudoElement:'::view-transition-new(root)'});
+    }).catch(()=>{});
   }
   const mapStyle=()=>night()?'dark-v11':'light-v11';
   function geoOf(en){const m=/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec((en&&en.geo)||'');return m?[+m[1],+m[2]]:null;}
