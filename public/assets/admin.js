@@ -194,10 +194,12 @@
           field('网站标题','siteTitle','text',{max:40}),
           field('一句介绍','siteDesc','text',{max:120})]),
         sect('封面',null,[
+          coverStyleField(),
           field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
           field('大字下面的一行','coverSub','text',{max:40}),
           coverStickerField(),
           coverPhotoField()]),
+        sect('纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]),
         sect('扉页','翻开封面后第一页的 README。',[
           field('whoami（名字）','readmeName','text',{max:30}),
           field('cat role（在做什么）','readmeRole','text',{max:40}),
@@ -432,6 +434,49 @@
   /* ---------- 手帐设置: cover stickers, cover pictures, sample pages ---------- */
   const COVER_STICKERS=[['mug','小咖'],['nas','NAS'],['cloud','云'],['film','胶卷'],['ticket','机票']];
   const csv=v=>String(v||'').split(',').filter(Boolean);
+  /* 封面款式: each style as a little cover with this journal's title on it; the covers, endpapers and the 3D
+     book's boards all change with it */
+  function coverStyleField(){
+    const wrap=el('div');
+    const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:6px';l.textContent='封面款式（封面、封底和环衬一起换）';
+    const w=el('div','cvpick');w.setAttribute('role','radiogroup');w.setAttribute('aria-label','封面款式');
+    const title=draft.coverTitle||'cui.log',dot=title.indexOf('.');
+    Object.entries(T.COVERS).forEach(([k,name])=>{
+      const o=el('label','cvopt');
+      const r=el('input');r.type='radio';r.name='f-cover';r.value=k;r.checked=(draft.coverStyle||'slate')===k;
+      r.onchange=()=>{if(r.checked){draft.coverStyle=k;changed();}};
+      const mini=el('div','cvmini'),pg=el('div','page cover');pg.setAttribute('aria-hidden','true');T.coverStyle(pg,k);
+      const deb=el('div','deboss');
+      if(dot<0)deb.textContent=title;else deb.append(title.slice(0,dot),el('span',null,'.'),title.slice(dot+1));
+      pg.append(el('div','spine'),deb,el('div','sub',draft.coverSub||''));
+      mini.appendChild(pg);
+      o.append(r,mini,el('span',null,name));w.appendChild(o);
+    });
+    wrap.append(l,w);return wrap;
+  }
+  /* 纸张: the pattern and the colour, each shown as a little page in the other's current choice */
+  function paperField(){
+    const wrap=el('div');wrap.style.cssText='display:grid;gap:14px';
+    const minis=[];
+    const repaint=()=>minis.forEach(([pg,pat,tone])=>T.paperStyle(pg,pat||draft.paperStyle||'grid',tone||draft.paperTone||'cream'));
+    const group=(label,key,opts,kind)=>{
+      const g=el('div');
+      const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:6px';l.textContent=label;
+      const w=el('div','cvpick pppick');w.setAttribute('role','radiogroup');w.setAttribute('aria-label',label);
+      const cur=draft[key]||Object.keys(opts)[0];
+      Object.entries(opts).forEach(([k,name])=>{
+        const o=el('label','cvopt');
+        const r=el('input');r.type='radio';r.name='f-'+key;r.value=k;r.checked=cur===k;
+        r.onchange=()=>{if(r.checked){draft[key]=k;repaint();changed();}};
+        const mini=el('div','cvmini ppmini page r');mini.setAttribute('aria-hidden','true');
+        minis.push([mini,kind==='pattern'?k:null,kind==='tone'?k:null]);
+        o.append(r,mini,el('span',null,name));w.appendChild(o);
+      });
+      g.append(l,w);return g;
+    };
+    wrap.append(group('纹路','paperStyle',T.PAPERS,'pattern'),group('纸色','paperTone',T.TONES,'tone'));
+    repaint();return wrap;
+  }
   function coverStickerField(){
     const wrap=el('div');
     const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:5px';l.textContent='封面上原来的贴纸（点一下隐藏 / 显示）';

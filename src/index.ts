@@ -155,12 +155,17 @@ const SETTING_DEFAULTS: Record<string, string> = {
   readmeSince: "2026-09", readmeSign: "小咖在旁边看着",
   backTitle: "EOF", backImprint: "cui.log · build 2026.09.25\ndeployed on the edge",
   samples: "show",
+  paperStyle: "grid",   // the paper's pattern: grid / lined / dots / plain
+  paperTone: "cream",   // and its colour: cream / white / aged / mint
+  coverStyle: "slate",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
   // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
   // Admin only (PRIVATE_SETTINGS).
   aiFormat: "anthropic", aiBaseUrl: "", aiModel: DEFAULT_MODEL,
 };
+const PAPER_STYLES = ["grid", "lined", "dots", "plain"], PAPER_TONES = ["cream", "white", "aged", "mint"];
+const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine"];
 /** settings only the admin sees: kept out of /api/settings and the page */
 const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel"]);
 const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
@@ -211,6 +216,9 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
     if (keys.some((k) => !PHOTO_KEY.test(k))) return { ok: false, error: "封面图片无效" };
   }
   if (v.samples !== undefined && v.samples !== "show" && v.samples !== "hide") return { ok: false, error: "samples 只能是 show / hide" };
+  if (v.paperStyle !== undefined && !PAPER_STYLES.includes(v.paperStyle)) return { ok: false, error: "paperStyle 只能是 " + PAPER_STYLES.join(" / ") };
+  if (v.paperTone !== undefined && !PAPER_TONES.includes(v.paperTone)) return { ok: false, error: "paperTone 只能是 " + PAPER_TONES.join(" / ") };
+  if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
   if (v.aiFormat !== undefined && !["anthropic", "openai"].includes(v.aiFormat)) return { ok: false, error: "aiFormat 只能是 anthropic / openai" };
   if (v.aiBaseUrl) {
