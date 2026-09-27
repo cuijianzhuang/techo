@@ -169,7 +169,7 @@
   }
   /* the words without their marks, for a line of them somewhere else (the timeline page) */
   function plainText(md){
-    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
       .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
   }
   function panel(time,rest){
@@ -187,6 +187,7 @@
   const BLOCKS=[
     ['fence',/^\s*```/],
     ['h',/^\s*(#{1,3})\s+(.+)$/],
+    ['brk',/^\s*\+{3,}\s*$/],
     ['hr',/^\s*([-*_])(\s*\1){2,}\s*$/],
     ['check',/^\s*(?:[-*+]\s+)?\[( |x|X|✓|√)\]\s+(.*)$/],
     ['ul',/^\s*[-*+•]\s+(.*)$/],
@@ -210,6 +211,7 @@
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
       if(kind==='hr'){open('hr',el('div','jhr'));run=null;continue;}
+      if(kind==='brk'){open('brk',el('div','jbrk'));run=null;continue;}   // +++: the words go on over the page (entryPages)
       if(!run||run.kind!==kind){
         const node=kind==='check'?el('ul','check'):kind==='ul'?el('ul','jul'):kind==='ol'?el('ol','jol'):
           kind==='quote'?el('div','label jnote'):kind==='panel'?el('div','jcomic'):el('p');
@@ -230,12 +232,17 @@
     return into;
   }
 
-  function entryPage(en,side){
-    if(en.locked)return lockedPage(en,side);
+  /* A diary page. entryShell: the paper, its date and (the first page) the title, the stamp and the photos,
+     with an empty .jtext for the words; a page carrying on from the one before says so at its top instead.
+     entryEnd: how the page ends, the note's stickers, the mug and the quote at its foot (the last page), or
+     接下页 (any other). entryPage is the whole of it on one page; entryPages as many pages as it takes. */
+  function entryShell(en,side,first){
     const dt=parseDate(en.date)||parseDate(todayStr());
-    const p=el('div','page '+side+' jp');
-    const h=dateHead(dt,en.aside,en);
+    const p=el('div','page '+side+' jp'+(first?'':' cont'));
+    const h=dateHead(dt,first?en.aside:null,en);
     const b=el('div','body');
+    const tx=el('div','jtext');
+    if(!first){b.append(el('div','jcont hand',(en.title||'（无题）')+' · 续'),tx);return finish();}
     if(en.stamp){const st=el('div','stamp',[...en.stamp][0]);st.style.cssText='top:0;right:4px';b.appendChild(st);}
     const jt=el('div','jt');jt.appendChild(el('h2',null,en.title||'（无题）'));
     if(en.latin)jt.appendChild(el('div','latin',en.latin));
@@ -252,25 +259,131 @@
       return f;
     });
     if(shots.length>1){const row=el('div','jphs n'+shots.length);shots.forEach(f=>row.appendChild(f));b.appendChild(row);}
-    const tx=el('div','jtext');
     if(shots.length===1)tx.appendChild(shots[0]);
-    bodyBlocks(en.body,tx);
-    if(en.note){const n=el('div','label jnote',en.note);n.appendChild(el('div','tape'));tx.appendChild(n);}
     b.appendChild(tx);
+    return finish();
+    function finish(){
+      p.append(h,b);
+      const f=el('footer','foot');
+      if(side==='r')f.style.right='130px';
+      p.appendChild(f);
+      if(side==='r'){p.appendChild(el('div','tab',String(dt.mo)));p.appendChild(makeCal(dt.y,dt.mo,dt.d));}
+      return {p,b,tx,f};
+    }
+  }
+  function entryEnd(s,en,last){
+    s.b.querySelectorAll(':scope>.jstk,:scope>.jmug').forEach(n=>n.remove());
+    s.f.textContent='';s.f.classList.toggle('more',!last);
+    if(!last){s.f.append('接下页 →');return;}
     const stk=(Array.isArray(en.stickers)?en.stickers:String(en.stickers||'').split(',')).filter(k=>STICKERS[k]).slice(0,2);
     if(stk.length){
       const row=el('div','jstk'+(en.mood&&en.mood!=='none'?' by-mug':''));
       stk.forEach(k=>row.appendChild(stickerSvg(k,62)));
-      b.appendChild(row);
+      s.b.appendChild(row);
     }
-    if(en.mood&&en.mood!=='none'){const g=mugSvg(en.mood==='sleep'?'mug-sleep':'mug',64);g.setAttribute('class','jmug');b.appendChild(g);}
-    p.append(h,b);
-    const f=el('footer','foot');
-    if(side==='r')f.style.right='130px';
-    if(en.quote){f.append(en.quote);if(en.quoteSrc)f.appendChild(el('small',null,'—— '+en.quoteSrc));}
-    p.appendChild(f);
-    if(side==='r'){p.appendChild(el('div','tab',String(dt.mo)));p.appendChild(makeCal(dt.y,dt.mo,dt.d));}
-    return p;
+    if(en.mood&&en.mood!=='none'){const g=mugSvg(en.mood==='sleep'?'mug-sleep':'mug',64);g.setAttribute('class','jmug');s.b.appendChild(g);}
+    if(en.quote){s.f.append(en.quote);if(en.quoteSrc)s.f.appendChild(el('small',null,'—— '+en.quoteSrc));}
+  }
+  // the words of a page, block by block (the note, taped on, last)
+  function entryWords(en,into){
+    bodyBlocks(en.body,into);
+    if(en.note){const n=el('div','label jnote',en.note);n.appendChild(el('div','tape'));into.appendChild(n);}
+    return into;
+  }
+  function entryPage(en,side){
+    if(en.locked)return lockedPage(en,side);
+    const s=entryShell(en,side,true);
+    entryWords(en,s.tx);entryEnd(s,en,true);
+    return s.p;
+  }
+
+  /* A diary page as many pages as it takes. On one page when the words fit at FIT_MIN or bigger (as big as
+     they fit), otherwise they run on at RUN_FS a block at a time (a paragraph, a list, a quote, a comic strip,
+     a code block …): a paragraph that doesn't fit what's left of a page is split after a sentence, a list or
+     a comic strip after an item, and a heading never ends a page. A +++ line starts a new page. A block too
+     big even for a page of its own is cut off at its foot, as a page always was. */
+  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17;
+  const over=t=>t.scrollHeight>t.clientHeight+1;
+  const SENTENCE=/[^。！？!?；;…]*[。！？!?；;…]+[”’」』）)\]]*\s*|[^。！？!?；;…]+/g;
+  function entryPages(en,side){
+    if(en.locked)return [lockedPage(en,side)];
+    const m=measure();
+    const one=entryPage(en,side);m.appendChild(one);
+    const t1=one.querySelector('.jtext');
+    if(!t1.querySelector('.jbrk'))for(let fs=FIT_MAX;fs>=FIT_MIN;fs--){one.style.setProperty('--jfs',fs+'px');if(!over(t1))return [one];}
+    one.remove();
+    const queue=[...entryWords(en,el('div')).children];
+    const out=[];let s=null;
+    const next=()=>{
+      s=entryShell(en,(out.length%2===0)===(side==='l')?'l':'r',!out.length);
+      s.p.style.setProperty('--jfs',RUN_FS+'px');m.appendChild(s.p);entryEnd(s,en,false);out.push(s);
+    };
+    const words=()=>[...s.tx.children].filter(c=>!c.classList.contains('jph'));
+    // a heading never ends a page: it goes over with what follows it
+    const keepHeading=()=>{const w=words(),l=w[w.length-1];if(w.length>1&&l.classList.contains('jh')){s.tx.removeChild(l);queue.unshift(l);}};
+    const run=()=>{
+      while(queue.length){
+        const b=queue.shift();
+        if(b.classList.contains('jbrk')){if(words().length)next();continue;}
+        s.tx.appendChild(b);
+        if(!over(s.tx))continue;
+        s.tx.removeChild(b);
+        const [rest,some]=splitBlock(b,s.tx);
+        if(!rest)continue;
+        if(!some&&!words().length){s.tx.appendChild(rest);continue;}   // too big for any page: cut off
+        queue.unshift(rest);keepHeading();next();
+      }
+    };
+    next();
+    // the ending (stickers, mug) takes room at the foot of the last page: what it pushes out goes over
+    for(;;){
+      run();
+      entryEnd(s,en,true);
+      if(!over(s.tx))break;
+      while(over(s.tx)&&words().length>1){const w=words();const l=w[w.length-1];s.tx.removeChild(l);queue.unshift(l);}
+      if(over(s.tx)&&words().length===1){
+        const l=words()[0];s.tx.removeChild(l);
+        const [rest,some]=splitBlock(l,s.tx);
+        if(!some){s.tx.appendChild(rest||l);if(!queue.length)break;}
+        else if(rest)queue.unshift(rest);
+      }else if(queue.length){
+        // the page has room again: as much of the first block pushed out as fits
+        const l=queue.shift(),[rest]=splitBlock(l,s.tx);if(rest)queue.unshift(rest);
+      }
+      if(!queue.length)break;
+      keepHeading();
+      entryEnd(s,en,false);next();
+    }
+    out.forEach((x,k)=>{if(k)x.p.querySelector('.jcont').textContent=(en.title||'（无题）')+' · 续 '+(k+1)+'/'+out.length;});
+    return out.map(x=>x.p);
+  }
+  // as much of block b as fits at the end of tx: a paragraph up to a sentence (a sentence longer than the
+  // page, up to a character), a list or a comic strip up to an item. [what's left for the next page (null:
+  // nothing), whether any of it went on this page]
+  function splitBlock(b,tx){
+    const items=b.matches('ul,ol,.jcomic');
+    if(!items&&b.tagName!=='P')return [b,false];
+    const parts=[];
+    if(items)parts.push(...b.children);
+    else b.childNodes.forEach(n=>{if(n.nodeType===3)(n.data.match(SENTENCE)||[n.data]).forEach(t=>parts.push(document.createTextNode(t)));else parts.push(n);});
+    const head=b.cloneNode(false);tx.appendChild(head);
+    let i=0;
+    for(;i<parts.length;i++){head.appendChild(parts[i]);if(over(tx)){head.removeChild(parts[i]);break;}}
+    if(!items&&i===0&&parts.length&&parts[0].nodeType===3){
+      const t=parts[0].data,tn=document.createTextNode('');head.appendChild(tn);
+      let lo=0,hi=t.length;
+      while(lo<hi){const mid=(lo+hi+1)>>1;tn.data=t.slice(0,mid);if(over(tx))hi=mid-1;else lo=mid;}
+      if(lo){tn.data=t.slice(0,lo);parts[0]=document.createTextNode(t.slice(lo));}else head.removeChild(tn);
+    }
+    const some=head.childNodes.length>0;
+    if(!some)tx.removeChild(head);
+    const left=parts.slice(i);
+    if(!items)while(left.length&&(left[0].nodeName==='BR'||(left[0].nodeType===3&&!left[0].data.trim())))left.shift();
+    if(!left.length)return [null,true];
+    const rest=b.cloneNode(false);left.forEach(n=>rest.appendChild(n));
+    if(b.tagName==='OL'&&some)rest.start=head.start+head.children.length;
+    if(b.matches('.jcomic'))[head,rest].forEach(c=>{c.className=c.className.replace(/\bn\d\b/,'n'+Math.min(c.children.length,4));});
+    return [rest,some];
   }
   function blankPage(side,text){
     const p=el('div','page '+side+' jp empty');
@@ -796,12 +909,15 @@
     // day that also has a diary page opens the diary page
     if(showSamples)days.forEach((p,i)=>p!==contact&&push(p,{label:i%2===0?p.dataset.label:null,date:p===contact?null:sampleDate(days[i-i%2].dataset.label,i%2),sample:true}));
     sortEntries(entries).forEach(en=>{
-      const side=leftNext()?'l':'r',d=parseDate(en.date);
-      // id: the diary page's own link (#e-<id>), for a day with more than one page
-      push(fitText(entryPage(en,side)),{label:side==='l'&&d?(d.mo+'/'+d.d):null,date:d?en.date:null,id:en.id});
+      const d=parseDate(en.date);
+      // id: the diary page's own link (#e-<id>), for a day with more than one page. A page written on over
+      // several (cont: the ones after its first) links, and is on the 时间线, by its first.
+      entryPages(en,leftNext()?'l':'r').forEach((node,k)=>{
+        push(node,{label:k===0&&leftNext()&&d?(d.mo+'/'+d.d):null,date:d?en.date:null,id:en.id,cont:k>0});
+      });
     });
     // the timeline, after the flyleaf: its pages come in pairs, so every page after it keeps its side
-    const dated=pages.slice(tlAt).map((p,i)=>p.date&&!p.sample&&{date:p.date,id:p.id,order:i,locked:p.node.classList.contains('locked'),
+    const dated=pages.slice(tlAt).map((p,i)=>p.date&&!p.sample&&!p.cont&&{date:p.date,id:p.id,order:i,locked:p.node.classList.contains('locked'),
       title:p.node.classList.contains('locked')?'上了锁的一页':((p.node.querySelector('h2')||{}).textContent||'（无题）').replace(/\s+/g,'')}).filter(Boolean);
     if(dated.length){
       const tl=timelinePages(dated).map((node,k)=>({node,label:k===0?'时间线':null}));
@@ -843,5 +959,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();

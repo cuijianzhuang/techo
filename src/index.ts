@@ -53,7 +53,7 @@ const STICKERS = new Set(Object.keys(STICKER_LABELS));
 const MAX_STICKERS = 2;
 
 const LIMITS: Record<string, number> = {
-  title: 30, latin: 60, stamp: 2, aside: 30, body: 4000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30, place: 30, weather: 20,
+  title: 30, latin: 60, stamp: 2, aside: 30, body: 8000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30, place: 30, weather: 20,
 };
 const PHOTO_KEY = /^p\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/;
 /* A page holds up to MAX_PHOTOS photos, kept in the columns that held one: photo_key is their keys joined by
@@ -604,7 +604,7 @@ app.post("/api/admin/ai/suggest", async (c) => {
   const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!o || typeof o !== "object") return bad(c, 400, "请求体必须是 JSON 对象");
   const s = (k: string, max = 4000) => [...(typeof o[k] === "string" ? (o[k] as string).trim() : "")].slice(0, max).join("");
-  const body = s("body");
+  const body = s("body", 8000);
   if (!body) return bad(c, 400, "先写几句正文，再让 AI 补全");
   try {
     const ai = await aiConfig(c.env);

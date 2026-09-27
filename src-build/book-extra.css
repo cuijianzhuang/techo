@@ -258,6 +258,11 @@ html{scrollbar-gutter:stable}
 /* a diary page's words (render.js bodyBlocks): paragraphs, and the sample pages' pieces — a checklist, a
    taped slip, a comic strip, highlighted words. One photo sits beside the words, which run round it. */
 .jp .jtext{display:block}
+/* a page written on over several (entryPages): +++ is only a mark, the pages after the first begin with the
+   title and 续 n/m, and every page but the last ends 接下页 → at its foot */
+.jp .jtext .jbrk{display:none}
+.jp .jcont{margin-top:6px;font-size:17px;color:var(--ink-soft);padding-bottom:4px;border-bottom:1px dashed var(--grid-strong);align-self:flex-start}
+.jp .foot.more{font:400 17px/1 var(--hand);color:var(--ink-soft);text-align:right;padding-top:14px;box-sizing:border-box}
 .jp .jtext>:not(:first-child){margin-top:10px}
 .jp .jtext>.jph{float:right;margin:8px 6px 10px 18px}
 .jp .jtext>.jph+*{margin-top:0}
