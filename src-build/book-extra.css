@@ -131,6 +131,8 @@ html{scrollbar-gutter:stable}
 .nav{display:flex;align-items:center;justify-content:center;gap:6px;margin:16px auto 0;flex-wrap:nowrap;max-width:100%}
 #dots{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;min-width:0}
 #dots::-webkit-scrollbar{display:none}
+#dots .chip{display:inline-grid;place-items:center;padding:7px 12px}
+#dots .chip svg{display:block}
 .nav[hidden]{display:flex;visibility:hidden}
 .nav .sound{margin-left:4px}
 .nav .calbox{position:relative;display:inline-flex}
