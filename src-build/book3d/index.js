@@ -698,6 +698,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     b.onclick = () => openPage(c.page);
     dots.appendChild(b);
   });
+  { const m = T.mapChip(); if (m) dots.appendChild(m); }   // 足迹地图, with a Mapbox token
 
   /* ---------- any day: the calendar in the nav, and a link (#2026-09-27) for every diary page (the 时间线 lines use it) ---------- */
   const dated = pages.map((p, i) => ({ i, date: p.date, sample: p.sample })).filter((d) => d.date);
@@ -738,10 +739,12 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   };
   const arrivalHash = location.hash;                     // read before the cover's own (empty) link replaces it
   window.addEventListener('hashchange', openHash);
+  let shareBtn = null;   // 分享 (made with 放大看, below)
   function chrome() {
     T.dragNote(dragnote, cur === 0 && !fit.portrait);
     const shown = shownPages();
-    [...dots.children].forEach((b) => {
+    if (shareBtn) shareBtn.sync();
+    [...dots.children].filter((b) => 'page' in b.dataset).forEach((b) => {
       const on = +b.dataset.page === 0 ? cur === 0 : shown.some(isTimeline);
       b.setAttribute('aria-current', on ? 'true' : 'false');
       if (on && dots.scrollWidth > dots.clientWidth) dots.scrollLeft = b.offsetLeft - dots.clientWidth / 2 + b.offsetWidth / 2;
@@ -753,7 +756,9 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   // the pages in view: the shut cover, the page looked at on a phone, or the open spread
   const shownPages = () => (cur <= 0 ? [0] : cur >= S ? [N - 1] : fit.portrait ? [side === 'L' ? 2 * cur - 1 : 2 * cur] : [2 * cur - 1, 2 * cur]);
   const readerPages = () => shownPages().map((i) => pages[i] && pages[i].node);
-  $('next').after(T.readerButton(readerPages));
+  const zoom = T.readerButton(readerPages); $('next').after(zoom);
+  // 分享: the diary page in view (/p/<id>)
+  shareBtn = T.shareButton(readerPages); zoom.after(shareBtn);
   $('prev').onclick = prev; $('next').onclick = next;
   nav.appendChild(T.soundButton());
   document.addEventListener('keydown', (e) => {

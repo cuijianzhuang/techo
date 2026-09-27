@@ -495,15 +495,10 @@
     out.setAttribute('aria-label','缩小');inn.setAttribute('aria-label','放大');x.setAttribute('aria-label','关闭');
     bar.append(out,inn,x);box.append(sc,bar);
     // 分享: a diary page's link for sharing (/p/<id>: chat apps show its card), by the phone's share sheet or copied
-    const shared=nodes.find(n=>n.dataset&&n.dataset.id&&n.classList.contains('jp')&&!n.classList.contains('locked'));
+    const shared=sharable(nodes);
     if(shared&&!/^\/admin/.test(location.pathname)){
       const sb=el('button','rd-btn rd-share','分享');sb.type='button';sb.setAttribute('aria-label','分享这一页');
-      sb.onclick=async()=>{
-        const url=location.origin+'/p/'+shared.dataset.id,h=shared.querySelector('h2,.jcont'),title=h?h.textContent:document.title;
-        if(navigator.share){try{await navigator.share({title,url});}catch(e){}return;}
-        try{await navigator.clipboard.writeText(url);sb.textContent='已复制链接';}catch(e){sb.textContent=url;}
-        setTimeout(()=>{sb.textContent='分享';},1800);
-      };
+      sb.onclick=()=>sharePage(shared,t=>{sb.textContent=t||'分享';});
       bar.insertBefore(sb,x);
     }
     // on a touch screen "fit" is barely bigger than the book: say how to get closer (fades by itself)
@@ -729,8 +724,16 @@
   // the nav's 封面 and 时间线: a closed book and a line of days, named for screen readers and on hover
   const CHIP_ICONS={
     cover:'<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.2 1.8h8.1a1.4 1.4 0 0 1 1.4 1.4v9.6a1.4 1.4 0 0 1-1.4 1.4H4.2a1.9 1.9 0 0 1-1.9-1.9V3.7a1.9 1.9 0 0 1 1.9-1.9Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.3 2v12.2M7.6 5.4h3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    map:'<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.6s-4.8-4.3-4.8-8A4.8 4.8 0 0 1 12.8 6.6c0 3.7-4.8 8-4.8 8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="6.5" r="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
     timeline:'<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.6 2v12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 2"/><circle cx="3.6" cy="3.6" r="1.7" fill="currentColor"/><circle cx="3.6" cy="8" r="1.7" fill="currentColor"/><circle cx="3.6" cy="12.4" r="1.7" fill="currentColor"/><path d="M7.4 3.6h6.2M7.4 8h4.6M7.4 12.4h5.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   };
+  // 足迹地图 in the nav, beside 时间线: a way out to /map/, once the journal has a Mapbox token (null without)
+  function mapChip(){
+    if(!site.mapboxToken)return null;
+    const b=el('button','chip mapchip');b.type='button';b.innerHTML=CHIP_ICONS.map;
+    b.setAttribute('aria-label','足迹地图');b.title='足迹地图';b.onclick=()=>{location.href='/map/';};
+    return b;
+  }
   function chipButton(label,icon,page){
     const b=el('button','chip');b.type='button';b.dataset.page=page;
     b.innerHTML=CHIP_ICONS[icon]||'';if(!CHIP_ICONS[icon])b.textContent=label;
@@ -801,6 +804,24 @@
     Object.keys(TONES).forEach(k=>node.classList.remove('pt-'+k));
     if(PAPERS[pattern]&&pattern!=='grid')node.classList.add('pp-'+pattern);
     if(TONES[tone]&&tone!=='cream')node.classList.add('pt-'+tone);
+  }
+  /* 分享 a diary page: its link for sharing (/p/<id>: chat apps show its card, title and first words), by the
+     phone's share sheet, else copied. say(text) shows how it went, say() puts the button back. */
+  const sharable=nodes=>nodes.find(n=>n&&n.dataset&&n.dataset.id&&n.classList.contains('jp')&&!n.classList.contains('locked'))||null;
+  async function sharePage(node,say){
+    const url=location.origin+'/p/'+node.dataset.id,h=node.querySelector('h2,.jcont'),title=h?h.textContent:document.title;
+    if(navigator.share){try{await navigator.share({title,url});}catch(e){}return;}
+    try{await navigator.clipboard.writeText(url);say('已复制链接');}catch(e){say(url);}
+    setTimeout(()=>say(),1800);
+  }
+  // the nav's 分享: the diary page in view (on the cover, the timeline, a sample page … there's none: greyed)
+  function shareButton(pages){
+    const b=el('button','arrow share');b.type='button';
+    const icon='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 6.2H4a1.6 1.6 0 0 0-1.6 1.6v5.4A1.6 1.6 0 0 0 4 14.8h8a1.6 1.6 0 0 0 1.6-1.6V7.8A1.6 1.6 0 0 0 12 6.2h-1.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10V1.6M5.2 4.2 8 1.4l2.8 2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';b.innerHTML=icon;
+    b.setAttribute('aria-label','分享这一页');b.title='分享这一页（发到微信、Telegram 会带预览卡片）';
+    b.sync=()=>{b.disabled=!sharable(pages());};
+    b.onclick=()=>{const n=sharable(pages());if(n)sharePage(n,t=>{if(t){b.textContent=t;b.classList.add('said');}else{b.innerHTML=icon;b.classList.remove('said');}});};
+    return b;
   }
   function readerButton(pages){
     const b=el('button','arrow zoomin');b.type='button';
@@ -1025,5 +1046,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();
