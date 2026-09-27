@@ -177,7 +177,8 @@ export async function start() {
   // A phone (narrow stage) shows one page at a time, big enough to read; wider screens show the spread.
   const PORTRAIT = 640, SPAN_H = H + 2 * OH + 40;
   const spanW = (width) => (width < PORTRAIT ? W + 2 * OH + 30 : 2 * (W + OH) + 30);
-  const bookHeight = (width) => Math.max(200, Math.round(Math.min(window.innerHeight - 140, width * SPAN_H / spanW(width))));
+  const BOOK_RESERVE = 108;   // the nav and its hint under the book (the .stage rule in book-extra.css)
+  const bookHeight = (width) => Math.max(200, Math.round(Math.min(window.innerHeight - BOOK_RESERVE, width * SPAN_H / spanW(width))));
   host.style.height = bookHeight(stage.getBoundingClientRect().width) + 'px';
   document.body.classList.add('is-3d');
   stage.appendChild(host);
@@ -201,7 +202,9 @@ export async function start() {
     const node = pages[i].node, state = drawState(node), cached = tex.get(i);
     if (cached && cached.state === state) return cached.promise;
     const entry = { texture: cached && cached.texture, promise: null, state };   // the old one shows until the new is ready
-    entry.promise = rasterize(node, 2, state === 'done').then((canvas) => {
+    // sharp at the size the page is shown: twice its size, more for a big book on a sharp screen (up to 3×)
+    const k = Math.min(3, Math.max(2, Math.ceil((fit.px || 1) * (window.devicePixelRatio || 1) * 2) / 2));
+    entry.promise = rasterize(node, k, state === 'done').then((canvas) => {
       if (cached && cached.texture && cached.texture !== entry.texture) cached.texture.dispose();
       const t = new CanvasTexture(canvas);
       t.colorSpace = NoColorSpace;
@@ -795,7 +798,11 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     if (pe) blockMat.uniforms.color.value.copy(new Color(pe).convertLinearToSRGB());
     for (const t of tex.values()) t.state = 'stale';
     invalidate();
-    await ready([0, 1, N - 2, N - 1, ...shownPages()]).catch(() => {});
+    // The pages at rest are live, already in the new colours: their pictures (only needed to turn them) are
+    // redrawn a moment later, while nothing's happening, not in the middle of the switch; a turn before then
+    // waits for the ones it needs (ready).
+    await new Promise((r) => setTimeout(r, 900));
+    await ready(shownPages()).catch(() => {});
     if (!busy && !drag) layout(restState(cur));
     invalidate(); warm(cur ? 2 * cur - 1 : 0);
   });
