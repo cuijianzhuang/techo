@@ -183,14 +183,4 @@
     if(e.key==='ArrowRight'){e.preventDefault();pf.flipNext();}
     if(e.key==='ArrowLeft'){e.preventDefault();pf.flipPrev();}
   });
-
-  // copy e-mail
-  const btn=$('copyBtn'),mailEl=$('mail');
-  if(btn&&mailEl)btn.addEventListener('click',ev=>{
-    ev.stopPropagation();
-    const t=mailEl.textContent.trim();
-    const done=()=>{btn.textContent='已复制';setTimeout(()=>btn.textContent='复制',1600);};
-    const sel=()=>{const r=document.createRange();r.selectNodeContents(mailEl);const s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='已选中，按 Ctrl+C';};
-    try{navigator.clipboard.writeText(t).then(done,sel);}catch(err){sel();}
-  });
 })();
