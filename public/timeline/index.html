@@ -11,7 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
 <!-- Every diary page on one strip of desk, newest first: the book's paper, grid, fonts and colours. Each day
-     opens the book at that page (/#YYYY-MM-DD). Filled by /assets/timeline.js. -->
+     opens the book at that page (/#YYYY-MM-DD). Filled by /assets/timeline.js. The paper follows 手帐设置 →
+     纸张: its colour from /assets/paper.css (a pt-<tone> class on <html>, after these styles so it wins), its
+     pattern below (pp-<pattern>). -->
 <style>
 :root{
   --desk:#e8e6e1;--desk-ink:#6d6a63;--desk-strong:#2a2724;
@@ -92,6 +94,11 @@ h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-
 .tl-stk{display:flex;gap:4px;margin-top:6px}
 .tl-stk svg{width:30px;height:30px}
 
+/* the paper's pattern (手帐设置 → 纸张): 横线 a ruled line every two squares, 点阵 a dot where they'd cross, 空白 none */
+.pp-lined .tl-card{background-image:linear-gradient(var(--grid) 1px,transparent 1px);background-size:100% 28px;background-position:0 -1px}
+.pp-dots .tl-card{background-image:radial-gradient(circle,var(--grid-strong) 1.1px,transparent 1.5px);background-position:-8px -8px}
+.pp-plain .tl-card{background-image:none}
+
 /* a photo: a little print taped on */
 .tl-ph{position:relative;margin:2px 2px 0 0;width:84px;height:84px;padding:4px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.16);transform:rotate(3deg)}
 .tl-ph img{display:block;width:100%;height:100%;object-fit:cover;background:#eee}
@@ -125,6 +132,7 @@ h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-
   .tl-end::before{left:4px}
 }
 </style>
+<link rel="stylesheet" href="/assets/paper.css">
 </head>
 <body>
 <header class="tl-top">

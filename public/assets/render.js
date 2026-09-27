@@ -239,6 +239,7 @@
   function entryShell(en,side,first){
     const dt=parseDate(en.date)||parseDate(todayStr());
     const p=el('div','page '+side+' jp'+(first?'':' cont'));
+    if(en.id)p.dataset.id=en.id;          // for 放大看's 分享 (/p/<id>)
     const h=dateHead(dt,first?en.aside:null,en);
     const b=el('div','body');
     const tx=el('div','jtext');
@@ -260,6 +261,7 @@
     });
     if(shots.length>1){const row=el('div','jphs n'+shots.length);shots.forEach(f=>row.appendChild(f));b.appendChild(row);}
     if(shots.length===1)tx.appendChild(shots[0]);
+    const map=pageMap(en);if(map)tx.appendChild(map);
     b.appendChild(tx);
     return finish();
     function finish(){
@@ -492,6 +494,18 @@
     out.type=inn.type=x.type='button';
     out.setAttribute('aria-label','缩小');inn.setAttribute('aria-label','放大');x.setAttribute('aria-label','关闭');
     bar.append(out,inn,x);box.append(sc,bar);
+    // 分享: a diary page's link for sharing (/p/<id>: chat apps show its card), by the phone's share sheet or copied
+    const shared=nodes.find(n=>n.dataset&&n.dataset.id&&n.classList.contains('jp')&&!n.classList.contains('locked'));
+    if(shared&&!/^\/admin/.test(location.pathname)){
+      const sb=el('button','rd-btn rd-share','分享');sb.type='button';sb.setAttribute('aria-label','分享这一页');
+      sb.onclick=async()=>{
+        const url=location.origin+'/p/'+shared.dataset.id,h=shared.querySelector('h2,.jcont'),title=h?h.textContent:document.title;
+        if(navigator.share){try{await navigator.share({title,url});}catch(e){}return;}
+        try{await navigator.clipboard.writeText(url);sb.textContent='已复制链接';}catch(e){sb.textContent=url;}
+        setTimeout(()=>{sb.textContent='分享';},1800);
+      };
+      bar.insertBefore(sb,x);
+    }
     // on a touch screen "fit" is barely bigger than the book: say how to get closer (fades by itself)
     const tip=window.matchMedia&&matchMedia('(pointer: coarse)').matches?el('div','rd-tip','双击页面放大，双指也可以'):null;
     if(tip)box.appendChild(tip);
@@ -723,6 +737,54 @@
     b.setAttribute('aria-label',label);b.title=label;
     return b;
   }
+  /* The journal's settings the pages are drawn with (loadBook sets them; the admin's preview too). */
+  let site={};
+  function useSite(s){site=s||{};}
+  /* Mapbox (手帐设置 → 地图): the GL library, loaded once when a map is wanted, and the little map on a
+     page (a Static Images API picture, pinned where the page was written). Nothing without a token. */
+  const MAPBOX_GL='https://api.mapbox.com/mapbox-gl-js/v3.31.0/';
+  let glReady=null;
+  function mapbox(token){
+    if(!token)return Promise.reject(new Error('还没有配置 Mapbox token'));
+    if(!glReady)glReady=new Promise((res,rej)=>{
+      const css=document.createElement('link');css.rel='stylesheet';css.href=MAPBOX_GL+'mapbox-gl.css';document.head.appendChild(css);
+      const s=document.createElement('script');s.src=MAPBOX_GL+'mapbox-gl.js';
+      s.onload=()=>window.mapboxgl?res(window.mapboxgl):rej(new Error('Mapbox 没加载上'));
+      s.onerror=()=>{glReady=null;rej(new Error('Mapbox 没加载上（网络？）'));};
+      document.head.appendChild(s);
+    });
+    return glReady.then(gl=>{gl.accessToken=token;return gl;});
+  }
+  const night=()=>document.documentElement.getAttribute('data-theme')==='dark';
+  /* 夜间书页: data-theme="dark" while the system is in dark mode (unless the journal says off), which darkens
+     the paper (paper.css). A change while reading: the pages follow; 'techo-theme' tells a book to redraw. */
+  let themeWatch=null;
+  function nightTheme(S){
+    const root=document.documentElement,mq=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)');
+    const apply=()=>{
+      const want=S.nightPaper!=='off'&&!!mq&&mq.matches,was=night();
+      if(want)root.setAttribute('data-theme','dark');else if(was)root.removeAttribute('data-theme');
+      return want!==was;
+    };
+    apply();
+    if(mq&&mq.addEventListener&&!themeWatch){themeWatch=()=>{if(apply())document.dispatchEvent(new Event('techo-theme'));};mq.addEventListener('change',themeWatch);}
+  }
+  const mapStyle=()=>night()?'dark-v11':'light-v11';
+  function geoOf(en){const m=/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.exec((en&&en.geo)||'');return m?[+m[1],+m[2]]:null;}
+  function staticMap(la,lo,w,h,zoom){
+    return 'https://api.mapbox.com/styles/v1/mapbox/'+mapStyle()+'/static/pin-s+d9573b('+lo+','+la+')/'+lo+','+la+','+(zoom||12)+',0/'+w+'x'+h+'@2x?logo=false&attribution=false&access_token='+encodeURIComponent(site.mapboxToken);
+  }
+  // the little map on a page: a snapshot taped on like a photo, the place under it (and whose map it is)
+  function pageMap(en){
+    const g=geoOf(en);
+    if(!g||!site.mapboxToken||site.mapOnPage==='hide')return null;
+    const f=el('figure','jph jmap'),img=el('img');
+    img.alt=en.place?'地图：'+en.place:'地图';img.decoding='async';img.loading='lazy';img.src=staticMap(g[0],g[1],180,135);
+    f.append(el('div','tape'),img,el('figcaption','cap',en.place||''),el('small','jmap-by','© Mapbox © OSM'));
+    f.style.setProperty('--tilt','2.5deg');
+    return f;
+  }
+
   /* the cover styles (手帐设置 → 封面款式): a cv-<key> class on the covers and endpapers, their colours in
      book-extra.css. slate is the built-in one (no class). */
   const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面'};
@@ -788,6 +850,8 @@
       // the same days as cards, with their words, doodles and photos: the timeline page (/timeline/)
       const all=el('a','tlp-all','整页看 →');all.href='/timeline/';
       const left=el('span');left.append('点一行，翻到那一天 · ',all);
+      // where they were written: the map page (/map/), when there's a Mapbox token
+      if(site.mapboxToken){const mp=el('a','tlp-all','地图 →');mp.href='/map/';left.append(' · ',mp);}
       f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;
@@ -829,6 +893,8 @@
     const gh=src.querySelector('#gh');
     if(gh){const ok=/^https:\/\//i.test(settings.github||'');gh.href=ok?settings.github:'https://github.com/';
       gh.textContent=settings.githubText||(ok?settings.github.replace(/^https:\/\//i,''):'github.com/你的用户名');}
+    useSite(settings);
+    nightTheme(settings);
     applySettings(settings);
     // wait for the handwriting fonts so text fitting measures the real glyphs
     if(document.fonts&&document.fonts.ready)await Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,2500))]);
@@ -959,5 +1025,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();

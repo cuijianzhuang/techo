@@ -221,6 +221,7 @@
         sect('加密','给整本手帐设一个口令。',[lockField('book')]),
         sect('翻页方式','首页的书怎么翻。',[bookModeField()]),
         sect('示例页',null,[samplesField()]),
+        sect('地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]),
         sect('AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]),
         sect('联系方式','显示在「写信给我」那一页。',[
           field('邮箱','email','email',{ph:'you@example.com',max:120}),
@@ -267,6 +268,15 @@
     see.onclick=()=>{const ps=T.entryPages(draft,'r');T.reader(ps);ps.forEach(p=>p.remove());};
     // deleting is rare: at the foot of the page, not in the bar
     const danger=el('div','bar danger');
+    // a published page's link for sharing: chat apps show its card, title and first words
+    const saved=sel!=='new'&&entries.find(e=>e.id===sel);
+    if(saved&&saved.status==='published'){
+      const url=location.origin+'/p/'+saved.id,sh=el('span','sharelink');
+      const cp=el('button','b small','复制分享链接');cp.type='button';
+      cp.onclick=()=>{const t=cp.textContent;navigator.clipboard.writeText(url).then(()=>{cp.textContent='已复制';setTimeout(()=>{cp.textContent=t;},1500);},()=>status(url));};
+      sh.append(cp,el('span','hintx',saved.locked||dayLocks.has(saved.date)||bookLocked?'上了锁：分享出去只看得到「上了锁的一页」':url));
+      danger.appendChild(sh);
+    }
     if(sel!=='new'){
       const del=el('button','b warn small','删除这一页');del.type='button';
       del.onclick=()=>{
@@ -356,6 +366,18 @@
     f.appendChild(statusEl);
     main.appendChild(f);
   }
+  /* The page's share card (/p/<id>): drawn here, as the book draws the page, and uploaded. Only for a page
+     that's out and not locked (a locked one shares nothing); quietly, as the page is already saved. */
+  let cardLib=null;
+  async function refreshCard(en){
+    if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
+    try{
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      const lib=await cardLib,page=T.entryPages(en,'r')[0];
+      const blob=await lib.make(page,en,settings);page.remove();
+      await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
+    }catch(e){console.warn('techo: share card',e);}
+  }
   /* publish a draft from the list of them, as it is */
   async function publish(en,btn){
     if(busy)return;busy=true;btn.disabled=true;status('正在发布……');
@@ -363,6 +385,7 @@
       const r=await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(en.id),stripLocal(Object.assign({},en,{status:'published'})));
       const i=entries.findIndex(e=>e.id===en.id);r.entry.locked=en.locked;if(i>=0)entries[i]=r.entry;
       busy=false;drawList();drawForm();status('「'+(r.entry.title||'（无题）')+'」已发布，主页刷新就能看到。','ok');
+      refreshCard(r.entry);
     }catch(e){btn.disabled=false;status(e.message||'没发布成功','err');}
     finally{busy=false;}
   }
@@ -485,6 +508,11 @@
       g.append(l,w);return g;
     };
     wrap.append(group('纹路','paperStyle',T.PAPERS,'pattern'),group('纸色','paperTone',T.TONES,'tone'));
+    // 夜间书页: the paper darkens with the system's dark mode
+    const nl=el('label','check1'),nb=el('input');nb.type='checkbox';nb.id='f-nightPaper';nb.checked=draft.nightPaper!=='off';
+    nb.onchange=()=>{draft.nightPaper=nb.checked?'auto':'off';changed();};
+    nl.append(nb,el('span',null,'夜间书页：系统是深色模式时，纸页也变暗'));
+    wrap.append(nl,el('div','hintx','关掉的话，深色模式下只有桌面变暗，纸还是白天的样子。'));
     repaint();return wrap;
   }
   function coverStickerField(){
@@ -630,6 +658,18 @@
     w.append(pick,row,key,acts);
     return w;
   }
+  /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
+  function mapField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    w.appendChild(field('Mapbox access token','mapboxToken','text',{ph:'pk.eyJ1Ijoi…',max:300,
+      hint:'用公开的 token（pk. 开头）：在 account.mapbox.com 的 Tokens 里新建一个，URL restrictions 填你的域名，别人拿去也用不了。留空就没有地图。'}));
+    const l=el('label','check1');
+    const cb=el('input');cb.type='checkbox';cb.id='f-mapOnPage';cb.checked=draft.mapOnPage!=='hide';
+    cb.onchange=()=>{draft.mapOnPage=cb.checked?'show':'hide';changed();};
+    l.append(cb,el('span',null,'有坐标的日记页上贴一张小地图'));
+    w.appendChild(l);
+    return w;
+  }
   function samplesField(){
     const l=el('label','check1');
     const cb=el('input');cb.type='checkbox';cb.id='f-samples';cb.checked=draft.samples!=='hide';
@@ -759,7 +799,20 @@
     const lo=Math.round(d.temperature_2m_min[0]),hi=Math.round(d.temperature_2m_max[0]);
     return (WMO[code]||'—')+' '+(lo===hi?hi:lo+'~'+hi)+'°';
   }
+  // a place's name, "城市 · 附近": from Mapbox when there's a token (streets and landmarks, in Chinese), else
+  // from BigDataCloud (free, no key)
   async function placeAt(lat,lon){
+    if(settings.mapboxToken){
+      try{
+        const r=await fetch('https://api.mapbox.com/search/geocode/v6/reverse?longitude='+lon+'&latitude='+lat+'&language=zh&limit=1&access_token='+encodeURIComponent(settings.mapboxToken));
+        const f=r.ok&&((await r.json()).features||[])[0];
+        const c=f&&f.properties&&f.properties.context||{},nm=x=>(x&&x.name||'').trim();
+        const city=(nm(c.place)||nm(c.region)||nm(c.country)).replace(/市$/,'');
+        const near=(nm(c.locality)||nm(c.neighborhood)||nm(c.street)).replace(/(街道|镇|乡)$/,'');
+        const name=city&&near&&near!==city?city+' · '+near:city||near;
+        if(name)return [...name].slice(0,30).join('');
+      }catch(e){/* fall back */}
+    }
     const r=await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+lat+'&longitude='+lon+'&localityLanguage=zh');
     if(!r.ok)return '';
     const j=await r.json();
@@ -781,6 +834,33 @@
     const go=el('button','b small','📍 获取位置和天气');go.type='button';
     const wx=el('button','b small','按坐标查天气');wx.type='button';
     acts.append(go,wx);r2.appendChild(acts);
+    // 在地图上选: a Mapbox map under the coordinates; a click or dragging the pin sets them, the place and that
+    // day's weather
+    const pickBox=el('div','mappick');pickBox.hidden=true;
+    if(settings.mapboxToken){
+      const mp=el('button','b small','🗺 在地图上选');mp.type='button';acts.appendChild(mp);
+      let map=null,pin=null;
+      mp.onclick=async()=>{
+        pickBox.hidden=!pickBox.hidden;mp.setAttribute('aria-pressed',String(!pickBox.hidden));
+        if(pickBox.hidden||map)return;
+        try{
+          const gl=await T.mapbox(settings.mapboxToken),c=coords();
+          map=new gl.Map({container:pickBox,style:'mapbox://styles/mapbox/streets-v12',center:c?[c[1],c[0]]:[116.4,35],zoom:c?11:3.2,language:'zh-Hans'});
+          map.addControl(new gl.NavigationControl({showCompass:false}),'top-right');
+          pin=new gl.Marker({color:'#d9573b',draggable:true});
+          if(c)pin.setLngLat([c[1],c[0]]).addTo(map);
+          const pick=ll=>run(mp,async()=>{
+            pin.setLngLat(ll).addTo(map);
+            const la=+ll.lat.toFixed(2),lo=+ll.lng.toFixed(2);set('geo',la+','+lo);
+            const [name,w]=await Promise.all([placeAt(ll.lat,ll.lng).catch(()=>''),weatherOn(draft.date,la,lo).catch(()=>'')]);
+            if(name)set('place',name);if(w)set('weather',w);
+            status('已按地图上的位置填好'+(name?'地点':'坐标')+(w?'和天气':'')+'，记得保存。','ok');
+          });
+          map.on('click',e=>pick(e.lngLat));
+          pin.on('dragend',()=>pick(pin.getLngLat()));
+        }catch(e){pickBox.hidden=true;status(e.message,'err');}
+      };
+    }
     const set=(k,v)=>{draft[k]=v;const i=$('f-'+k);if(i)i.value=v;};
     const coords=()=>{const m=/^\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(draft.geo||'');return m?[+m[1],+m[2]]:null;};
     async function run(btn,fn){
@@ -800,7 +880,7 @@
       if(!T.parseDate(draft.date))throw new Error('先填日期');
       set('weather',await weatherOn(draft.date,c[0],c[1]));status('已按坐标查到 '+draft.date+' 的天气，记得保存。','ok');
     });
-    wrap.append(h,row,r2,el('span','hintx','坐标只保留两位小数（大约 1 公里），因为手帐是公开的。天气按这一页的日期查。'));
+    wrap.append(h,row,r2,pickBox,el('span','hintx','坐标只保留两位小数（大约 1 公里），因为手帐是公开的。天气按这一页的日期查。'));
     return wrap;
   }
 
@@ -933,29 +1013,92 @@
         const files=[...(inp.files||[])].slice(0,MAX_PHOTOS-list.length);if(!files.length)return;
         fb.firstChild.textContent='上传中……';status('正在压缩并上传照片……');
         try{
+          let info=null;
           for(const file of files){
+            info=info||await exifOf(file).catch(()=>null);
             const blob=await shrink(file);
             const r=await api('/api/admin/photos',{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
             list.push({key:r.key,cap:'',url:URL.createObjectURL(blob)});
           }
-          syncFirst();drawForm();changed();status('照片已上传，记得保存这一页。','ok');
+          const said=await fromPhoto(info);
+          syncFirst();drawForm();changed();
+          status(said.length?'照片已上传，按照片的拍摄信息填好了'+said.join('、')+'，记得保存这一页。':'照片已上传，记得保存这一页。','ok');
         }catch(e){syncFirst();drawForm();changed();status(e.message||'照片上传失败','err');}
       });
     }
     return wrap;
   }
-  /* shrink big photos (NAS originals) to 1600px JPEG before upload */
+  /* photos go up redrawn (big NAS originals shrunk to 1600px JPEG): never as they came, since a camera's EXIF
+     (where it was taken, to the metre) would be public with them. What the admin wants from it is read before
+     (exifOf). */
   async function shrink(file,max=1600,keepAlpha=false){
     if(file.type==='image/gif')return file;
     let bmp;
     try{bmp=await createImageBitmap(file);}catch(e){throw new Error('这个格式浏览器打不开，请换成 JPG 或 PNG');}
     const k=Math.min(1,max/Math.max(bmp.width,bmp.height));
-    if(k===1&&file.size<1.5e6&&/^image\/(jpeg|png|webp)$/.test(file.type))return file;
     const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
     c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
     // cover stickers keep a transparent background: re-encode PNG / WebP as PNG, not JPEG
     const out=keepAlpha&&/^image\/(png|webp)$/.test(file.type)?['image/png']:['image/jpeg',0.86];
     return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('压缩失败')),...out));
+  }
+
+  /* When and where a JPEG was taken, from its EXIF: {date:'YYYY-MM-DD', lat, lon} (either may be missing), or
+     null. Only the start of the file is read; anything unexpected is simply no answer. */
+  async function exifOf(file){
+    if(!/jpe?g/i.test(file.type||file.name))return null;
+    const v=new DataView(await file.slice(0,262144).arrayBuffer());
+    if(v.byteLength<4||v.getUint16(0)!==0xFFD8)return null;
+    let o=2;
+    while(o+4<=v.byteLength){
+      const mk=v.getUint16(o),len=v.getUint16(o+2);
+      if((mk&0xFF00)!==0xFF00||mk===0xFFDA)return null;
+      if(mk===0xFFE1&&o+10<=v.byteLength&&v.getUint32(o+4)===0x45786966)return tiff(v,o+10);   // "Exif"
+      o+=2+len;
+    }
+    return null;
+  }
+  function tiff(v,t){
+    const le=v.getUint16(t)===0x4949,u16=p=>v.getUint16(p,le),u32=p=>v.getUint32(p,le);
+    // an IFD's entries: tag → [type, count, where its value is]
+    const ifd=at=>{
+      const m=new Map();if(!at||t+at+2>v.byteLength)return m;
+      const n=u16(t+at);
+      for(let i=0;i<n;i++){
+        const e=t+at+2+i*12;if(e+12>v.byteLength)break;
+        const type=u16(e+2),count=u32(e+4),size=({1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8})[type]||1;
+        m.set(u16(e),[type,count,count*size>4?t+u32(e+8):e+8]);
+      }
+      return m;
+    };
+    const ascii=x=>{if(!x)return '';let s='';for(let i=0;i<x[1]&&x[2]+i<v.byteLength;i++){const c=v.getUint8(x[2]+i);if(!c)break;s+=String.fromCharCode(c);}return s;};
+    const num=x=>(x[0]===3?u16(x[2]):u32(x[2]));
+    const rats=x=>{const r=[];for(let i=0;i<x[1]&&x[2]+i*8+8<=v.byteLength;i++){const d=u32(x[2]+i*8+4);r.push(d?u32(x[2]+i*8)/d:0);}return r;};
+    const ifd0=ifd(u32(t+4));
+    const ex=ifd0.has(0x8769)?ifd(num(ifd0.get(0x8769))):new Map();
+    const gps=ifd0.has(0x8825)?ifd(num(ifd0.get(0x8825))):new Map();
+    const out={};
+    const dm=/^(\d{4}):(\d{2}):(\d{2})/.exec(ascii(ex.get(0x9003))||ascii(ex.get(0x9004))||ascii(ifd0.get(0x0132)));
+    if(dm&&dm[1]!=='0000')out.date=dm[1]+'-'+dm[2]+'-'+dm[3];
+    const deg=(ref,val)=>{if(!gps.has(val))return null;const [d,m,s]=rats(gps.get(val));const x=(d||0)+(m||0)/60+(s||0)/3600;return /[SW]/.test(ascii(gps.get(ref)))?-x:x;};
+    const la=deg(1,2),lo=deg(3,4);
+    if(la!=null&&lo!=null&&(la||lo)&&Math.abs(la)<=90&&Math.abs(lo)<=180){out.lat=la;out.lon=lo;}
+    return out.date||out.lat!=null?out:null;
+  }
+  /* what a photo knows, onto the page: its day (a new page still on today's date takes it), and where it was
+     taken with that day's weather, for a page without a place yet. Only what's still empty; nothing saved. */
+  async function fromPhoto(info){
+    const said=[];
+    if(!info)return said;
+    if(info.date&&sel==='new'&&draft.date===T.todayStr()&&info.date<draft.date){draft.date=info.date;said.push('日期');}
+    if(info.lat!=null&&!draft.place&&!draft.geo){
+      const la=+info.lat.toFixed(2),lo=+info.lon.toFixed(2);
+      draft.geo=la+','+lo;said.push('坐标');
+      const [name,w]=await Promise.all([placeAt(info.lat,info.lon).catch(()=>''),draft.weather?'':weatherOn(draft.date,la,lo).catch(()=>'')]);
+      if(name){draft.place=name;said.push('地点');}
+      if(w){draft.weather=w;said.push('天气');}
+    }
+    return said;
   }
 
   /* ---------- save / delete ---------- */
@@ -973,7 +1116,7 @@
     try{
       if(sel==='settings'){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
-        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);
+        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
         drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
@@ -993,6 +1136,7 @@
         draft.photos=(en.photos||[]).map(p=>Object.assign({},p,urls.has(p.key)?{url:urls.get(p.key)}:{}));
         base=JSON.stringify(stripLocal(draft));
         drawList();drawForm();status((en.status==='draft'?'已存为草稿，主页上还看不到':'已发布，主页刷新就能看到')+lockNote+'。',lockNote.includes('没成功')?'err':'ok');
+        refreshCard(en);
       }
       return true;
     }catch(e){
@@ -1022,6 +1166,7 @@
       // all the settings, the AI's too (the public /api/settings leaves those out)
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/admin/settings')]);
       entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);bookLocked=!!e.bookLocked;
+      T.useSite(settings);   // the preview draws pages as the book does (the little map needs the Mapbox token)
       entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();
     }catch(err){

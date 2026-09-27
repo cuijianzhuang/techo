@@ -10,7 +10,7 @@
     "db:init:remote": "wrangler d1 execute techo-db --remote --file=schema.sql",
     "typecheck": "tsc --noEmit",
     "build:pages": "python3 src-build/build.py",
-    "build:3d": "esbuild src-build/book3d/index.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=public/assets/book3d.js"
+    "build:3d": "esbuild src-build/book3d/index.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=public/assets/book3d.js && esbuild src-build/card.js --bundle --format=iife --minify --target=es2020 --legal-comments=eof --outfile=public/assets/card.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

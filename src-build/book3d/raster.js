@@ -6,7 +6,7 @@
    - fonts: only the Google Fonts slices whose unicode-range covers characters on this page (the Chinese
      handwriting fonts come in ~100–200 slices of ~40KB; a page needs a handful). Each slice is fetched once.
    - <use href="#mug">: the shared symbol's drawing is copied in.
-   - <img src="/img/…">: fetched and turned into a data URL.
+   - <img src="/img/…"> (and a page's little Mapbox map): fetched and turned into a data URL.
    3D pages are captured with their complete content so the live and moving versions match. */
 
 export const PAGE_W = 530, PAGE_H = 740;
@@ -103,7 +103,8 @@ async function inlineImages(root) {
   await Promise.all([...root.querySelectorAll('img')].map(async (img) => {
     const src = img.getAttribute('src');
     if (!src || src.startsWith('data:')) return;
-    img.setAttribute('src', await dataURL(new URL(src, location.href).href));
+    // a picture that can't be fetched (another site's, a network hiccup) is left blank, not the whole page
+    try { img.setAttribute('src', await dataURL(new URL(src, location.href).href)); } catch { img.removeAttribute('src'); }
   }));
 }
 

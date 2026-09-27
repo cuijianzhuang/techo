@@ -194,6 +194,10 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 /* 地点和天气 (admin.js placeField) */
 .admin .placefield{display:grid;gap:8px}
 .admin .place-row{align-items:end}
+.admin .sharelink{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.admin .sharelink .hintx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin .mappick{height:280px;border-radius:10px;overflow:hidden;border:1px solid #d9d3c3}
+.admin .mappick[hidden]{display:none}
 /* fields side by side: a taller neighbour (a two-line hint) mustn't stretch this one's input */
 .admin .row>label{align-content:start}
 

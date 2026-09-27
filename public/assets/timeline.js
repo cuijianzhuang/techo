@@ -30,6 +30,10 @@
     return;
   }
   if(settings.siteTitle)document.title='时间线 · '+settings.siteTitle;
+  T.paperStyle(document.documentElement,settings.paperStyle,settings.paperTone);   // 纸张: the cards are the book's paper
+  T.nightTheme(settings);                                                           // (evening paper in dark mode)
+  // where they were written: the map page, when the journal has a Mapbox token
+  if(settings.mapboxToken){const a=el('a','tl-back','足迹地图 →');a.href='/map/';a.style.marginLeft='14px';document.querySelector('.tl-back').after(a);}
   if(!entries.length){say('还没有写下的日子。','去手帐看看');return;}
 
   entries=T.sortEntries(entries).reverse();
