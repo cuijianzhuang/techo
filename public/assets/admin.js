@@ -119,7 +119,7 @@
   }
 
   /* ---------- form ---------- */
-  let pvbox=null,statusEl=null;
+  let pvbox=null,pvcap=null,pvAt=0,pvT=0,statusEl=null;
   function status(msg,kind){if(statusEl){statusEl.textContent=msg||'';statusEl.className='status'+(kind?' '+kind:'');}}
   function field(label,key,type,opts){
     opts=opts||{};
@@ -138,7 +138,8 @@
     return l;
   }
   function changed(){
-    drawPreview();
+    // laying a long page out over several takes a moment: not on every keystroke
+    clearTimeout(pvT);pvT=setTimeout(drawPreview,150);
     const d=dirty();
     status(d?'有改动还没保存（⌘/Ctrl+S 保存）':'');
     const a=main.querySelector('.actbar');if(a)a.classList.toggle('dirty',!!d);
@@ -146,8 +147,16 @@
   function drawPreview(){
     if(!pvbox||!draft||sel==='settings')return;
     pvbox.textContent='';
-    const p=T.fitText(T.entryPage(draft,'r'));
-    pvbox.appendChild(p);
+    // as it will be in the book: as many pages as it takes, one at a time with ‹ › when there are more
+    const ps=T.entryPages(draft,'r');
+    pvAt=Math.min(pvAt,ps.length-1);
+    ps.forEach((p,i)=>{if(i===pvAt)pvbox.appendChild(p);else p.remove();});
+    if(!pvcap)return;
+    pvcap.textContent='';
+    if(ps.length<2){pvcap.append('预览 · 保存后会按日期排进手帐');return;}
+    const go=(d,t)=>{const b=el('button','pvgo',t);b.type='button';b.disabled=pvAt+d<0||pvAt+d>=ps.length;
+      b.setAttribute('aria-label',d<0?'上一页':'下一页');b.onclick=()=>{pvAt+=d;drawPreview();};return b;};
+    pvcap.append(go(-1,'‹'),' 第 '+(pvAt+1)+' / '+ps.length+' 页（一页写不下，接着往后排）',go(1,'›'));
   }
   /* a group of fields: a card with a title. fold: folded away until opened, its title saying what's in it */
   function card(title,nodes,opt){
@@ -174,7 +183,7 @@
     return h;
   }
   function drawForm(){
-    main.textContent='';pvbox=null;statusEl=el('div','status');
+    main.textContent='';pvbox=null;pvcap=null;pvAt=0;statusEl=el('div','status');
     document.body.classList.toggle('detail',!!sel);
     if(sel==='jots'){drawJots();return;}
     if(!sel||!draft){drawHome();return;}
@@ -255,7 +264,7 @@
     s2.onclick=()=>{draft.status='draft';save();};
     // on a narrow screen the page isn't beside the form: open it big (Techo.reader)
     const see=el('button','b pvbtn','预览');see.type='button';
-    see.onclick=()=>{const p=T.fitText(T.entryPage(draft,'r'));T.reader([p]);p.remove();};
+    see.onclick=()=>{const ps=T.entryPages(draft,'r');T.reader(ps);ps.forEach(p=>p.remove());};
     // deleting is rare: at the foot of the page, not in the bar
     const danger=el('div','bar danger');
     if(sel!=='new'){
@@ -272,7 +281,8 @@
     }
     f.append(danger,actBar([s,s2,see]));
     const pv=el('div','pv');pvbox=el('div','pvbox');
-    pv.append(pvbox,el('div','pvcap','预览 · 保存后会按日期排进手帐'));
+    pvcap=el('div','pvcap');
+    pv.append(pvbox,pvcap);
     main.append(f,pv);drawPreview();fitPreview(pv);
     if(sel==='new')setTimeout(()=>{const t=$('f-title');if(t)t.focus();},0);
   }
@@ -801,7 +811,7 @@
   function mdField(){
     const wrap=el('div','mdfield');
     const lab=el('label','sr',null);lab.textContent='正文';lab.htmlFor='f-body';
-    const ta=el('textarea');ta.id='f-body';ta.rows=12;ta.maxLength=4000;ta.value=draft.body||'';ta.spellcheck=false;
+    const ta=el('textarea');ta.id='f-body';ta.rows=12;ta.maxLength=8000;ta.value=draft.body||'';ta.spellcheck=false;
     const on=()=>{draft.body=ta.value;changed();};
     ta.addEventListener('input',on);
     // replace [a, b) with text, then select [sa, sb) (offsets from a)
@@ -848,6 +858,7 @@
       ['🔗','链接（⌘/Ctrl+K）',()=>{const [a,b,v]=sel(),t=v.slice(a,b)||'文字';put(a,b,'['+t+'](https://)',t.length+3,t.length+11);}],
       ['—','分隔线',()=>block('---')],
       ['▦','漫画格',()=>block('@09:00 做什么：说的话 #laptop',7,14)],
+      ['⤓','换页：后面的字从下一页写起',()=>block('+++\n')],   // the caret on the line after, ready to write on
     ];
     const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
     TOOLS.forEach(([t,title,fn,cls])=>{
@@ -879,11 +890,12 @@
       ['> 一句话','贴一张胶带便签'],
       ['```↵ 代码 ↵```','一块深色代码'],
       ['@09:10 站会：今天修什么？ #laptop','漫画格：时间 · 在做什么、对话气泡、小插画（相邻几行排成一条）'],
-      ['空一行','分段；段落里换行就是换行']];
+      ['空一行','分段；段落里换行就是换行'],
+      ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）']];
     const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
     help.appendChild(tb);
     help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));
-    wrap.append(lab,bar,ta,el('span','hintx','没有照片时大约 250 字写满一页，再多字会自动缩小。'),help);
+    wrap.append(lab,bar,ta,el('span','hintx','没有照片时大约 250 字写满一页；写不下会接到下一页（续页），单独一行 +++ 可以自己换页。'),help);
     return wrap;
   }
 
