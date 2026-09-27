@@ -28,9 +28,7 @@ const FOV = 18, DEG = Math.PI / 180;
 const VIEW = { front: { pitch: 0, yaw: 0 }, open: { pitch: 0, yaw: 0 }, back: { pitch: 0, yaw: 0 } };
 // The shader outputs raw display colors, just like the DOM textures. Convert
 // Three's linear Color values back to display space for untextured edges too.
-const CLOTH = new Color('#2b454b').convertLinearToSRGB();
-const CLOTH_EDGE = new Color('#314d53').convertLinearToSRGB();
-const PAPER = new Color('#f6f1e2').convertLinearToSRGB();
+let PAPER = new Color('#f6f1e2').convertLinearToSRGB();   // the paper's colour (--pp-edge): set in start()
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 // paper: a quick lift, an unhurried float, a soft landing (gentler than the boards' cubic)
@@ -240,6 +238,12 @@ export async function start() {
   deskShadow.position.z = -0.5; book.add(deskShadow);
 
   // boards: a box on a hinge group (the group turns about the spine; the box sits above the hinge)
+  // the boards' cloth and edges: the cover style's (--cv-rim, --cv-edge in book-extra.css)
+  const cvStyle = getComputedStyle(pages[0].node);
+  const cloth = (name, fallback) => new Color(cvStyle.getPropertyValue(name).trim() || fallback).convertLinearToSRGB();
+  const CLOTH = cloth('--cv-rim', '#2b454b'), CLOTH_EDGE = cloth('--cv-edge', '#314d53');
+  // and the paper's (纸张: the page edges, a sheet before its picture is ready)
+  { const e = getComputedStyle(pages[2].node).getPropertyValue('--pp-edge').trim(); if (e) PAPER = new Color(e).convertLinearToSRGB(); }
   function board(coverOnTop) {
     const w = W + OH + 1, h = H + 2 * OH;
     const edge = material({ color: CLOTH_EDGE });

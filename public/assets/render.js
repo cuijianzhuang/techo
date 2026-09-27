@@ -610,6 +610,23 @@
     b.setAttribute('aria-label',label);b.title=label;
     return b;
   }
+  /* the cover styles (手帐设置 → 封面款式): a cv-<key> class on the covers and endpapers, their colours in
+     book-extra.css. slate is the built-in one (no class). */
+  const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面'};
+  function coverStyle(node,key){
+    Object.keys(COVERS).forEach(k=>node.classList.remove('cv-'+k));
+    if(COVERS[key]&&key!=='slate')node.classList.add('cv-'+key);
+  }
+  /* the paper (手帐设置 → 纸张): its pattern (pp-<key>) and colour (pt-<key>), in book-extra.css. 方格 and
+     米白 are the built-in ones (no class). */
+  const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白'};
+  const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷'};
+  function paperStyle(node,pattern,tone){
+    Object.keys(PAPERS).forEach(k=>node.classList.remove('pp-'+k));
+    Object.keys(TONES).forEach(k=>node.classList.remove('pt-'+k));
+    if(PAPERS[pattern]&&pattern!=='grid')node.classList.add('pp-'+pattern);
+    if(TONES[tone]&&tone!=='cream')node.classList.add('pt-'+tone);
+  }
   function readerButton(pages){
     const b=el('button','arrow zoomin');b.type='button';
     b.innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.9" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.4 10.4 14.5 14.5M4.6 6.8h4.4M6.8 4.6v4.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
@@ -698,6 +715,8 @@
     function applySettings(S){
       const has=k=>typeof S[k]==='string',one=s=>src.querySelector(s),list=v=>v.split(',').filter(Boolean);
       if(has('siteTitle')&&S.siteTitle)document.title=S.siteTitle;
+      // 封面款式: the covers and the endpapers wear it (book-extra.css), the 3D boards follow them
+      if(has('coverStyle')&&COVERS[S.coverStyle])src.querySelectorAll('.page.cover,.page.backcover,.page.inside').forEach(n=>coverStyle(n,S.coverStyle));
       const deb=one('.cover .deboss');
       if(deb&&has('coverTitle')){
         // the first "." is the lime dot of cui.log
@@ -800,6 +819,10 @@
       const hint=document.querySelector('.hint');
       if(hint&&!document.getElementById('relock')){const r=el('button','relock','重新上锁');r.type='button';r.id='relock';r.onclick=relock;hint.appendChild(r);}
     }
+    // 纸张: every paper page wears the paper's pattern and colour; the page itself (the slips, the flip book's
+    // backing) takes the colour too
+    pages.forEach(p=>{if(!p.hard)paperStyle(p.node,settings.paperStyle,settings.paperTone);});
+    paperStyle(document.documentElement,null,settings.paperTone);
     return {pages,settings,lock};
   }
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
@@ -811,5 +834,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,chipButton,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();
