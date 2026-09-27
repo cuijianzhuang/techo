@@ -16,7 +16,6 @@ import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRe
 import { rasterize, PAGE_W as W, PAGE_H as H } from './raster.js';
 import { boardHeight, spreadCenter } from './motion.mjs';
 import { foldOf, constrain, cornerPath } from './curl.mjs';
-import { unlock, soundOn, setSound, paperTurn, boardTurn, fallBack } from './sound.js';
 
 const OH = 12;         // boards overhang the pages: the paper is a little smaller than its covers
 const BT = 7;          // board thickness
@@ -162,6 +161,8 @@ function placePiece(g, f, flap, mirror, z, view) {
 
 export async function start() {
   const T = window.Techo, $ = (id) => document.getElementById(id);
+  // page sounds: shared with the page-flip book (render.js)
+  const { paperTurn, boardTurn, fallBack } = T.sound;
   const stage = $('stage'), src = $('static'), dragnote = $('dragnote'), restart = $('restart'), nav = $('nav'), dots = $('dots');
 
   /* ---------- renderers (a WebGL failure here falls back to the page-flip book in boot.js) ---------- */
@@ -567,7 +568,6 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     return ray.ray.intersectPlane(plane, hit) ? hit.x : 0;
   }
   let drag = null;
-  for (const t of ['pointerdown', 'keydown', 'wheel', 'touchend']) window.addEventListener(t, unlock, { passive: true });
   host.addEventListener('pointerdown', (ev) => {
     if (busy || drag || ev.button > 0) return;
     if (ev.target.closest && ev.target.closest('a,button,input,textarea,select,label,[contenteditable]')) return;
@@ -752,11 +752,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   const readerPages = () => shownPages().map((i) => pages[i] && pages[i].node);
   $('next').after(T.readerButton(readerPages));
   $('prev').onclick = prev; $('next').onclick = next;
-  const sound = T.el('button', 'arrow sound');
-  sound.type = 'button';
-  const showSound = () => { const v = soundOn(); sound.textContent = '♪'; sound.setAttribute('aria-pressed', String(v)); sound.setAttribute('aria-label', v ? '关闭翻页声' : '打开翻页声'); sound.title = sound.getAttribute('aria-label'); };
-  sound.onclick = () => { setSound(!soundOn()); showSound(); };
-  showSound(); nav.appendChild(sound);
+  nav.appendChild(T.soundButton());
   restart.onclick = () => goTo(0);
   document.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;

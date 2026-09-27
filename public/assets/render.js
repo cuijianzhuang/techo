@@ -518,6 +518,86 @@
     return box;
   }
 
+  /* ---------- page sounds, for both books ----------
+     Synthesised with WebAudio (no files to load): a paper rustle as a sheet turns and a soft flap as it lands;
+     a heavier swing and a low thump for a cover. Silent until the reader first touches the page (browsers
+     only allow audio after a gesture). Muted or not is remembered in localStorage, the same for both books. */
+  const sound=(()=>{
+    const KEY='techo-sound';
+    let ctx=null,noise=null,master=null,on=true;
+    try{on=localStorage.getItem(KEY)!=='off';}catch(e){}
+    function audio(){
+      if(ctx)return ctx;
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return null;
+      ctx=new AC();
+      master=ctx.createGain();master.gain.value=.9;master.connect(ctx.destination);
+      // two seconds of soft (pinkish) noise, reused by every sound
+      const len=ctx.sampleRate*2;noise=ctx.createBuffer(1,len,ctx.sampleRate);
+      const d=noise.getChannelData(0);let b0=0,b1=0,b2=0;
+      for(let i=0;i<len;i++){
+        const w=Math.random()*2-1;
+        b0=.997*b0+w*.029;b1=.985*b1+w*.032;b2=.95*b2+w*.048;
+        d[i]=(b0+b1+b2+w*.05)*.9;
+      }
+      return ctx;
+    }
+    // call from a user gesture: creates / resumes the audio context
+    function unlock(){if(!on)return;const c=audio();if(c&&c.state==='suspended')c.resume().catch(()=>{});}
+    const soundOn=()=>on;
+    function setSound(v){on=v;try{localStorage.setItem(KEY,v?'on':'off');}catch(e){}if(v)unlock();}
+    function burst(t0,dur,o){
+      const src=ctx.createBufferSource();src.buffer=noise;
+      src.playbackRate.value=.9+Math.random()*.2;
+      const f=ctx.createBiquadFilter();f.type=o.type||'bandpass';f.Q.value=o.q==null?.9:o.q;
+      f.frequency.setValueAtTime(o.f0,t0);f.frequency.exponentialRampToValueAtTime(o.f1,t0+dur);
+      const g=ctx.createGain(),at=o.at==null?.2:o.at;
+      g.gain.setValueAtTime(.0001,t0);
+      g.gain.exponentialRampToValueAtTime(o.peak,t0+dur*at);
+      g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
+      src.connect(f);f.connect(g);g.connect(master);
+      src.start(t0,Math.random()*1.2,dur+.05);
+    }
+    const ready=()=>on&&ctx&&ctx.state==='running';
+    // a paper sheet turning for `ms` (soft: finishing a drag, the rustle already happened under the hand)
+    function paperTurn(ms,soft){
+      if(!ready())return;
+      const t=ctx.currentTime+.01,d=ms/1000;
+      if(!soft)burst(t,d*.55,{f0:1400,f1:3800,q:.7,peak:.16,at:.35});                  // lifting off
+      burst(t+d*.3,d*.55,{f0:3200,f1:1100,q:.6,peak:soft?.1:.13,at:.3});                // air through it
+      burst(t+d*.86,.14,{f0:900,f1:500,q:.8,peak:.22,at:.12,type:'lowpass'});           // lands
+    }
+    // a cover swinging over and landing
+    function boardTurn(ms){
+      if(!ready())return;
+      const t=ctx.currentTime+.01,d=ms/1000;
+      burst(t,d*.8,{f0:500,f1:1400,q:.6,peak:.07,at:.5});
+      const land=t+d*.93;
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.setValueAtTime(120,land);o.frequency.exponentialRampToValueAtTime(48,land+.16);
+      g.gain.setValueAtTime(.0001,land);g.gain.exponentialRampToValueAtTime(.5,land+.008);
+      g.gain.exponentialRampToValueAtTime(.0001,land+.22);
+      o.connect(g);g.connect(master);o.start(land);o.stop(land+.25);
+      burst(land,.09,{f0:700,f1:300,q:.7,peak:.3,at:.08,type:'lowpass'});
+    }
+    // a dragged sheet let go and falling back
+    function fallBack(ms){
+      if(!ready())return;
+      const t=ctx.currentTime+.01,d=ms/1000;
+      burst(t+d*.75,.12,{f0:800,f1:450,q:.8,peak:.12,at:.15,type:'lowpass'});
+    }
+    // the first touch, key or wheel lets the sounds play (on the book's page: the admin has no use for them)
+    if(document.getElementById('stage'))['pointerdown','keydown','wheel','touchend'].forEach(t=>addEventListener(t,unlock,{passive:true}));
+    return {unlock,soundOn,setSound,paperTurn,boardTurn,fallBack};
+  })();
+  /* ♪ in the nav: turn the page sounds on and off */
+  function soundButton(){
+    const b=el('button','arrow sound');b.type='button';
+    const show=()=>{const v=sound.soundOn();b.textContent='♪';b.setAttribute('aria-pressed',String(v));b.setAttribute('aria-label',v?'关闭翻页声':'打开翻页声');b.title=b.getAttribute('aria-label');};
+    b.onclick=()=>{sound.setSound(!sound.soundOn());show();};
+    show();return b;
+  }
+
   /* the nav's button for it; pages(): the page nodes open now */
   function readerButton(pages){
     const b=el('button','arrow zoomin');b.type='button';
@@ -723,5 +803,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,dayPicker,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,dayPicker,sound,soundButton,bodyBlocks,plainText};
 })();

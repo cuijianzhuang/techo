@@ -98,6 +98,25 @@
   chips.forEach(c=>{const b=el('button',null,c.label);b.type='button';b.dataset.page=c.page;b.onclick=()=>pf.flip(c.page);dots.appendChild(b);});
 
   pf.on('flip',e=>{setShift(e.data);chrome(e.data);reveal(e.data);});
+  /* page sounds (Techo.sound, as in the 3D book): a turn clicked or keyed rustles and lands; a sheet let go
+     after a drag only lands softly (the rustle was under the hand). A cover swings and thumps. The sound
+     lasts as long as StPageFlip's turn does (shorter when there's less to go). */
+  const snd=T.sound;
+  let lastState='read';
+  // is the sheet turning now a cover? (the covers and their insides are hard pages)
+  function turningHard(i,fwd){
+    if(!landscape())return !!(pages[fwd?i:i-1]&&pages[fwd?i:i-1].hard);
+    return fwd?(i===0||i>=last-2):(i<=2||i>=last);
+  }
+  pf.on('changeState',e=>{
+    const was=lastState;lastState=e.data;
+    if(e.data!=='flipping'||reduced)return;
+    const i=pf.getCurrentPageIndex(),fwd=rnd.getDirection()===0,hard=turningHard(i,fwd);
+    Promise.resolve().then(()=>{
+      const an=rnd.animation,ms=an&&an.frames?an.frames.length*an.durationFrame:FLIP_MS;
+      if(hard)snd.boardTurn(ms);else snd.paperTurn(ms,was==='user_fold');
+    });
+  });
   pf.on('changeState',e=>{
     const i=pf.getCurrentPageIndex();
     if(e.data==='read'){shiftEl.style.transitionDuration='';setShift(i);}
@@ -157,6 +176,7 @@
 
   // 放大看: the page(s) open now, big enough to read on a phone
   $('next').after(T.readerButton(()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].node)));
+  nav.appendChild(T.soundButton());
   $('prev').onclick=()=>pf.flipPrev();
   $('next').onclick=()=>pf.flipNext();
   restart.onclick=()=>pf.flip(0);
