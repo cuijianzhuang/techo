@@ -157,7 +157,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 - **网站**：浏览器标题、一句介绍。Worker 在返回主页时直接写进 `<title>` 和 `<meta name="description">`，搜索和分享链接也看得到；已发布的页和设置一并内联进页面，主页不用再请求接口。
 - **封面款式**：石板青布面（默认）、牛皮纸、黑皮烫金、米白亚麻、酒红绒面。封面、封底、环衬和立体书的书板一起换。
-- **纸张**：纹路（方格、横线、点阵、空白）和纸色（米白、雪白、旧黄、薄荷），手帐里每页纸都跟着变。
+- **纸张**：纹路（方格、横线、点阵、空白）和纸色（米白、雪白、旧黄、薄荷），手帐里每页纸和 `/timeline/` 的卡片都跟着变。
 - **封面**：大字（第一个「.」是绿色小圆点）、下面那行字；原来的 5 个贴纸可以逐个隐藏；最多 4 张自己的图片当贴纸（透明 PNG 会保留透明背景，拿掉的图会从 R2 删除）。
 - **扉页**：README 里的 whoami / cat role / ls ~/life / 开始记的日期，和小咖旁边那句话。
 - **封底**：大字和下方小字（可换行）。
@@ -252,7 +252,7 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 
 ## 改页面
 
-- 示例页、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`，样式在 `src-build/design/extra.css` 和 `src-build/book-extra.css`。改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css`。
+- 示例页、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`，样式在 `src-build/design/extra.css` 和 `src-build/book-extra.css`。改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css` 和 `public/assets/paper.css`（纸色，书和 `/timeline/` 共用，源文件是 `src-build/paper.css`）。
 - 立体的书的源码在 `src-build/book3d/`，改完运行 `npm run build:3d` 重新打包 `public/assets/book3d.js`。
 - `public/assets/` 里其余的 js / css 和 `public/timeline/`、`public/404.html` 直接改。
 - 生成的文件要和源码一起提交，CI 会检查两边一致。

@@ -119,12 +119,8 @@ html{scrollbar-gutter:stable}
 .page.inside.r{box-shadow:inset 22px 0 26px -18px var(--end-shade);border-radius:3px 10px 10px 3px}
 
 /* ---------- the paper (手帐设置 → 纸张) ----------
-   A colour (pt-<tone>, on the paper pages and on the document: the slips and the flip book's backing follow)
-   and a pattern (pp-<pattern>, on the paper pages). --pp-edge: the 3D book's page edges (book3d reads it). */
-:root{--pp-edge:#f6f1e2}
-.pt-white{--paper:#fffefa;--grid:rgba(110,125,140,.15);--grid-strong:rgba(110,125,140,.28);--pp-edge:#f3f2ee}
-.pt-aged{--paper:#f5e9ca;--grid:rgba(150,115,60,.17);--grid-strong:rgba(150,115,60,.32);--pp-edge:#eadcb7}
-.pt-mint{--paper:#eef4ea;--grid:rgba(80,130,110,.16);--grid-strong:rgba(80,130,110,.3);--pp-edge:#e2eadd}
+   A colour (pt-<tone>, on the paper pages and on the document: the slips and the flip book's backing follow;
+   its colours are in src-build/paper.css) and a pattern (pp-<pattern>, on the paper pages). */
 /* 横线: a ruled line every two squares; 点阵: a dot where the squares would cross; 空白: just paper */
 .page.pp-lined{background-image:linear-gradient(var(--grid) 1px,transparent 1px);background-size:100% 28px;background-position:0 6px}
 .page.pp-dots{background-image:radial-gradient(circle,var(--grid-strong) 1.1px,transparent 1.5px);background-size:14px 14px;background-position:-8px -1px}

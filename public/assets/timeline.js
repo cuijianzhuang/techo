@@ -30,6 +30,7 @@
     return;
   }
   if(settings.siteTitle)document.title='时间线 · '+settings.siteTitle;
+  T.paperStyle(document.documentElement,settings.paperStyle,settings.paperTone);   // 纸张: the cards are the book's paper
   if(!entries.length){say('还没有写下的日子。','去手帐看看');return;}
 
   entries=T.sortEntries(entries).reverse();
