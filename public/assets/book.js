@@ -5,7 +5,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const bookEl=$('book'),wrap=$('bookwrap'),shiftEl=$('shift');
-  const src=$('static'),dragnote=$('dragnote'),restart=$('restart'),nav=$('nav'),dots=$('dots');
+  const src=$('static'),dragnote=$('dragnote'),nav=$('nav'),dots=$('dots');
   const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* data, settings and the page list (shared with the 3D book): see Techo.loadBook in render.js */
@@ -82,7 +82,6 @@
   function reveal(i){visible(i).forEach(k=>{const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);});}
   function chrome(i){
     T.dragNote(dragnote,i===0&&landscape());
-    restart.hidden=i<last;
     [...dots.children].forEach(b=>{
       const on=+b.dataset.page===0?i===0:visible(i).some(isTimeline);
       b.setAttribute('aria-current',on?'true':'false');
@@ -179,7 +178,6 @@
   nav.appendChild(T.soundButton());
   $('prev').onclick=()=>pf.flipPrev();
   $('next').onclick=()=>pf.flipNext();
-  restart.onclick=()=>pf.flip(0);
   document.addEventListener('keydown',e=>{
     if(e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]'))return;
     if(e.key==='ArrowRight'){e.preventDefault();pf.flipNext();}

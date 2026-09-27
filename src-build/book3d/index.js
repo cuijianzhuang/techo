@@ -163,7 +163,7 @@ export async function start() {
   const T = window.Techo, $ = (id) => document.getElementById(id);
   // page sounds: shared with the page-flip book (render.js)
   const { paperTurn, boardTurn, fallBack } = T.sound;
-  const stage = $('stage'), src = $('static'), dragnote = $('dragnote'), restart = $('restart'), nav = $('nav'), dots = $('dots');
+  const stage = $('stage'), src = $('static'), dragnote = $('dragnote'), nav = $('nav'), dots = $('dots');
 
   /* ---------- renderers (a WebGL failure here falls back to the page-flip book in boot.js) ---------- */
   const host = document.createElement('div');
@@ -682,7 +682,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   }, { passive: false });
   host.addEventListener('pointercancel', endDrag);
 
-  /* ---------- chrome: the arrows, 封面 and 时间线 (any day is a line on the 时间线), restart, drag hint ---------- */
+  /* ---------- chrome: the arrows, 封面 and 时间线 (any day is a line on the 时间线), drag hint ---------- */
   const isTimeline = (i) => !!(pages[i] && pages[i].node.classList.contains('tlp'));
   const chips = [{ label: '封面', icon: 'cover', page: 0 }];
   { const t = pages.findIndex((p, i) => isTimeline(i)); if (t >= 0) chips.push({ label: '时间线', icon: 'timeline', page: t }); }
@@ -736,7 +736,6 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   window.addEventListener('hashchange', openHash);
   function chrome() {
     T.dragNote(dragnote, cur === 0 && !fit.portrait);
-    restart.hidden = cur < S;
     const shown = shownPages();
     [...dots.children].forEach((b) => {
       const on = +b.dataset.page === 0 ? cur === 0 : shown.some(isTimeline);
@@ -753,7 +752,6 @@ const LIFT = 0.25 * H, CREASE = 2.5;
   $('next').after(T.readerButton(readerPages));
   $('prev').onclick = prev; $('next').onclick = next;
   nav.appendChild(T.soundButton());
-  restart.onclick = () => goTo(0);
   document.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
