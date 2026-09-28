@@ -171,6 +171,10 @@ const SETTING_DEFAULTS: Record<string, string> = {
   // …and its token, for an API that wants one (sent by the Worker as Authorization: Bearer). Admin only
   // (PRIVATE_SETTINGS): never in /api/settings or the page. METING_TOKEN, a Worker secret, is used without it.
   metingToken: "",
+  // 和风天气 (QWeather) for a page's weather: the key, and the account's API Host (console → 设置, e.g.
+  // abc123.re.qweatherapi.com; "" = devapi.qweather.com). Admin only (PRIVATE_SETTINGS). Without a key the
+  // admin asks Open-Meteo.
+  qweatherKey: "", qweatherHost: "",
   // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
@@ -181,7 +185,7 @@ const SETTING_DEFAULTS: Record<string, string> = {
 const PAPER_STYLES = ["grid", "lined", "dots", "plain"], PAPER_TONES = ["cream", "white", "aged", "mint"];
 const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine"];
 /** settings only the admin sees: kept out of /api/settings and the page */
-const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel", "metingToken"]);
+const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel", "metingToken", "qweatherKey", "qweatherHost"]);
 const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
 /** the AI as configured (the admin's settings, the Worker's key) */
 const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";
@@ -195,6 +199,7 @@ const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
   readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
   aiBaseUrl: 200, aiModel: 80, mapboxToken: 300, metingApi: 200, metingToken: 300,
+  qweatherKey: 100, qweatherHost: 120,
 };
 const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
 const MAX_COVER_PHOTOS = 4;
@@ -236,6 +241,12 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   if (v.mapboxToken && !/^pk\.[\w.-]+$/.test(v.mapboxToken)) return { ok: false, error: "Mapbox token 要用公开的那种（pk. 开头）" };
   if (v.metingApi && !/^https:\/\/[^\s]+$/i.test(v.metingApi)) return { ok: false, error: "Meting API 要以 https:// 开头" };
   if (v.metingToken && /\s/.test(v.metingToken)) return { ok: false, error: "Meting token 里不能有空格或换行" };
+  if (v.qweatherKey && !/^[\w-]+$/.test(v.qweatherKey)) return { ok: false, error: "和风天气的 KEY 只有字母和数字" };
+  if (v.qweatherHost) {
+    // "https://abc.re.qweatherapi.com/…" or the host alone: the host
+    v.qweatherHost = v.qweatherHost.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+    if (!/^[a-z0-9.-]+\.(?:qweatherapi\.com|qweather\.com|qweather\.net)$/.test(v.qweatherHost)) return { ok: false, error: "和风天气的 API Host 像 abc123.re.qweatherapi.com（控制台 → 设置里有）" };
+  }
   if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
@@ -1150,6 +1161,70 @@ app.get("/api/admin/meting", async (c) => {
   // (with the token as typed, not saved yet, too)
   const s = await loadSettings(c.env), tok = (c.req.header("x-meting-token") || "").trim();
   return songReply(c, api || s.metingApi || "", tok || metingToken(c.env, s));
+});
+
+/* 地点和天气 → a day's weather from 和风天气 (QWeather), as Chinese forecasts say it ("多云转小雨 15~25°"): the
+   forecast's day and night for today and the week ahead; for the last ten days the hours the time machine
+   (/v7/historical) kept, the morning (6–13) and the afternoon and evening (14–21) each by what most of it was.
+   Asked here so the key stays in the Worker. { weather } or an error; without a key: 404 { off: true }, and the
+   admin asks Open-Meteo. */
+const QW_SAID: Record<string, string> = {
+  "204": "那一天那里没有天气数据", "400": "请求不对", "401": "和风天气的 KEY 不对", "402": "和风天气的额度用完了",
+  "403": "这个 KEY 没有这项服务（或 API Host 不对）", "404": "那一天那里没有天气数据", "429": "和风天气说请求太频繁",
+};
+async function qweatherDay(key: string, host: string, date: string, lat: number, lon: number, today: string) {
+  const h = host || "devapi.qweather.com", legacy = /^(?:dev)?api\.qweather\.com$/.test(h);
+  const loc = lon.toFixed(2) + "," + lat.toFixed(2);
+  const ask = async (base: string, path: string) => {
+    const r = await fetch("https://" + base + path, { headers: { "X-QW-Api-Key": key, accept: "application/json" } });
+    const j = (await r.json().catch(() => null)) as ({ code?: string } & Record<string, unknown>) | null;
+    const code = j?.code || String(r.status);
+    if (code !== "200") { const e = new Error(QW_SAID[code] || "和风天气没答上来（" + code + "）"); (e as Error & { code?: string }).code = code; throw e; }
+    return j as Record<string, unknown>;
+  };
+  const span = (a: number, b: number) => (a === b ? String(b) : a + "~" + b) + "°";
+  const days = (Date.parse(date + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 864e5;
+  if (days > 6) throw new Error("太远的日子还查不到天气");
+  if (days >= 0) {
+    // the week ahead (7d; a plan with only 3d)
+    const j = await ask(h, "/v7/weather/7d?location=" + loc).catch((e) => (e.code === "403" ? ask(h, "/v7/weather/3d?location=" + loc) : Promise.reject(e)));
+    type D = { fxDate: string; textDay: string; textNight: string; tempMax: string; tempMin: string };
+    const d = ((j.daily || []) as D[]).find((x) => x.fxDate === date);
+    if (!d) throw new Error("那一天的天气还没有");
+    return (d.textDay === d.textNight ? d.textDay : d.textDay + "转" + d.textNight) + " " + span(Math.round(+d.tempMin), Math.round(+d.tempMax));
+  }
+  if (days < -10) throw new Error("和风天气只存最近 10 天");
+  // the time machine wants the place's LocationID
+  const g = await ask(legacy ? "geoapi.qweather.com" : h, (legacy ? "/v2" : "/geo/v2") + "/city/lookup?number=1&location=" + loc);
+  const id = ((g.location || []) as { id?: string }[])[0]?.id;
+  if (!id) throw new Error("和风天气没认出这个地方");
+  const w = await ask(legacy ? "datasetapi.qweather.com" : h, "/v7/historical/weather?location=" + id + "&date=" + date.replace(/-/g, ""));
+  const dd = (w.weatherDaily || {}) as { tempMax?: string; tempMin?: string };
+  const hours = ((w.weatherHourly || []) as { time: string; text: string }[]).map((x) => ({ at: +(/T(\d\d)/.exec(x.time)?.[1] ?? -1), text: x.text }));
+  const most = (hs: { text: string }[]) => {
+    const n = new Map<string, number>();
+    hs.forEach((x) => n.set(x.text, (n.get(x.text) || 0) + 1));
+    return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  };
+  const am = most(hours.filter((x) => x.at >= 6 && x.at <= 13)), pm = most(hours.filter((x) => x.at >= 14 && x.at <= 21));
+  const text = am && pm && am !== pm ? am + "转" + pm : am || pm;
+  if (!text || dd.tempMax == null) throw new Error("那一天那里没有天气数据");
+  return text + " " + span(Math.round(+(dd.tempMin ?? dd.tempMax)), Math.round(+dd.tempMax));
+}
+app.get("/api/admin/weather", async (c) => {
+  const date = c.req.query("date") || "", lat = Number(c.req.query("lat")), lon = Number(c.req.query("lon"));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180)) return bad(c, 400, "要日期和坐标");
+  const s = await loadSettings(c.env);
+  // 试一下 in 手帐设置: a key and a host not saved yet
+  const key = (c.req.header("x-qweather-key") || "").trim() || s.qweatherKey;
+  const host = (c.req.query("host") || "").trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase() || s.qweatherHost;
+  if (!key) return c.json({ error: "没配和风天气", off: true }, 404);
+  if (host && !/^[a-z0-9.-]+\.(?:qweatherapi\.com|qweather\.com|qweather\.net)$/.test(host)) return bad(c, 400, "和风天气的 API Host 像 abc123.re.qweatherapi.com");
+  try {
+    return c.json({ weather: await qweatherDay(key, host, date, lat, lon, localDay(c.env.TIMEZONE || "Asia/Shanghai").date), source: "和风天气" });
+  } catch (e) {
+    return bad(c, 500, e instanceof Error ? e.message : "和风天气连不上");
+  }
 });
 
 app.all("/api/*", (c) => bad(c, 404, "没有这个接口"));
