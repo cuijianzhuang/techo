@@ -273,6 +273,9 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 
 /* ================= the menu: 写 at the top, the pages in the middle (they scroll), 设置 at the foot ================= */
 .admin{--toph:61px}
+/* the book's page is one screen tall (techo.css html,body{height:100%}); the admin grows with what's in it, or the
+   header, stuck to the top of the body, would leave with the first screen */
+body.admin{height:auto}
 .admin .top{position:sticky;top:0;z-index:20;height:var(--toph);box-sizing:border-box;align-items:center;flex-wrap:nowrap;padding-block:0;background:var(--desk)}
 .admin .top h1{white-space:nowrap}
 .admin .wrap{min-height:calc(100vh - var(--toph))}
@@ -355,3 +358,20 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
   .admin .pst{grid-column:3;justify-self:start;margin-top:-4px}
   .admin .pday b{font-size:22px}
 }
+
+/* ================= 随手记 (admin.js drawJots) ================= */
+.admin .main:has(>.jotsv){grid-template-columns:minmax(0,1fr)}
+.admin .jotsv{max-width:780px}
+.admin .jotsv .card textarea{min-height:0}
+.admin .jotsv .card .status:empty{display:none}
+.admin .jotsv .jots{gap:4px;margin-top:0}
+.admin .jotsv .lmonth{padding:14px 12px 4px}
+.admin .jotsv .jot{grid-template-columns:16px minmax(0,1fr) auto;gap:3px 12px;border-radius:10px;padding:9px 12px}
+.admin .jotsv .jot>input{grid-row:1 / span 2;width:16px;height:16px;margin:0;accent-color:var(--olive)}
+.admin .jotsv .jot p{grid-column:2}
+.admin .jotsv .jot .when{grid-column:2}
+.admin .jotsv .jot .b{grid-column:3;grid-row:1 / span 2}
+.admin .jotsv .jot.on{background:#fbf4dc;border-color:#e0cf98}
+.admin .jot mark{background:rgba(236,214,150,.8);color:inherit;border-radius:2px;padding:0 1px}
+.admin .jused{appearance:none;border:0;background:none;padding:0;cursor:pointer;font:inherit;color:var(--olive);text-decoration:underline;text-underline-offset:2px}
+.admin .jused:hover{color:var(--ink)}

@@ -7,7 +7,7 @@
   let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | 'pages' (文章管理) | null (今天)
-  let fromPages=false;     // the page open was picked in 文章管理: its back button goes there
+  let backTo=null;         // 'pages' | 'jots': the page open was picked there, its back button goes back
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
   let busy=false;
@@ -99,8 +99,8 @@
     const older=sel&&entries.some(e=>e.id===sel)&&!recent.some(e=>e.id===sel);
     $('homeBtn').setAttribute('aria-current',sel===null?'true':'false');
     $('newBtn').setAttribute('aria-current',sel==='new'?'true':'false');
-    $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
-    $('pagesBtn').setAttribute('aria-current',sel==='pages'||older?'true':'false');
+    $('jotsBtn').setAttribute('aria-current',sel==='jots'||(older&&backTo==='jots')?'true':'false');
+    $('pagesBtn').setAttribute('aria-current',sel==='pages'||(older&&backTo!=='jots')?'true':'false');
     document.querySelectorAll('#setnav .item').forEach(b=>b.setAttribute('aria-current',sel==='set:'+b.dataset.set?'true':'false'));
   }
   $('homeBtn').onclick=()=>select(null);
@@ -131,7 +131,7 @@
       const f=main.querySelector('.form');(f||main).prepend(u);
       return;
     }
-    fromPages=sel==='pages'&&!!entries.find(e=>e.id===id);
+    backTo=(sel==='pages'||sel==='jots')&&entries.find(e=>e.id===id)?sel:null;
     sel=id;
     if(across){drawList();drawForm();changed();if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);return;}
     if(isSet(id)){draft=Object.assign({},settings);}
@@ -203,7 +203,7 @@
   }
   /* on a phone the list and a page take turns: this goes back to the list */
   function backBtn(){
-    if(fromPages){const b=el('button','b small back show','← 文章管理');b.type='button';b.onclick=()=>select('pages');return b;}
+    if(backTo){const to=backTo,b=el('button','b small back show','← '+(to==='pages'?'文章管理':'随手记'));b.type='button';b.onclick=()=>select(to);return b;}
     const b=el('button','b small back','← 菜单');b.type='button';b.onclick=()=>select(null);return b;
   }
   function head(title,extra){
@@ -908,35 +908,137 @@
 
   /* ---------- jots: loose lines for tonight's page ---------- */
   let jotsToday=null;
+  /* 随手记: a line to write, then every line written — searched (the Worker looks, so the old ones too),
+     filtered (still waiting / already in a page), a day at a heading, a page of them at a time; one deleted
+     after a second tap, or several picked and deleted together */
+  const jv={q:'',st:'all'},jPicked=new Set();
+  let jMore=false,jStats={total:0,unused:0,matched:0};
   function drawJots(again){
     if(again){main.textContent='';statusEl=el('div','status');}
-    const f=el('form','form');f.noValidate=true;
+    const f=el('form','form jotsv');f.noValidate=true;
     const hint=el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。');
-    const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
-    const l=el('label');l.append('新的一句',ta);
+    const ta=el('textarea');ta.rows=3;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
+    const l=el('label','sr');l.htmlFor='f-jot';l.textContent='新的一句';
     const b=el('div','bar');const s=el('button','b pri','记下');s.type='submit';b.appendChild(s);
     const cw=el('button','b','现在就用今天的随手记写一页');cw.type='button';cw.onclick=compose;b.appendChild(cw);
-    const ul=el('div','jots');
-    const paint=()=>{
-      ul.textContent='';
-      if(!jots.length){ul.appendChild(el('div','hintx','还没有记过。'));return;}
-      jots.forEach(j=>{
-        const d=new Date(j.createdAt);
-        const row=el('div','jot'+(j.usedIn?' used':''));
-        const meta=el('span','when',(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+(j.usedIn?' · 已写进手帐':''));
-        const x=el('button','b small','删掉');x.type='button';
-        x.onclick=async()=>{
-          try{await api('/api/admin/jots/'+encodeURIComponent(j.id),{method:'DELETE'});jots=jots.filter(k=>k.id!==j.id);paint();}
-          catch(e){status(e.message||'删除失败','err');}
-        };
-        row.append(el('p',null,j.text),meta,x);ul.appendChild(row);
+    b.appendChild(el('span','hintx','⌘/Ctrl+Enter 记下'));
+    ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();f.requestSubmit();}});
+    const stat=el('div','hintx');
+    // finding and picking
+    const tools=el('div','ptools');
+    const q=el('input');q.type='search';q.placeholder='搜随手记';q.value=jv.q;q.setAttribute('aria-label','搜随手记');q.autocomplete='off';
+    const sts=el('div','lfilter');sts.setAttribute('role','group');sts.setAttribute('aria-label','按状态');
+    const r1=el('div','prow');r1.append(q);
+    const bulk=el('div','pbulk');
+    tools.append(r1,sts,bulk);
+    const ul=el('div','jots'),more=el('div','bar');
+    const WD='日一二三四五六',hm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    // the words, the searched-for bit marked (text nodes only)
+    function marked(text){
+      const p=el('p'),k=jv.q.trim();
+      if(!k){p.textContent=text;return p;}
+      const lo=text.toLowerCase(),kl=k.toLowerCase();let at=0,i;
+      while((i=lo.indexOf(kl,at))>=0){p.append(text.slice(at,i),el('mark',null,text.slice(i,i+k.length)));at=i+k.length;}
+      p.append(text.slice(at));return p;
+    }
+    function paint(){
+      stat.textContent='共 '+jStats.total+' 条'+(jStats.unused?' · 还没写进手帐 '+jStats.unused+' 条':'');
+      sts.textContent='';
+      [['all','全部',jStats.total],['unused','还没写进手帐',jStats.unused],['used','已写进手帐',jStats.total-jStats.unused]].forEach(([k,label,n])=>{
+        const x=el('button',null,label+' '+n);x.type='button';x.setAttribute('aria-pressed',String(jv.st===k));
+        x.onclick=()=>{jv.st=k;load();};sts.appendChild(x);
       });
-    };
+      [...jPicked].forEach(id=>{if(!jots.some(j=>j.id===id))jPicked.delete(id);});
+      bulk.textContent='';
+      const all=el('input');all.type='checkbox';all.setAttribute('aria-label','全选');
+      const n=jots.filter(j=>jPicked.has(j.id)).length;
+      all.checked=!!jots.length&&n===jots.length;all.indeterminate=n>0&&n<jots.length;
+      all.onchange=()=>{jots.forEach(j=>all.checked?jPicked.add(j.id):jPicked.delete(j.id));paint();};
+      const filtered=jv.q.trim()||jv.st!=='all';
+      const lab=el('label','pall');lab.append(all,el('span',null,jPicked.size?'已选 '+jPicked.size+' 条':(filtered?'找到 '+jStats.matched+' 条':'全部 '+jStats.total+' 条')+(jMore?'，显示了 '+jots.length+' 条':'')));
+      bulk.appendChild(lab);
+      if(jPicked.size){
+        const del=el('button','b small warn','删除');del.type='button';
+        del.onclick=()=>{
+          const c=el('span','confirm','删除 '+jPicked.size+' 条，不能恢复。确定？');
+          const yes=el('button','b warn small','删除');yes.type='button';yes.onclick=removeJots;
+          const no=el('button','b small','取消');no.type='button';no.onclick=()=>c.replaceWith(del);
+          c.append(yes,no);del.replaceWith(c);
+        };
+        const none=el('button','b small quiet','不选了');none.type='button';none.onclick=()=>{jPicked.clear();paint();};
+        bulk.append(del,none);
+      }
+      ul.textContent='';
+      if(!jots.length)ul.appendChild(el('div','lempty',filtered?'没有找到。换个词，或者看看「全部」。':'还没有记过。'));
+      let day='';
+      jots.forEach(j=>{
+        const d=new Date(j.createdAt),k=d.toDateString();
+        if(k!==day){day=k;ul.appendChild(el('div','lmonth',(d.getFullYear()!==new Date().getFullYear()?d.getFullYear()+' 年 ':'')+(d.getMonth()+1)+' 月 '+d.getDate()+' 日 · 周'+WD[d.getDay()]+(k===new Date().toDateString()?' · 今天':'')));}
+        const row=el('div','jot'+(j.usedIn?' used':'')+(jPicked.has(j.id)?' on':''));
+        const cb=el('input');cb.type='checkbox';cb.checked=jPicked.has(j.id);cb.setAttribute('aria-label','选中这一条');
+        cb.onchange=()=>{cb.checked?jPicked.add(j.id):jPicked.delete(j.id);paint();};
+        const meta=el('span','when',hm(d));
+        if(j.usedIn){
+          const en=entries.find(e=>e.id===j.usedIn);
+          if(en){const a=el('button','jused','写进了《'+(en.title||'（无题）')+'》');a.type='button';a.onclick=()=>select(en.id);meta.append(' · ',a);}
+          else meta.append(' · 已写进手帐');
+        }
+        // deleting: a second tap, within a few seconds
+        const x=el('button','b small','删掉');x.type='button';let armed=0;
+        x.onclick=async()=>{
+          if(!armed){armed=setTimeout(()=>{armed=0;x.textContent='删掉';x.classList.remove('warn');},3000);x.textContent='确定删掉？';x.classList.add('warn');return;}
+          clearTimeout(armed);x.disabled=true;
+          try{await api('/api/admin/jots/'+encodeURIComponent(j.id),{method:'DELETE'});
+            jots=jots.filter(k=>k.id!==j.id);jPicked.delete(j.id);jStats.total--;jStats.matched--;if(!j.usedIn)jStats.unused--;paint();status('删掉了一条。','ok');}
+          catch(e){x.disabled=false;status(e.message||'删除失败','err');}
+        };
+        row.append(cb,marked(j.text),meta,x);ul.appendChild(row);
+      });
+      more.textContent='';
+      if(jMore){const m=el('button','b small','再往前看 100 条');m.type='button';m.onclick=()=>load(true);more.appendChild(m);}
+    }
+    // from the Worker: the first page, or (more) the page after the last one here
+    let seq=0;
+    async function load(next){
+      const my=++seq,p=new URLSearchParams({limit:'100'});
+      if(jv.q.trim())p.set('q',jv.q.trim());
+      if(jv.st!=='all')p.set('state',jv.st);
+      const last=jots[jots.length-1];
+      if(next&&last)p.set('before',last.createdAt+'.'+last.id);
+      try{
+        const r=await api('/api/admin/jots?'+p);
+        if(my!==seq)return;
+        jots=next?jots.concat(r.jots||[]):(r.jots||[]);jMore=!!r.more;
+        jStats={total:r.total||0,unused:r.unused||0,matched:r.matched||0};
+        if(!next)jPicked.clear();
+        if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
+        paint();paintLock();
+      }catch(e){status(e.message||'加载失败','err');}
+    }
+    async function removeJots(){
+      if(busy)return;busy=true;
+      const ids=[...jPicked];let done=0;
+      try{
+        for(let i=0;i<ids.length;i+=100){
+          status('正在删除……（'+Math.min(ids.length,i+100)+' / '+ids.length+'）');
+          done+=(await sendJson('POST','/api/admin/jots/delete',{ids:ids.slice(i,i+100)})).deleted;
+        }
+        status('删了 '+done+' 条。','ok');
+      }catch(e){status((done?'删了 '+done+' 条，其余的':'')+(e.message||'没删成功'),'err');}
+      finally{busy=false;jPicked.clear();load();}
+    }
+    let qt=0;
+    q.addEventListener('input',()=>{clearTimeout(qt);qt=setTimeout(()=>{jv.q=q.value;load();},250);});
+    q.addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();});
     f.addEventListener('submit',async e=>{
       e.preventDefault();
       const text=ta.value.trim();if(!text){ta.focus();return;}
       if(busy)return;busy=true;status('正在记……');
-      try{const r=await sendJson('POST','/api/admin/jots',{text});jots.unshift(r.jot);ta.value='';paint();status('记下了。','ok');}
+      try{
+        await sendJson('POST','/api/admin/jots',{text});ta.value='';status('记下了。','ok');
+        // it's the newest: shown at the top unless a search or a filter leaves it out
+        busy=false;await load();
+      }
       catch(err){status(err.message||'没记上，稍后再试。','err');}
       finally{busy=false;}
     });
@@ -954,12 +1056,11 @@
     const paintLock=()=>{lk.textContent='';if(!jotsToday)return;
       const on=dayLocks.has(jotsToday);
       lk.appendChild(card('今天这一页上锁',[lockField('d-'+jotsToday)],{fold:true,open:on,sum:on?'🔒 已上锁':'不上锁'}));};
-    f.append(head('随手记'),hint,l,b,statusEl,ul,lk);main.appendChild(f);paint();paintLock();
-    (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];
-      if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
-      paint();paintLock();}catch(e){status(e.message||'加载失败','err');}})();
+    f.append(head('随手记'),stat,card('记一句',[hint,l,ta,b,statusEl]),lk,tools,ul,more);main.appendChild(f);
+    paint();paintLock();load();
     setTimeout(()=>ta.focus(),0);
   }
+
 
   /* ---------- 一键补全: the AI fills in the parts of the page still empty, from its words ----------
      Title, English note, header note, stamp, footer quote and doodles; what's filled in stays as it is, and
@@ -1489,7 +1590,7 @@
     if(busy)return;busy=true;status('正在删除……');
     try{
       await api('/api/admin/entries/'+encodeURIComponent(sel),{method:'DELETE'});
-      entries=entries.filter(e=>e.id!==sel);sel=fromPages?'pages':null;fromPages=false;draft=null;base='';
+      entries=entries.filter(e=>e.id!==sel);sel=backTo;backTo=null;draft=null;base='';
       drawList();drawForm();
     }catch(e){status(e.message||'删除失败','err');}
     finally{busy=false;}

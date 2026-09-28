@@ -734,16 +734,47 @@ app.put("/api/admin/settings", async (c) => {
   return c.json(await adminSettings(c.env));
 });
 
-/* jots: loose lines written during the day, picked up by the nightly summary */
+/* jots: loose lines written during the day, picked up by the nightly summary.
+   Newest first, a page at a time (?limit, at most 200; ?before=<createdAt>.<id> for the page after), searched
+   (?q, in the words) and filtered (?state=unused: not yet in a page, used: already in one). */
+type JotRow = { id: string; text: string; created_at: number; used_in: string };
 app.get("/api/admin/jots", async (c) => {
-  const { results } = await c.env.DB.prepare(
-    "SELECT id, text, created_at, used_in FROM jots ORDER BY created_at DESC LIMIT 100",
-  ).all<{ id: string; text: string; created_at: number; used_in: string }>();
+  const q = (c.req.query("q") || "").trim().slice(0, 100);
+  const state = c.req.query("state");
+  const limit = Math.min(200, Math.max(1, Number(c.req.query("limit")) || 100));
+  const [bt, bid] = (c.req.query("before") || "").split(".");
+  const where: string[] = [], args: (string | number)[] = [];
+  if (q) { where.push("text LIKE ? ESCAPE '\\'"); args.push("%" + q.replace(/[\\%_]/g, (m) => "\\" + m) + "%"); }
+  if (state === "unused") where.push("used_in=''");
+  else if (state === "used") where.push("used_in<>''");
+  const matchedWhere = where.length ? " WHERE " + where.join(" AND ") : "", matchedArgs = [...args];
+  if (Number(bt) > 0 && bid) { where.push("(created_at<? OR (created_at=? AND id<?))"); args.push(Number(bt), Number(bt), bid); }
+  const w = where.length ? " WHERE " + where.join(" AND ") : "";
+  const [page, all, matched] = await Promise.all([
+    c.env.DB.prepare(`SELECT id, text, created_at, used_in FROM jots${w} ORDER BY created_at DESC, id DESC LIMIT ?`).bind(...args, limit + 1).all<JotRow>(),
+    c.env.DB.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(used_in=''),0) AS unused FROM jots").first<{ n: number; unused: number }>(),
+    c.env.DB.prepare(`SELECT COUNT(*) AS n FROM jots${matchedWhere}`).bind(...matchedArgs).first<{ n: number }>(),
+  ]);
+  const rows = page.results.slice(0, limit);
   c.header("Cache-Control", "no-store");
   // today's date where the journal lives, and whether today's page (written from these) will be locked
   const today = localDay(c.env.TIMEZONE || "Asia/Shanghai").date;
   const locks = await loadLocks(c.env);
-  return c.json({ jots: results.map((r) => ({ id: r.id, text: r.text, createdAt: r.created_at, usedIn: r.used_in })), today, todayLocked: locks.has(dayScope(today)) });
+  return c.json({
+    jots: rows.map((r) => ({ id: r.id, text: r.text, createdAt: r.created_at, usedIn: r.used_in })),
+    more: page.results.length > limit, total: all?.n || 0, unused: all?.unused || 0, matched: matched?.n || 0,
+    today, todayLocked: locks.has(dayScope(today)),
+  });
+});
+
+/* several at once: {ids: [...]} (at most 100 a time, D1's bound parameters) */
+app.post("/api/admin/jots/delete", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as { ids?: unknown } | null;
+  const ids = Array.isArray(o?.ids) ? [...new Set(o.ids.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 64))] : [];
+  if (!ids.length) return bad(c, 400, "没有要删的");
+  if (ids.length > 100) return bad(c, 400, "一次最多删 100 条");
+  const r = await c.env.DB.prepare(`DELETE FROM jots WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).run();
+  return c.json({ deleted: r.meta.changes || 0 });
 });
 
 app.post("/api/admin/jots", async (c) => {
