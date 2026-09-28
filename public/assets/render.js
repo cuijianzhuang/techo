@@ -169,7 +169,7 @@
   }
   /* the words without their marks, for a line of them somewhere else (the timeline page) */
   function plainText(md){
-    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
       .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
   }
   function panel(time,rest){
@@ -195,18 +195,325 @@
     ['quote',/^\s*[>＞]\s?(.*)$/],
     ['panel',/^\s*[@＠](\d{1,2}[:：]\d{2})\s*(.*)$/],
   ];
+  /* ---------- 账单 / 机票 / 车票: the paper a day leaves behind, stuck on the page ----------
+     Written as a fenced block, a line per item, "名称: 内容" (a colon and a space, or a full-width colon).
+     账单 (```receipt), a till receipt: "# 标题", "> 居中的小字", "---" a dashed rule, "= 总计: ¥128" the big
+     total, "* 分组: ¥" a bold line, "- 明细: ¥" an indented one, "名称: 内容" a line; anything else, centred.
+     机票 (```flight) and 车票 (```train) take the items they know (航班、从、到、日期、座位 … see TICKET_KEYS),
+     whatever else is written is left off. All made of text nodes: nothing written is taken as HTML. */
+  const TICKET_NAMES={receipt:'receipt',bill:'receipt','账单':'receipt','小票':'receipt',flight:'flight','机票':'flight','登机牌':'flight',train:'train','车票':'train','火车票':'train',
+    book:'book','书':'book','书籍':'book','读书':'book',
+    // 影视: the film (its poster, its rating); 电影票: the ticket to it
+    movie:'film',film:'film',tv:'film','电影':'film','影视':'film','剧':'film','追剧':'film','剧集':'film',
+    cinema:'cinema',ticket:'cinema','电影票':'cinema','影票':'cinema','观影':'cinema',
+    music:'music',song:'music','音乐':'music','歌':'music','听歌':'music'};
+  const TICKET_KEYS={
+    airline:['航空','航空公司','airline'],flight:['航班','航班号','flight'],from:['从','出发','起点','from'],to:['到','目的地','终点','to'],
+    date:['日期','date'],dep:['起飞','发车','出发时间','开车','dep','time'],arr:['到达','到达时间','arr'],gate:['登机口','检票','检票口','gate'],
+    seat:['座位','座','seat'],cls:['舱位','席别','等级','class'],name:['乘客','旅客','姓名','name'],boarding:['登机','登机时间','boarding'],
+    train:['车次','train'],car:['车厢','car'],price:['票价','价格','price'],no:['票号','no'],
+    // 书籍 / 影视 / 音乐
+    title:['书名','片名','剧名','歌名','标题','title'],author:['作者','author'],publisher:['出版社','出版','publisher'],
+    progress:['进度','读到','progress'],rating:['评分','打分','rating'],quote:['书摘','摘录','短评','一句话','歌词','quote','lyric'],
+    director:['导演','director'],cast:['主演','演员','cast'],where:['影院','平台','在哪看','cinema','where'],hall:['影厅','厅','hall'],
+    episode:['集数','季','episode'],type:['类型','type'],artist:['歌手','艺人','乐队','artist'],album:['专辑','album'],
+    length:['时长','length'],at:['听到','at'],show:['场次','放映'],
+    cover:['封面','海报','poster','cover'],year:['年份','上映','year'],brief:['简介','brief'],state:['状态','state'],isbn:['isbn'],
+    netease:['网易云','网易云音乐','netease'],link:['链接','link','url'],
+  };
+  const KEY_OF={};Object.entries(TICKET_KEYS).forEach(([k,names])=>names.forEach(n=>{KEY_OF[n.toLowerCase()]=k;}));
+  const kvOf=line=>{const m=/^\s*(.+?)\s*(?:：|:\s)\s*(.*?)\s*$/.exec(line);return m?[m[1],m[2]]:null;};
+  function ticketFields(lines){
+    const f={};
+    lines.forEach(l=>{const kv=kvOf(l);if(!kv)return;const k=KEY_OF[kv[0].toLowerCase()];if(k&&!f[k])f[k]=kv[1];});
+    return f;
+  }
+  // "PEK 北京首都" → code PEK, name 北京首都; "北京南 Beijingnan" → 北京南, Beijingnan
+  const place=v=>{const s=String(v||'').trim(),m=/^([A-Z]{3})\s+(.+)$/.exec(s);if(m)return{code:m[1],name:m[2]};const n=/^(\S+)\s+(.+)$/.exec(s);return n?{code:n[1],name:n[2]}:{code:s,name:''};};
+  // 封面 / 海报: a picture of the journal's own (p/<uuid>.jpg, from 🔍 NeoDB or an upload) or a web address
+  const imgSrc=v=>{const s=String(v||'').trim();return /^p\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/.test(s)?'/img/'+s:/^https:\/\/\S+$/.test(s)?s:'';};
+  const picture=(src,alt)=>{const i=el('img');i.src=src;i.alt=alt||'';i.loading='lazy';i.decoding='async';i.referrerPolicy='no-referrer';return i;};
+  // a series rather than a film (剧情 is a genre, not a series)
+  const SERIES=/剧集|电视剧|连续剧|网剧|美剧|日剧|韩剧|英剧|综艺|番剧|\btv\b|series/i;
+  // a colour of its own for a title (the book's cover, the record's sleeve): the same title, the same colour
+  const hueOf=s=>{let h=5;for(const ch of String(s||''))h=(h*33+ch.charCodeAt(0))>>>0;return h%360;};
+  // 评分: "4.5", "9/10", "★★★★" → five stars filled that far
+  function stars(v){
+    const s=String(v||'').trim();if(!s)return null;
+    let r=(s.match(/★/g)||[]).length;
+    if(!r){const m=/^(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+))?/.exec(s);if(!m)return null;r=+m[1]*(m[2]?5/+m[2]:(+m[1]>5?.5:1));}
+    r=Math.max(0,Math.min(5,r));
+    const w=el('span','jstars');w.setAttribute('role','img');w.setAttribute('aria-label','评分 '+(Math.round(r*10)/10)+' / 5');
+    const on=el('span','on','★★★★★');on.style.width=(r/5*100)+'%';w.append(el('span','off','★★★★★'),on);
+    return w;
+  }
+  // a bar filled to a fraction (0–1)
+  const bar=(k,cls)=>{const b=el('div','jbar'+(cls?' '+cls:''));const f=el('i');f.style.width=Math.round(Math.max(0,Math.min(1,k))*100)+'%';b.appendChild(f);return b;};
+  const secs=t=>{const m=/^(\d+):(\d{1,2})$/.exec(String(t||'').trim());return m?+m[1]*60+ +m[2]:null;};
+  /* What holds a card on the page: a receipt's paper clip, otherwise a strip or two of washi tape across a
+     corner. Its colour, and which corners, from what's written: the same card is always held the same way. */
+  const TAPES=['rgba(236,214,150,.82)','rgba(169,208,196,.8)','rgba(240,178,170,.78)','rgba(196,190,228,.78)'];
+  function fasten(card,text){
+    let h=11;for(const ch of text)h=(h*37+ch.charCodeAt(0))>>>0;
+    if(card.classList.contains('jreceipt')){card.appendChild(el('i','jclip'));return;}
+    const t=el('i','jtape '+(h%2?'tl':'tr'));t.style.setProperty('--tape',TAPES[h%TAPES.length]);card.appendChild(t);
+    if(h%3===0){const b=el('i','jtape '+(h%2?'br':'bl'));b.style.setProperty('--tape',TAPES[(h>>3)%TAPES.length]);card.appendChild(b);}
+  }
+  /* ---------- 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐): a song's name, singer, cover, words and sound ----------
+     "网易云: 186016" or a music.163.com link. The Meting API is any of the public ones (or one's own); its
+     answers differ a little (title / name, author / artist), both are taken. */
+  const METING_DEFAULT='https://api.injahow.cn/meting/';
+  const neteaseId=v=>{const s=String(v||'').trim();if(!s)return '';if(/^\d{3,12}$/.test(s))return s;const m=/music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(s)||/[?&]id=(\d+)/.exec(/163\.com/.test(s)?s:'');return m?m[1]:'';};
+  const metingCache=new Map();
+  // api: another Meting API than the journal's (its 试一下 in 手帐设置)
+  function meting(id,api){
+    const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id;
+    if(!metingCache.has(ck)){
+      const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
+        :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
+      metingCache.set(ck,fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
+        const x=Array.isArray(j)?j[0]:j&&(j.data&&j.data[0]||j);
+        if(!x||!x.url)throw new Error('meting: no song '+id);
+        return{title:x.title||x.name||'',artist:x.author||x.artist||'',url:x.url,pic:x.pic||x.cover||'',lrc:x.lrc||''};
+      }));
+      metingCache.get(ck).catch(()=>metingCache.delete(ck));
+    }
+    return metingCache.get(ck);
+  }
+  // "[01:23.45]words" lines → [[seconds, words], …]
+  function lrcLines(text){
+    const out=[];
+    String(text||'').split(/\r?\n/).forEach(l=>{
+      const ts=[...l.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)],w=l.replace(/\[[^\]]*\]/g,'').trim();
+      if(w)ts.forEach(t=>out.push([+t[1]*60+ +t[2],w]));
+    });
+    return out.sort((a,b)=>a[0]-b[0]);
+  }
+  const PLAY_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3.5 1.8v10.4L12 7z" fill="currentColor"/></svg>';
+  const PAUSE_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 2h3v10H3zM8 2h3v10H8z" fill="currentColor"/></svg>';
+  let playing=null;   // the one card playing: another's play stops it
+  const clock=t=>{t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
+  function wirePlayer(card,f){
+    let audio=null,lines=null;
+    const q=s=>card.querySelector(s);
+    const stop=e=>e.stopPropagation();
+    const paint=()=>{
+      const on=!!audio&&!audio.paused,btn=q('.jmu-play');
+      card.classList.toggle('playing',on);btn.innerHTML=on?PAUSE_ICON:PLAY_ICON;btn.setAttribute('aria-label',on?'暂停':'播放');
+    };
+    const tick=()=>{
+      if(!audio)return;
+      const d=audio.duration||0,t=audio.currentTime||0;
+      q('.jmu-progress i').style.width=(d?t/d*100:0)+'%';q('.jmu-at').textContent=clock(t);if(d)q('.jmu-len').textContent=clock(d);
+      if(lines&&lines.length){let w='';for(const [s,x] of lines){if(s<=t+.2)w=x;else break;}if(w)q('.jmu-lyric').textContent='♫ '+w;}
+    };
+    // the page-flip book listens to the mouse and to touch to turn the page: these belong to the player
+    ['pointerdown','mousedown','mouseup','touchstart','touchend'].forEach(k=>{q('.jmu-play').addEventListener(k,stop);q('.jmu-progress .jbar').addEventListener(k,stop);});
+    q('.jmu-play').addEventListener('click',async e=>{
+      e.stopPropagation();
+      if(audio&&!audio.paused){audio.pause();return;}
+      if(!audio){
+        const song=card.__song||await meting(neteaseId(f.netease||f.link)).catch(()=>null);
+        if(!song||!song.url){card.classList.add('failed');q('.jmu-lyric').textContent='这首歌放不了（换个 Meting 接口试试）';return;}
+        audio=new Audio(song.url);audio.preload='auto';
+        audio.addEventListener('timeupdate',tick);audio.addEventListener('loadedmetadata',tick);
+        ['play','pause','ended'].forEach(k=>audio.addEventListener(k,paint));
+        audio.addEventListener('error',()=>{q('.jmu-lyric').textContent='这首歌放不了（可能要会员，或接口失效）';paint();});
+        if(song.lrc)(/^https?:/.test(song.lrc)?fetch(song.lrc).then(r=>r.text()):Promise.resolve(song.lrc)).then(t=>{lines=lrcLines(t);}).catch(()=>{});
+      }
+      if(playing&&playing!==audio)playing.pause();
+      playing=audio;
+      audio.play().catch(()=>{q('.jmu-lyric').textContent='浏览器没让它出声，再点一下试试';});
+    });
+    q('.jmu-progress .jbar').addEventListener('click',e=>{
+      e.stopPropagation();
+      if(!audio||!audio.duration)return;
+      const r=e.currentTarget.getBoundingClientRect();audio.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*audio.duration;tick();
+    });
+  }
+  const PLANE='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15.5v-1.8l-8-5V3.5a1.5 1.5 0 0 0-3 0v5.2l-8 5v1.8l8-2.5v5.3l-2 1.5V21l3.5-1 3.5 1v-1.2l-2-1.5V13z" fill="currentColor"/></svg>';
+  const TICKETS={
+    book(lines){
+      const f=ticketFields(lines),title=f.title||'书名',h=hueOf(title);
+      const card=el('div','jticket jbook');
+      const cover=el('div','jb-cover');cover.style.setProperty('--h',h);
+      const src=imgSrc(f.cover);
+      // its own cover, if there is one; else a cloth one with a Chinese title running down it a character to a
+      // line (any other goes across)
+      if(src){cover.classList.add('pic');cover.appendChild(picture(src,title));}
+      else cover.append(el('b',/[\u3400-\u9fff]/.test(title)?'v':null,title),el('small',null,f.author||''));
+      const info=el('div','jb-info');
+      // 进度: "132/360" pages, "65%", or 读完
+      let k=null,said='';
+      const p=String(f.progress||'').trim(),pm=/^(\d+)\s*\/\s*(\d+)/.exec(p),pc=/^(\d+(?:\.\d+)?)\s*%$/.exec(p);
+      if(pm){k=+pm[1]/Math.max(1,+pm[2]);said=pm[1]+' / '+pm[2]+' 页';}else if(pc){k=+pc[1]/100;said=pc[1]+'%';}else if(/读完|完/.test(p)){k=1;said='读完了';}else if(p)said=p;
+      info.append(el('div','jb-state',f.state||(k===1?'读完 FINISHED':'在读 READING')),el('div','jb-title',title));
+      const by=[f.author,f.publisher].filter(Boolean).join(' · ');if(by)info.appendChild(el('div','jb-by',by));
+      const st=stars(f.rating);if(st)info.appendChild(st);
+      if(k!=null||said){const pr=el('div','jb-progress');if(k!=null)pr.appendChild(bar(k));pr.appendChild(el('span',null,said));info.appendChild(pr);}
+      if(f.quote)info.appendChild(el('blockquote','jb-quote',f.quote));
+      card.append(cover,info);
+      return card;
+    },
+    // 影视: the film or series itself — its poster in a white border, what it is, its rating, a line about it
+    film(lines){
+      const f=ticketFields(lines),title=f.title||'片名',tv=SERIES.test(f.type||'')||!!f.episode;
+      const card=el('div','jticket jfilm'),poster=el('div','jfi-poster');poster.style.setProperty('--h',hueOf(title));
+      const src=imgSrc(f.cover);
+      if(src)poster.appendChild(picture(src,title));else poster.appendChild(el('b',null,title));
+      const info=el('div','jfi-info');
+      info.appendChild(el('div','jfi-state',f.state||(tv?'在追 WATCHING':'看过 WATCHED')));
+      const t=el('div','jfi-title',title);if(f.year)t.appendChild(el('small',null,f.year));info.appendChild(t);
+      const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join(' / ');if(who)info.appendChild(el('div','jfi-who',who));
+      const tags=[...String(f.type||'').split(/[\/、,，\s]+/).filter(Boolean).slice(0,3),f.episode&&f.episode].filter(Boolean);
+      if(tags.length){const r=el('div','jfi-tags');tags.forEach(x=>r.appendChild(el('span',null,x)));info.appendChild(r);}
+      const st=stars(f.rating);
+      if(st){const r=el('div','jfi-rating');const n=/^\d+(?:\.\d+)?/.exec(String(f.rating).trim());if(n)r.appendChild(el('b',null,n[0]));r.appendChild(st);info.appendChild(r);}
+      if(f.brief)info.appendChild(el('div','jfi-brief',f.brief));
+      if(f.quote)info.appendChild(el('div','jfi-quote','“'+f.quote+'”'));
+      card.append(poster,info);
+      return card;
+    },
+    // 电影票: a cinema ticket, its red stub torn along the perforation
+    cinema(lines){
+      const f=ticketFields(lines),tv=SERIES.test(f.type||'')||!!f.episode;
+      const card=el('div','jticket jmovie'),stub=el('div','jm-stub'),main=el('div','jm-main');
+      stub.append(el('b',null,tv?'追剧':'入场券'),el('small',null,tv?'NOW WATCHING':'ADMIT ONE'));
+      const top=el('div','jm-top');top.append(el('span',null,tv?'剧集 · TV':'电影票 · CINEMA'),el('span',null,[f.date,f.show||f.dep].filter(Boolean).join('  ')));
+      const t=el('div','jm-title',f.title||'片名');if(f.type)t.appendChild(el('span','jm-type',f.type));
+      const rows=el('div','jm-fields');
+      [['影院 / 平台',f.where],['影厅',f.hall],['座位',f.seat],['集数',f.episode]].filter(x=>x[1]).slice(0,3)
+        .forEach(([k,v])=>{const d=el('div');d.append(el('small',null,k),el('b',null,v));rows.appendChild(d);});
+      main.append(top,t);
+      if(rows.children.length)main.appendChild(rows);
+      const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join('　');if(who)main.appendChild(el('div','jm-who',who));
+      const foot=el('div','jm-foot');const st=stars(f.rating);if(st)foot.appendChild(st);if(f.quote)foot.appendChild(el('span','jm-quote','“'+f.quote+'”'));
+      if(foot.children.length)main.appendChild(foot);
+      card.append(stub,main);
+      return card;
+    },
+    music(lines){
+      const f=ticketFields(lines),ne=neteaseId(f.netease||f.link),title=f.title||(ne?'…':'歌名'),h=hueOf((f.album||'')+(f.title||ne||''));
+      const card=el('div','jticket jmusic'+(ne?' netease':''));
+      const art=el('div','jmu-art');art.style.setProperty('--h',h);
+      const disc=el('div','jmu-disc'),sleeve=el('div','jmu-sleeve');
+      const src=imgSrc(f.cover);
+      if(src)sleeve.appendChild(picture(src,f.album||title));else sleeve.appendChild(el('span',null,f.album||f.title||''));
+      art.append(disc,sleeve);
+      const info=el('div','jmu-info');
+      const tt=el('div','jmu-title',title),by=el('div','jmu-by',[f.artist,f.album&&'《'+f.album+'》'].filter(Boolean).join(' · '));
+      info.append(el('div','jmu-now',ne?'♪ 网易云音乐 · NOW PLAYING':'♪ 正在听 NOW PLAYING'),tt,by);
+      const a=secs(f.at),L=secs(f.length);
+      let pr=null;
+      if(L||ne){
+        pr=el('div','jmu-progress');
+        const sk=el(ne?'button':'div','jbar knob');const fill=el('i');fill.style.width=(L&&a!=null?Math.round(Math.min(1,a/L)*100):0)+'%';sk.appendChild(fill);
+        if(ne){sk.type='button';sk.setAttribute('aria-label','播放进度');}
+        pr.append(el('span','jmu-at',f.at||'0:00'),sk,el('span','jmu-len',f.length||'--:--'));info.appendChild(pr);
+      }
+      const st=stars(f.rating);if(st)info.appendChild(st);
+      const ly=el('div','jmu-lyric',f.quote?'♫ '+f.quote:'');if(f.quote||ne)info.appendChild(ly);
+      card.append(art,info);
+      if(ne){
+        // 网易云: the song itself, through Meting — what's not written comes from there, and it plays right here
+        const play=el('button','jmu-play');play.type='button';play.innerHTML=PLAY_ICON;play.setAttribute('aria-label','播放');
+        art.appendChild(play);
+        meting(ne).then(song=>{
+          if(!f.title)tt.textContent=song.title||'（没有歌名）';
+          if(!f.artist&&!f.album&&song.artist)by.textContent=song.artist;
+          if(!src&&song.pic){sleeve.textContent='';sleeve.appendChild(picture(song.pic,song.title));}
+          card.dataset.src=song.url||'';card.__song=song;
+        }).catch(e=>{console.warn('techo: meting',e);if(!f.title)tt.textContent='这首歌没加载上';card.classList.add('failed');});
+        wirePlayer(card,f);
+      }
+      return card;
+    },
+    receipt(lines){
+      const r=el('div','jticket jreceipt');
+      lines.forEach(raw=>{
+        let l=raw.trim();if(!l)return;
+        let m;
+        if(/^[-=*_]{3,}$/.test(l)){r.appendChild(el('div','jr-hr'));return;}
+        if((m=/^#\s+(.+)$/.exec(l))){r.appendChild(el('div','jr-title',m[1]));return;}
+        if((m=/^[>＞]\s?(.*)$/.exec(l))){r.appendChild(el('div','jr-note',m[1]));return;}
+        if((m=/^=\s*(.+)$/.exec(l))){
+          const kv=kvOf(m[1]),t=el('div','jr-total');
+          if(kv)t.append(el('small',null,kv[0]),el('strong',null,kv[1]));else t.appendChild(el('strong',null,m[1]));
+          r.appendChild(t);return;
+        }
+        let cls='jr-row';
+        if((m=/^\*\s+(.+)$/.exec(l))){cls+=' jr-group';l=m[1];}
+        else if((m=/^-\s+(.+)$/.exec(l))){cls+=' jr-sub';l=m[1];}
+        const kv=kvOf(l);
+        if(!kv){r.appendChild(el('div','jr-text',l));return;}
+        const row=el('div',cls);row.append(el('span',null,kv[0]),el('span',null,kv[1]));r.appendChild(row);
+      });
+      return r;
+    },
+    flight(lines){
+      const f=ticketFields(lines),a=place(f.from),b=place(f.to);
+      const card=el('div','jticket jflight'),main=el('div','jf-main'),stub=el('div','jf-stub');
+      const band=el('div','jf-band');band.append(el('span',null,f.airline||'航空公司'),el('span',null,'登机牌 BOARDING PASS'));
+      const route=el('div','jf-route');
+      const port=(p,k)=>{const d=el('div','jf-port '+k);d.append(el('b',null,p.code||'—'),el('span',null,p.name));return d;};
+      const mid=el('div','jf-plane');mid.innerHTML=PLANE;   // (the drawing only; nothing written goes in here)
+      route.append(port(a,'from'),mid,port(b,'to'));
+      const fields=el('div','jf-fields');
+      [['日期 DATE',f.date],['起飞 DEP',f.dep],['到达 ARR',f.arr],['登机口 GATE',f.gate],['登机 BOARDING',f.boarding],['舱位 CLASS',f.cls]].filter(x=>x[1]).slice(0,4)
+        .forEach(([k,v])=>{const d=el('div');d.append(el('small',null,k),el('b',null,v));fields.appendChild(d);});
+      main.append(band,route,fields);
+      if(f.name){const n=el('div','jf-name');n.append(el('small',null,'旅客 PASSENGER'),el('b',null,f.name));main.appendChild(n);}
+      stub.append(el('small',null,'航班 FLIGHT'),el('b','jf-no',f.flight||'—'),el('small',null,'座位 SEAT'),el('b','jf-seat',f.seat||'—'),el('div','jf-bar'));
+      card.append(main,stub);
+      return card;
+    },
+    train(lines){
+      const f=ticketFields(lines),a=place(f.from),b=place(f.to);
+      const card=el('div','jticket jtrain');
+      // the red number in the corner: the same for the same ticket
+      let h=7;for(const ch of lines.join('|'))h=(h*31+ch.charCodeAt(0))>>>0;
+      const no=f.no||('Z'+String(h%100000000).padStart(8,'0'));
+      const top=el('div','jt-top');top.append(el('span','jt-no',no),el('span',null,f.gate?'检票：'+f.gate:''));
+      const st=(p)=>{const d=el('div','jt-st');const n=el('b',null,p.code||'—');n.appendChild(el('i',null,'站'));d.append(n,el('span',null,p.name));return d;};
+      const mid=el('div','jt-mid');mid.append(el('b',null,f.train||'—'),el('span','jt-arrow','⟶'));
+      const route=el('div','jt-route');route.append(st(a),mid,st(b));
+      const when=el('div','jt-row');when.append(el('span',null,[f.date,f.dep&&f.dep+'开'].filter(Boolean).join(' ')),el('span',null,[f.car&&f.car+'车',f.seat&&f.seat+'号'].filter(Boolean).join('')));
+      const pay=el('div','jt-row');pay.append(el('span',null,f.price?(/[¥￥]/.test(f.price)?f.price:'¥'+f.price)+(/元$/.test(f.price)?'':'元'):''),el('span',null,f.cls||''));
+      const who=el('div','jt-row jt-who');who.append(el('span',null,f.name||''),el('span','jt-qr'));
+      card.append(top,route,when,pay,who,el('div','jt-foot','买票请到12306　发货请到95306'));
+      return card;
+    },
+  };
+  /* a line that is only a NetEase song link (music.163.com/song?id=…, the app's y.music.163.com/m/song?id=…,
+     #/song?id=…): its player, as if written as ```音乐 with 网易云: <link> */
+  const NETEASE_LINE=/^[ \t]*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*[ \t]*$/gm;
+  const neteaseLine=l=>/^\s*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*\s*$/.test(l)&&neteaseId(l.trim());
   function bodyBlocks(body,into){
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
+    // a card taped on; one right after another: a pile, each on the one before (a stack of tickets that won't
+    // all lie flat) (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
+    const stick=(c,text)=>{
+      fasten(c,text);
+      const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
+      if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
+      else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
+      else open('ticket',c);
+      [...(c.parentNode.classList.contains('jstack')?c.parentNode.children:[])].forEach((t,i)=>t.style.setProperty('--i',i));
+    };
     for(let i=0;i<lines.length;i++){
       const line=lines[i];
       if(!line.trim()){run=null;continue;}     // an empty line ends whatever block this was
       let kind='p',m=null;
       for(const [k,re] of BLOCKS){m=re.exec(line);if(m){kind=k;break;}}
+      if(kind==='p'&&neteaseLine(line)){stick(TICKETS.music(['网易云: '+line.trim()]),line);run=null;continue;}
       if(kind==='fence'){
-        const code=[];
+        const code=[],info=((/^\s*```\s*(\S*)/.exec(line)||[])[1]||'').toLowerCase();
         while(++i<lines.length&&!/^\s*```/.test(lines[i]))code.push(lines[i]);
+        // ```receipt / ```flight / ```train (or 账单 / 机票 / 车票): a bill, a boarding pass, a train ticket
+        const card=TICKETS[TICKET_NAMES[info]];
+        if(card){stick(card(code),code.join('|'));run=null;continue;}
         const pre=open('code',el('pre','jcode'));pre.appendChild(el('code',null,code.join('\n')));run=null;continue;
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
@@ -1122,5 +1429,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT};
 })();

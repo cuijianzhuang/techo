@@ -6,12 +6,46 @@
   const main=$('main'),list=$('list');
   let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
-  let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
+  let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | 'pages' (文章管理) | null (今天)
+  let backTo=null;         // 'pages' | 'jots': the page open was picked there, its back button goes back
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
   let busy=false;
 
-  $('today').textContent='今天是 '+T.todayStr();
+  $('today').textContent=T.todayStr().replace(/-/g,'.');
+
+  /* ---------- the menu ---------- */
+  // line icons for the menu (constant markup)
+  const ICONS={
+    home:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
+    new:'<path d="M4.5 19.5l1-4.2L16.3 4.5a2 2 0 012.9 0l.3.3a2 2 0 010 2.9L8.7 18.5z"/><path d="M14.5 6.3l3.2 3.2"/>',
+    jots:'<rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/>',
+    pages:'<path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11"/><circle cx="4.8" cy="6.5" r=".9"/><circle cx="4.8" cy="12" r=".9"/><circle cx="4.8" cy="17.5" r=".9"/>',
+    look:'<path d="M6 3.5h11.5a1 1 0 011 1v15a1 1 0 01-1 1H6a1.5 1.5 0 01-1.5-1.5v-14A1.5 1.5 0 016 3.5z"/><path d="M8 3.5v17M11 8h5"/>',
+    read:'<path d="M3 5.5c3-1.2 6-1 9 1v13c-3-2-6-2.2-9-1z"/><path d="M21 5.5c-3-1.2-6-1-9 1v13c3-2 6-2.2 9-1z"/>',
+    site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/>',
+    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>'};
+  function icon(k){
+    const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    s.setAttribute('viewBox','0 0 24 24');s.setAttribute('width','18');s.setAttribute('height','18');s.setAttribute('aria-hidden','true');
+    s.setAttribute('class','ico');s.setAttribute('fill','none');s.setAttribute('stroke','currentColor');s.setAttribute('stroke-width','1.6');
+    s.setAttribute('stroke-linecap','round');s.setAttribute('stroke-linejoin','round');s.innerHTML=ICONS[k];
+    return s;
+  }
+  document.querySelectorAll('.item[data-ico]').forEach(b=>b.prepend(icon(b.dataset.ico)));
+  /* 手帐设置 in four parts, each a page of its own: what the journal looks like, how it's read, the site, and
+     the services it's plugged into. The parts are the sections (SECTS, in drawForm) */
+  const SET_PAGES=[
+    {key:'look',title:'外观',sum:'封面 · 纸张 · 扉页 · 封底',parts:['cover','paper','readme','back']},
+    {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
+    {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
+    {key:'svc',title:'接入服务',sum:'网易云音乐 · 地图 · AI',parts:['music','map','ai']}];
+  const isSet=v=>typeof v==='string'&&v.startsWith('set:');
+  SET_PAGES.forEach(pg=>{
+    const b=el('button','item mi');b.type='button';b.dataset.set=pg.key;
+    b.append(icon(pg.key),el('b',null,pg.title),el('span',null,pg.sum));
+    b.onclick=()=>select('set:'+pg.key);$('setnav').appendChild(b);
+  });
 
   /* ---------- API ---------- */
   async function api(path,opt){
@@ -40,51 +74,39 @@
   $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
 
-  /* ---------- list: search, filter by status, grouped by month ---------- */
-  let listQuery='',listFilter='all';
-  const FILTERS=[['all','全部'],['draft','草稿'],['published','已发布']];
+  /* ---------- the menu's list: the few pages written last (all of them: 文章管理) ---------- */
+  const RECENT=6;
   const plain=en=>[en.title,en.latin,en.aside,en.body,en.note,en.place,en.weather,en.quote,en.date,en.date.replace(/-0?/g,'/')].join('\n').toLowerCase();
+  const lockNote=en=>en.locked?'🔒 单独上锁':dayLocks.has(en.date)?'🔒 这一天上锁':'';
   function drawList(){
     list.textContent='';
     const nd=entries.filter(e=>e.status==='draft').length;
-    $('countLabel').textContent='已写的页 · '+entries.length;
-    const fl=$('lfilter');fl.textContent='';
-    FILTERS.forEach(([k,label])=>{
-      const n=k==='all'?entries.length:k==='draft'?nd:entries.length-nd;
-      const b=el('button',null,label+' '+n);b.type='button';b.setAttribute('aria-pressed',listFilter===k?'true':'false');
-      b.onclick=()=>{listFilter=k;drawList();};
-      fl.appendChild(b);
-    });
-    const q=listQuery.trim().toLowerCase();
-    const shown=T.sortEntries(entries).reverse().filter(en=>
-      (listFilter==='all'||(listFilter==='draft')===(en.status==='draft'))&&(!q||plain(en).includes(q)));
-    if(!shown.length){
-      list.appendChild(el('div','lempty',entries.length?'没有找到。':'还没有写过。点上面「新写一页」开始。'));
-    }
-    let month='';
-    shown.forEach(en=>{
-      const d=T.parseDate(en.date),m=d?d.y+' 年 '+d.mo+' 月':'';
-      if(m!==month){month=m;list.appendChild(el('div','lmonth',m));}
+    $('pagesSum').textContent=entries.length?'共 '+entries.length+' 页'+(nd?' · 草稿 '+nd:''):'搜索 · 筛选 · 批量发布';
+    const recent=T.sortEntries(entries).reverse().slice(0,RECENT);
+    if(!recent.length)list.appendChild(el('div','lempty','还没有写过。点上面「新写一页」开始。'));
+    recent.forEach(en=>{
+      const d=T.parseDate(en.date);
       const it=el('button','item'+(en.status==='draft'?' draft':''));it.type='button';it.dataset.id=en.id;
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+((en.photos&&en.photos.length)||en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':dayLocks.has(en.date)?' · 🔒 这一天上锁':''));
-      const gist=T.plainText(en.body);
-      it.append(t,meta);
-      if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
+      it.append(t,el('span',null,[d?d.mo+'/'+d.d:en.date,lockNote(en)].filter(Boolean).join(' · ')));
       (en.stickers||[]).slice(0,2).forEach(k=>{const g=T.stickerSvg(k,18);if(g){g.classList.add('lstk');it.appendChild(g);}});
       it.onclick=()=>select(en.id);
       list.appendChild(it);
     });
+    // a page further back, open: 文章管理 is where it came from
+    const older=sel&&entries.some(e=>e.id===sel)&&!recent.some(e=>e.id===sel);
+    $('homeBtn').setAttribute('aria-current',sel===null?'true':'false');
     $('newBtn').setAttribute('aria-current',sel==='new'?'true':'false');
-    $('settingsBtn').setAttribute('aria-current',sel==='settings'?'true':'false');
-    $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
+    $('jotsBtn').setAttribute('aria-current',sel==='jots'||(older&&backTo==='jots')?'true':'false');
+    $('pagesBtn').setAttribute('aria-current',sel==='pages'||(older&&backTo!=='jots')?'true':'false');
+    document.querySelectorAll('#setnav .item').forEach(b=>b.setAttribute('aria-current',sel==='set:'+b.dataset.set?'true':'false'));
   }
-  $('q').addEventListener('input',e=>{listQuery=e.target.value;drawList();});
+  $('homeBtn').onclick=()=>select(null);
   $('newBtn').onclick=()=>select('new');
   $('jotsBtn').onclick=()=>select('jots');
-  $('settingsBtn').onclick=()=>select('settings');
+  $('pagesBtn').onclick=()=>select('pages');
 
   const dirty=()=>draft&&JSON.stringify(stripLocal(draft))!==base;
   function stripLocal(d){
@@ -97,7 +119,9 @@
   /* switching away from unsaved changes asks first, inline */
   function select(id,force){
     if(busy)return;
-    if(!force&&dirty()&&id!==sel){
+    // the settings' parts are one set of settings: going from one to another keeps what's been changed
+    const across=isSet(id)&&isSet(sel);
+    if(!force&&dirty()&&id!==sel&&!across){
       const box=main.querySelector('.unsaved');if(box)box.remove();
       const u=el('div','unsaved');u.append('这一页有改动还没保存。');
       const sv=el('button','b small pri','保存');sv.type='button';sv.onclick=async()=>{if(await save())select(id,true);};
@@ -107,9 +131,11 @@
       const f=main.querySelector('.form');(f||main).prepend(u);
       return;
     }
+    backTo=(sel==='pages'||sel==='jots')&&entries.find(e=>e.id===id)?sel:null;
     sel=id;
-    if(id==='settings'){draft=Object.assign({},settings);}
-    else if(id==='jots'){draft=null;}
+    if(across){drawList();drawForm();changed();if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);return;}
+    if(isSet(id)){draft=Object.assign({},settings);}
+    else if(id==='jots'||id==='pages'){draft=null;}
     else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
@@ -145,7 +171,7 @@
     const a=main.querySelector('.actbar');if(a)a.classList.toggle('dirty',!!d);
   }
   function drawPreview(){
-    if(!pvbox||!draft||sel==='settings')return;
+    if(!pvbox||!draft||isSet(sel))return;
     pvbox.textContent='';
     // as it will be in the book: as many pages as it takes, one at a time with ‹ › when there are more
     const ps=T.entryPages(draft,'r');
@@ -176,7 +202,10 @@
     return a;
   }
   /* on a phone the list and a page take turns: this goes back to the list */
-  function backBtn(){const b=el('button','b small back','← 列表');b.type='button';b.onclick=()=>select(null);return b;}
+  function backBtn(){
+    if(backTo){const to=backTo,b=el('button','b small back show','← '+(to==='pages'?'文章管理':'随手记'));b.type='button';b.onclick=()=>select(to);return b;}
+    const b=el('button','b small back','← 菜单');b.type='button';b.onclick=()=>select(null);return b;
+  }
   function head(title,extra){
     const h=el('div','fhead');h.append(backBtn(),el('h2',null,title));
     if(extra)h.appendChild(extra);
@@ -186,47 +215,53 @@
     main.textContent='';pvbox=null;pvcap=null;pvAt=0;statusEl=el('div','status');
     document.body.classList.toggle('detail',!!sel);
     if(sel==='jots'){drawJots();return;}
+    if(sel==='pages'){drawPages();return;}
     if(!sel||!draft){drawHome();return;}
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
-    if(sel==='settings'){
+    if(isSet(sel)){
+      const pg=SET_PAGES.find(p=>'set:'+p.key===sel)||SET_PAGES[0];
       // each section a card; the chips at the top go straight to one
-      const nav=el('nav','secnav');nav.setAttribute('aria-label','设置分区');
-      const cards=[];
-      const sect=(t,hint,nodes)=>{
-        const c=card(t,nodes,{hint});c.id='set-'+cards.length;cards.push(c);
-        const b=el('button','chip on',t);b.type='button';b.onclick=()=>c.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b);
-        return c;
-      };
-      f.append(head('手帐设置'),nav,
-        sect('网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。',[
+      const nav=el('nav','secnav');nav.setAttribute('aria-label','这一部分的设置');
+      const SECTS={
+        site:()=>['网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。',[
           field('网站标题','siteTitle','text',{max:40}),
-          field('一句介绍','siteDesc','text',{max:120})]),
-        sect('封面',null,[
+          field('一句介绍','siteDesc','text',{max:120})]],
+        cover:()=>['封面',null,[
           coverStyleField(),
           field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
           field('大字下面的一行','coverSub','text',{max:40}),
           coverStickerField(),
-          coverPhotoField()]),
-        sect('纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]),
-        sect('扉页','翻开封面后第一页的 README。',[
+          coverPhotoField()]],
+        paper:()=>['纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]],
+        readme:()=>['扉页','翻开封面后第一页的 README。',[
           field('whoami（名字）','readmeName','text',{max:30}),
           field('cat role（在做什么）','readmeRole','text',{max:40}),
           field('ls ~/life（生活里有什么）','readmeLife','text',{max:60}),
           field('从哪天开始记','readmeSince','text',{max:20,ph:'2026-09'}),
-          field('小咖旁边那句话','readmeSign','text',{max:30})]),
-        sect('封底',null,[
+          field('小咖旁边那句话','readmeSign','text',{max:30})]],
+        back:()=>['封底',null,[
           field('封底大字','backTitle','text',{max:12}),
-          field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]),
-        sect('加密','给整本手帐设一个口令。',[lockField('book')]),
-        sect('翻页方式','首页的书怎么翻。',[bookModeField()]),
-        sect('示例页',null,[samplesField()]),
-        sect('地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]),
-        sect('AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]),
-        sect('联系方式','显示在「写信给我」那一页。',[
+          field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]],
+        lock:()=>['加密','给整本手帐设一个口令（马上生效，不用点保存）。',[lockField('book')]],
+        mode:()=>['翻页方式','首页的书怎么翻。',[bookModeField()]],
+        samples:()=>['示例页',null,[samplesField()]],
+        music:()=>['网易云音乐','日记里的网易云歌曲：正文里单独一行贴歌曲链接，或 ```音乐 卡片里写「网易云: 链接」，就是一个能播的播放器。歌名、封面、歌词和声音从 Meting API 取。',[musicField()]],
+        map:()=>['地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]],
+        ai:()=>['AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]],
+        contact:()=>['联系方式','显示在「写信给我」那一页。',[
           field('邮箱','email','email',{ph:'you@example.com',max:120}),
           field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
-          field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60})]));
+          field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60})]]};
+      const cards=pg.parts.map((k,i)=>{
+        const [t,hint,nodes]=SECTS[k]();
+        const c=card(t,nodes,{hint});c.id='set-'+k;
+        const b=el('button','chip on',t);b.type='button';b.onclick=()=>c.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b);
+        return c;
+      });
+      f.append(head('手帐设置 · '+pg.title),el('div','hintx',pg.sum));
+      if(cards.length>2)f.appendChild(nav);
+      f.append(...cards);
       const s=el('button','b pri','保存设置');s.type='submit';
       f.append(actBar([s]));main.appendChild(f);return;
     }
@@ -314,6 +349,138 @@
     fit();
   }
   addEventListener('resize',()=>{const pv=main.querySelector('.pv');if(pv)fitPreview(pv);});
+
+  /* ---------- 文章管理: every page, to find one, and to publish, unpublish or delete several at once ----------
+     Searched (title, words, place, date), filtered (status, lock, month), sorted (by the day written about,
+     or by when last changed), a month at a heading; the first PAGE_STEP, then more on asking. */
+  const pv={q:'',st:'all',mo:'',sort:'new',n:0},chosen=new Set();
+  const PAGE_STEP=60;
+  const STATES=[['all','全部'],['published','已发布'],['draft','草稿'],['locked','上锁']];
+  const SORTS=[['new','日期：新→旧'],['old','日期：旧→新'],['edited','最近改过']];
+  const isLocked=en=>!!(en.locked||dayLocks.has(en.date));
+  function drawPages(){
+    pv.n=pv.n||PAGE_STEP;
+    const f=el('div','form pages');
+    const nd=entries.filter(e=>e.status==='draft').length,nl=entries.filter(isLocked).length;
+    f.append(head('文章管理'),el('div','hintx','共 '+entries.length+' 页 · 已发布 '+(entries.length-nd)+' · 草稿 '+nd+(nl?' · 上锁 '+nl:'')));
+    // what to show
+    const tools=el('div','ptools');
+    const q=el('input');q.type='search';q.placeholder='搜标题、正文、地点、日期';q.value=pv.q;q.setAttribute('aria-label','搜索文章');q.autocomplete='off';
+    const months=[...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+    const mo=el('select');mo.setAttribute('aria-label','按月份');
+    [['','全部月份'],...months.map(m=>[m,m.replace('-',' 年 ').replace(/ 0?(\d+)$/,' $1')+' 月'])].forEach(([v,t])=>{const o=el('option',null,t);o.value=v;mo.appendChild(o);});
+    mo.value=months.includes(pv.mo)?pv.mo:'';
+    const so=el('select');so.setAttribute('aria-label','排序');
+    SORTS.forEach(([v,t])=>{const o=el('option',null,t);o.value=v;so.appendChild(o);});so.value=pv.sort;
+    const sts=el('div','lfilter');sts.setAttribute('role','group');sts.setAttribute('aria-label','按状态');
+    const r1=el('div','prow');r1.append(q,mo,so);
+    // the bar of what's picked stays in reach with the search as the list scrolls
+    const bulk=el('div','pbulk'),rows=el('div','plist'),more=el('div','bar');
+    tools.append(r1,sts,bulk);
+    f.append(tools,rows,more,statusEl);
+    main.appendChild(f);
+    const shown=()=>{
+      const k=pv.q.trim().toLowerCase();
+      const a=entries.filter(en=>(pv.st==='all'||(pv.st==='locked'?isLocked(en):pv.st==='draft'?en.status==='draft':en.status!=='draft'))
+        &&(!pv.mo||en.date.slice(0,7)===pv.mo)&&(!k||plain(en).includes(k)));
+      return pv.sort==='edited'?a.sort((x,y)=>(y.updatedAt||0)-(x.updatedAt||0)):pv.sort==='old'?T.sortEntries(a):T.sortEntries(a).reverse();
+    };
+    function paint(){
+      [...chosen].forEach(id=>{if(!entries.some(e=>e.id===id))chosen.delete(id);});
+      const all=shown(),list=all.slice(0,pv.n);
+      sts.textContent='';
+      STATES.forEach(([k,label])=>{
+        const n=k==='all'?entries.length:k==='locked'?nl:k==='draft'?nd:entries.length-nd;
+        if(k==='locked'&&!n&&pv.st!=='locked')return;
+        const b=el('button',null,label+' '+n);b.type='button';b.setAttribute('aria-pressed',String(pv.st===k));
+        b.onclick=()=>{pv.st=k;pv.n=PAGE_STEP;paint();};sts.appendChild(b);
+      });
+      // what's picked, and what to do with it
+      bulk.textContent='';
+      const allBox=el('input');allBox.type='checkbox';allBox.setAttribute('aria-label','全选筛出来的');
+      const picked=list.filter(e=>chosen.has(e.id)).length;
+      allBox.checked=!!list.length&&picked===list.length;allBox.indeterminate=picked>0&&picked<list.length;
+      allBox.onchange=()=>{list.forEach(e=>allBox.checked?chosen.add(e.id):chosen.delete(e.id));paint();};
+      const lab=el('label','pall');lab.append(allBox,el('span',null,chosen.size?'已选 '+chosen.size+' 页':(all.length===entries.length?'全部 ':'筛出 ')+all.length+' 页'));
+      bulk.appendChild(lab);
+      if(chosen.size){
+        const ids=[...chosen];
+        const act=(t,cls,fn)=>{const b=el('button','b small'+(cls?' '+cls:''),t);b.type='button';b.onclick=fn;bulk.appendChild(b);return b;};
+        act('发布',null,()=>setStatus(ids,'published'));
+        act('改回草稿',null,()=>setStatus(ids,'draft'));
+        const del=act('删除','warn',()=>{
+          const c=el('span','confirm','删除 '+ids.length+' 页，连同照片，不能恢复。确定？');
+          const yes=el('button','b warn small','删除');yes.type='button';yes.onclick=()=>removeAll(ids);
+          const no=el('button','b small','取消');no.type='button';no.onclick=()=>c.replaceWith(del);
+          c.append(yes,no);del.replaceWith(c);
+        });
+        act('不选了','quiet',()=>{chosen.clear();paint();});
+      }
+      // the pages, a month at a heading
+      rows.textContent='';
+      if(!list.length)rows.appendChild(el('div','lempty',entries.length?'没有找到。换个词，或者看看「全部」。':'还没有写过。点左边「新写一页」开始。'));
+      let month='';
+      list.forEach(en=>{
+        const d=T.parseDate(en.date),m=pv.sort==='edited'?'':(d?d.y+' 年 '+d.mo+' 月':'');
+        if(m&&m!==month){month=m;rows.appendChild(el('div','lmonth',m+' · '+all.filter(e=>e.date.slice(0,7)===en.date.slice(0,7)).length+' 页'));}
+        const r=el('div','prowi'+(en.status==='draft'?' draft':'')+(chosen.has(en.id)?' on':''));
+        const cb=el('input');cb.type='checkbox';cb.checked=chosen.has(en.id);cb.setAttribute('aria-label','选中「'+(en.title||'（无题）')+'」');
+        cb.onchange=()=>{cb.checked?chosen.add(en.id):chosen.delete(en.id);paint();};
+        const day=el('span','pday');
+        day.append(el('b',null,d?String(d.d):''),el('small',null,d?d.mo+' 月 · 周'+WDN[d.wd]:en.date));
+        if(pv.sort==='edited'||!m)day.lastChild.textContent=d?d.y+'.'+d.mo+'.'+d.d:en.date;
+        const open=el('button','popen');open.type='button';
+        const t=el('b',null,en.title||'（无题）');
+        const gist=T.plainText(en.body);
+        const meta=[(en.photos&&en.photos.length)||en.photoKey?'📷 '+((en.photos&&en.photos.length)||1):'',en.place?'📍 '+en.place:'',lockNote(en),
+          pv.sort==='edited'&&en.updatedAt?'改于 '+new Date(en.updatedAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''].filter(Boolean).join(' · ');
+        open.append(t,el('i','gist',gist.length>60?gist.slice(0,60)+'…':gist||'（还没写正文）'));
+        if(meta)open.appendChild(el('span','pmeta',meta));
+        open.onclick=()=>select(en.id);
+        const st=el('span','pst '+(en.status==='draft'?'draft':'pub'),en.status==='draft'?'草稿':'已发布');
+        r.append(cb,day,open,st);rows.appendChild(r);
+      });
+      more.textContent='';
+      if(all.length>list.length){
+        const b=el('button','b small','再显示 '+Math.min(PAGE_STEP,all.length-list.length)+' 页（还有 '+(all.length-list.length)+'）');b.type='button';
+        b.onclick=()=>{pv.n+=PAGE_STEP;paint();};more.appendChild(b);
+      }
+    }
+    let qt=0;
+    q.addEventListener('input',()=>{clearTimeout(qt);qt=setTimeout(()=>{pv.q=q.value;pv.n=PAGE_STEP;paint();},120);});
+    mo.onchange=()=>{pv.mo=mo.value;pv.n=PAGE_STEP;paint();};
+    so.onchange=()=>{pv.sort=so.value;paint();};
+    paint();
+  }
+  // several at once, one after another; what didn't go is said
+  async function setStatus(ids,to){
+    if(busy)return;busy=true;
+    let done=0;const failed=[];
+    for(const id of ids){
+      const en=entries.find(e=>e.id===id);if(!en)continue;
+      if(en.status===to){done++;continue;}
+      status('正在'+(to==='draft'?'改回草稿':'发布')+'……（'+(done+failed.length+1)+' / '+ids.length+'）');
+      try{
+        const r=await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(id),stripLocal(Object.assign({},en,{status:to})));
+        r.entry.locked=en.locked;entries[entries.findIndex(e=>e.id===id)]=r.entry;done++;
+        if(to==='published')refreshCard(r.entry);
+      }catch(e){failed.push((en.title||'（无题）')+'：'+(e.message||'没成功'));}
+    }
+    busy=false;chosen.clear();drawList();drawForm();
+    status(failed.length?done+' 页'+(to==='draft'?'改回了草稿':'已发布')+'，'+failed.length+' 页没成功：'+failed.join('；'):done+' 页'+(to==='draft'?'改回了草稿，主页上看不到了。':'已发布，主页刷新就能看到。'),failed.length?'err':'ok');
+  }
+  async function removeAll(ids){
+    if(busy)return;busy=true;
+    let done=0;const failed=[];
+    for(const id of ids){
+      const en=entries.find(e=>e.id===id);if(!en)continue;
+      status('正在删除……（'+(done+failed.length+1)+' / '+ids.length+'）');
+      try{await api('/api/admin/entries/'+encodeURIComponent(id),{method:'DELETE'});entries=entries.filter(e=>e.id!==id);done++;}
+      catch(e){failed.push((en.title||'（无题）')+'：'+(e.message||'没成功'));}
+    }
+    busy=false;chosen.clear();drawList();drawForm();
+    status(failed.length?'删了 '+done+' 页，'+failed.length+' 页没删掉：'+failed.join('；'):'删了 '+done+' 页。',failed.length?'err':'ok');
+  }
 
   /* ---------- 今天: what's there to do ----------
      Today's page (or a way to start it), a line for 随手记, the drafts waiting to be published (one tap each),
@@ -658,6 +825,44 @@
     w.append(pick,row,key,acts);
     return w;
   }
+  /* 手帐设置 → 接入服务 → 网易云音乐: which Meting API (a few known ones, or one's own), and a song to try it on */
+  const METING_PRESETS=[
+    ['','api.injahow.cn（默认）'],
+    ['https://api.i-meto.com/meting/api?server=:server&type=:type&id=:id&r=:r','api.i-meto.com'],
+    ['https://meting.qjqq.cn/?server=:server&type=:type&id=:id','meting.qjqq.cn']];
+  function musicField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const f=field('Meting API 地址','metingApi','text',{ph:T.METING_DEFAULT,max:200,
+      hint:'留空用默认的公共接口。可以写成带占位符的 …?server=:server&type=:type&id=:id（:server :type :id :r 会被替换）；没有占位符的，后面会加上 server=netease&type=song&id=…。公共接口时好时坏，放不了就换一个，或者自己搭一个 Meting（github.com/metowolf/Meting-API）。'});
+    const inp=f.querySelector('input');
+    const chips=el('div','chips');
+    const mark=()=>chips.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===(inp.value.trim()))));
+    METING_PRESETS.forEach(([v,n])=>{
+      const b=el('button','chip pre',n);b.type='button';b.dataset.v=v;
+      b.onclick=()=>{inp.value=v;draft.metingApi=v;changed();mark();};chips.appendChild(b);
+    });
+    inp.addEventListener('input',mark);mark();
+    // try it: a song through the address as it is now (saved or not), from this browser, as readers will
+    const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（可空）';song.setAttribute('aria-label','试听的歌');
+    const t=el('button','b small','试一下');t.type='button';row.append(song,t);
+    const out=el('div','mtest');
+    t.onclick=async()=>{
+      const id=T.neteaseId(song.value)||(!song.value.trim()&&'186016');
+      if(!id){out.textContent='✗ 没认出歌曲 ID：贴 music.163.com 的歌曲链接，或者直接写数字 ID';out.className='mtest err';return;}
+      t.disabled=true;out.className='mtest';out.textContent='正在取……';
+      try{
+        const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT);
+        out.textContent='';out.className='mtest ok';
+        if(x.pic){const i=el('img');i.src=x.pic;i.alt='';i.referrerPolicy='no-referrer';out.appendChild(i);}
+        const au=el('audio');au.controls=true;au.preload='none';au.src=x.url;
+        const tx=el('span');tx.append(el('b',null,'✓ '+(x.title||'（没有歌名）')),el('small',null,(x.artist||'')+(x.lrc?' · 有歌词':' · 没有歌词')));
+        out.append(tx,au);
+      }catch(e){out.textContent='✗ 没取到：这个接口现在用不了，或者这首歌放不了（VIP / 下架）。换个接口或换首歌再试。';out.className='mtest err';}
+      finally{t.disabled=false;}
+    };
+    w.append(f,chips,row,out);
+    return w;
+  }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
   function mapField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
@@ -703,35 +908,137 @@
 
   /* ---------- jots: loose lines for tonight's page ---------- */
   let jotsToday=null;
+  /* 随手记: a line to write, then every line written — searched (the Worker looks, so the old ones too),
+     filtered (still waiting / already in a page), a day at a heading, a page of them at a time; one deleted
+     after a second tap, or several picked and deleted together */
+  const jv={q:'',st:'all'},jPicked=new Set();
+  let jMore=false,jStats={total:0,unused:0,matched:0};
   function drawJots(again){
     if(again){main.textContent='';statusEl=el('div','status');}
-    const f=el('form','form');f.noValidate=true;
+    const f=el('form','form jotsv');f.noValidate=true;
     const hint=el('div','hintx','白天想到什么就记一句。每晚 22:00 Claude 会把今天记下的这些和当天的聊天一起写成一页草稿；电脑没开的话，23:30 网站会自己用随手记写。');
-    const ta=el('textarea');ta.rows=4;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
-    const l=el('label');l.append('新的一句',ta);
+    const ta=el('textarea');ta.rows=3;ta.maxLength=1000;ta.placeholder='比如：午饭那家面馆换了老板，汤还是一样好喝。';ta.id='f-jot';
+    const l=el('label','sr');l.htmlFor='f-jot';l.textContent='新的一句';
     const b=el('div','bar');const s=el('button','b pri','记下');s.type='submit';b.appendChild(s);
     const cw=el('button','b','现在就用今天的随手记写一页');cw.type='button';cw.onclick=compose;b.appendChild(cw);
-    const ul=el('div','jots');
-    const paint=()=>{
-      ul.textContent='';
-      if(!jots.length){ul.appendChild(el('div','hintx','还没有记过。'));return;}
-      jots.forEach(j=>{
-        const d=new Date(j.createdAt);
-        const row=el('div','jot'+(j.usedIn?' used':''));
-        const meta=el('span','when',(d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+(j.usedIn?' · 已写进手帐':''));
-        const x=el('button','b small','删掉');x.type='button';
-        x.onclick=async()=>{
-          try{await api('/api/admin/jots/'+encodeURIComponent(j.id),{method:'DELETE'});jots=jots.filter(k=>k.id!==j.id);paint();}
-          catch(e){status(e.message||'删除失败','err');}
-        };
-        row.append(el('p',null,j.text),meta,x);ul.appendChild(row);
+    b.appendChild(el('span','hintx','⌘/Ctrl+Enter 记下'));
+    ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();f.requestSubmit();}});
+    const stat=el('div','hintx');
+    // finding and picking
+    const tools=el('div','ptools');
+    const q=el('input');q.type='search';q.placeholder='搜随手记';q.value=jv.q;q.setAttribute('aria-label','搜随手记');q.autocomplete='off';
+    const sts=el('div','lfilter');sts.setAttribute('role','group');sts.setAttribute('aria-label','按状态');
+    const r1=el('div','prow');r1.append(q);
+    const bulk=el('div','pbulk');
+    tools.append(r1,sts,bulk);
+    const ul=el('div','jots'),more=el('div','bar');
+    const WD='日一二三四五六',hm=d=>String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    // the words, the searched-for bit marked (text nodes only)
+    function marked(text){
+      const p=el('p'),k=jv.q.trim();
+      if(!k){p.textContent=text;return p;}
+      const lo=text.toLowerCase(),kl=k.toLowerCase();let at=0,i;
+      while((i=lo.indexOf(kl,at))>=0){p.append(text.slice(at,i),el('mark',null,text.slice(i,i+k.length)));at=i+k.length;}
+      p.append(text.slice(at));return p;
+    }
+    function paint(){
+      stat.textContent='共 '+jStats.total+' 条'+(jStats.unused?' · 还没写进手帐 '+jStats.unused+' 条':'');
+      sts.textContent='';
+      [['all','全部',jStats.total],['unused','还没写进手帐',jStats.unused],['used','已写进手帐',jStats.total-jStats.unused]].forEach(([k,label,n])=>{
+        const x=el('button',null,label+' '+n);x.type='button';x.setAttribute('aria-pressed',String(jv.st===k));
+        x.onclick=()=>{jv.st=k;load();};sts.appendChild(x);
       });
-    };
+      [...jPicked].forEach(id=>{if(!jots.some(j=>j.id===id))jPicked.delete(id);});
+      bulk.textContent='';
+      const all=el('input');all.type='checkbox';all.setAttribute('aria-label','全选');
+      const n=jots.filter(j=>jPicked.has(j.id)).length;
+      all.checked=!!jots.length&&n===jots.length;all.indeterminate=n>0&&n<jots.length;
+      all.onchange=()=>{jots.forEach(j=>all.checked?jPicked.add(j.id):jPicked.delete(j.id));paint();};
+      const filtered=jv.q.trim()||jv.st!=='all';
+      const lab=el('label','pall');lab.append(all,el('span',null,jPicked.size?'已选 '+jPicked.size+' 条':(filtered?'找到 '+jStats.matched+' 条':'全部 '+jStats.total+' 条')+(jMore?'，显示了 '+jots.length+' 条':'')));
+      bulk.appendChild(lab);
+      if(jPicked.size){
+        const del=el('button','b small warn','删除');del.type='button';
+        del.onclick=()=>{
+          const c=el('span','confirm','删除 '+jPicked.size+' 条，不能恢复。确定？');
+          const yes=el('button','b warn small','删除');yes.type='button';yes.onclick=removeJots;
+          const no=el('button','b small','取消');no.type='button';no.onclick=()=>c.replaceWith(del);
+          c.append(yes,no);del.replaceWith(c);
+        };
+        const none=el('button','b small quiet','不选了');none.type='button';none.onclick=()=>{jPicked.clear();paint();};
+        bulk.append(del,none);
+      }
+      ul.textContent='';
+      if(!jots.length)ul.appendChild(el('div','lempty',filtered?'没有找到。换个词，或者看看「全部」。':'还没有记过。'));
+      let day='';
+      jots.forEach(j=>{
+        const d=new Date(j.createdAt),k=d.toDateString();
+        if(k!==day){day=k;ul.appendChild(el('div','lmonth',(d.getFullYear()!==new Date().getFullYear()?d.getFullYear()+' 年 ':'')+(d.getMonth()+1)+' 月 '+d.getDate()+' 日 · 周'+WD[d.getDay()]+(k===new Date().toDateString()?' · 今天':'')));}
+        const row=el('div','jot'+(j.usedIn?' used':'')+(jPicked.has(j.id)?' on':''));
+        const cb=el('input');cb.type='checkbox';cb.checked=jPicked.has(j.id);cb.setAttribute('aria-label','选中这一条');
+        cb.onchange=()=>{cb.checked?jPicked.add(j.id):jPicked.delete(j.id);paint();};
+        const meta=el('span','when',hm(d));
+        if(j.usedIn){
+          const en=entries.find(e=>e.id===j.usedIn);
+          if(en){const a=el('button','jused','写进了《'+(en.title||'（无题）')+'》');a.type='button';a.onclick=()=>select(en.id);meta.append(' · ',a);}
+          else meta.append(' · 已写进手帐');
+        }
+        // deleting: a second tap, within a few seconds
+        const x=el('button','b small','删掉');x.type='button';let armed=0;
+        x.onclick=async()=>{
+          if(!armed){armed=setTimeout(()=>{armed=0;x.textContent='删掉';x.classList.remove('warn');},3000);x.textContent='确定删掉？';x.classList.add('warn');return;}
+          clearTimeout(armed);x.disabled=true;
+          try{await api('/api/admin/jots/'+encodeURIComponent(j.id),{method:'DELETE'});
+            jots=jots.filter(k=>k.id!==j.id);jPicked.delete(j.id);jStats.total--;jStats.matched--;if(!j.usedIn)jStats.unused--;paint();status('删掉了一条。','ok');}
+          catch(e){x.disabled=false;status(e.message||'删除失败','err');}
+        };
+        row.append(cb,marked(j.text),meta,x);ul.appendChild(row);
+      });
+      more.textContent='';
+      if(jMore){const m=el('button','b small','再往前看 100 条');m.type='button';m.onclick=()=>load(true);more.appendChild(m);}
+    }
+    // from the Worker: the first page, or (more) the page after the last one here
+    let seq=0;
+    async function load(next){
+      const my=++seq,p=new URLSearchParams({limit:'100'});
+      if(jv.q.trim())p.set('q',jv.q.trim());
+      if(jv.st!=='all')p.set('state',jv.st);
+      const last=jots[jots.length-1];
+      if(next&&last)p.set('before',last.createdAt+'.'+last.id);
+      try{
+        const r=await api('/api/admin/jots?'+p);
+        if(my!==seq)return;
+        jots=next?jots.concat(r.jots||[]):(r.jots||[]);jMore=!!r.more;
+        jStats={total:r.total||0,unused:r.unused||0,matched:r.matched||0};
+        if(!next)jPicked.clear();
+        if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
+        paint();paintLock();
+      }catch(e){status(e.message||'加载失败','err');}
+    }
+    async function removeJots(){
+      if(busy)return;busy=true;
+      const ids=[...jPicked];let done=0;
+      try{
+        for(let i=0;i<ids.length;i+=100){
+          status('正在删除……（'+Math.min(ids.length,i+100)+' / '+ids.length+'）');
+          done+=(await sendJson('POST','/api/admin/jots/delete',{ids:ids.slice(i,i+100)})).deleted;
+        }
+        status('删了 '+done+' 条。','ok');
+      }catch(e){status((done?'删了 '+done+' 条，其余的':'')+(e.message||'没删成功'),'err');}
+      finally{busy=false;jPicked.clear();load();}
+    }
+    let qt=0;
+    q.addEventListener('input',()=>{clearTimeout(qt);qt=setTimeout(()=>{jv.q=q.value;load();},250);});
+    q.addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault();});
     f.addEventListener('submit',async e=>{
       e.preventDefault();
       const text=ta.value.trim();if(!text){ta.focus();return;}
       if(busy)return;busy=true;status('正在记……');
-      try{const r=await sendJson('POST','/api/admin/jots',{text});jots.unshift(r.jot);ta.value='';paint();status('记下了。','ok');}
+      try{
+        await sendJson('POST','/api/admin/jots',{text});ta.value='';status('记下了。','ok');
+        // it's the newest: shown at the top unless a search or a filter leaves it out
+        busy=false;await load();
+      }
       catch(err){status(err.message||'没记上，稍后再试。','err');}
       finally{busy=false;}
     });
@@ -749,12 +1056,11 @@
     const paintLock=()=>{lk.textContent='';if(!jotsToday)return;
       const on=dayLocks.has(jotsToday);
       lk.appendChild(card('今天这一页上锁',[lockField('d-'+jotsToday)],{fold:true,open:on,sum:on?'🔒 已上锁':'不上锁'}));};
-    f.append(head('随手记'),hint,l,b,statusEl,ul,lk);main.appendChild(f);paint();paintLock();
-    (async()=>{try{const r=await api('/api/admin/jots');jots=r.jots||[];
-      if(r.today){jotsToday=r.today;if(r.todayLocked)dayLocks.add(r.today);else dayLocks.delete(r.today);}
-      paint();paintLock();}catch(e){status(e.message||'加载失败','err');}})();
+    f.append(head('随手记'),stat,card('记一句',[hint,l,ta,b,statusEl]),lk,tools,ul,more);main.appendChild(f);
+    paint();paintLock();load();
     setTimeout(()=>ta.focus(),0);
   }
+
 
   /* ---------- 一键补全: the AI fills in the parts of the page still empty, from its words ----------
      Title, English note, header note, stamp, footer quote and doodles; what's filled in stays as it is, and
@@ -884,10 +1190,27 @@
     return wrap;
   }
 
+  /* 账单 / 机票 / 车票 templates for the toolbar, dated today */
+  const TICKET_TPL={
+    receipt:()=>{const d=T.parseDate(T.todayStr());return '```账单\n# 今日账单\n> 慢慢花，好好记\n日期: '+d.y+'年'+d.mo+'月'+d.d+'日\n---\n= 合计: ¥128.00\n---\n* 早餐: ¥18.00\n- 豆浆油条: ¥8.00\n- 茶叶蛋: ¥10.00\n* 午饭: ¥45.00\n* 电影: ¥65.00\n---\n> 谢谢惠顾\n```';},
+    flight:()=>{const d=T.parseDate(T.todayStr());return '```机票\n航空: 中国国际航空\n航班: CA933\n从: PEK 北京首都\n到: CDG 巴黎戴高乐\n日期: '+d.mo+'月'+d.d+'日\n起飞: 13:30\n到达: 18:40\n登机口: E12\n座位: 32K\n舱位: 经济舱\n乘客: XIAO/KA\n```';},
+    book:()=>'```书籍\n书名: 百年孤独\n作者: 加西亚·马尔克斯\n出版社: 南海出版公司\n进度: 132/360\n评分: 4.5\n书摘: 划线的那一句，抄在这里\n```',
+    film:()=>'```影视\n片名: 千与千寻\n年份: 2001\n导演: 宫崎骏\n类型: 动画 / 奇幻\n评分: 9.4\n简介: 一两句写这部片讲了什么\n短评: 看完想说的一句话\n```',
+    cinema:()=>{const d=T.parseDate(T.todayStr());return '```电影票\n片名: 千与千寻\n类型: 电影\n日期: '+d.mo+'月'+d.d+'日\n场次: 19:30\n影院: 万达影城\n影厅: 6号厅\n座位: 7排8座\n评分: 5\n短评: 看完想说的一句话\n```';},
+    music:()=>'```音乐\n歌名: 晴天\n歌手: 周杰伦\n专辑: 叶惠美\n时长: 4:29\n听到: 1:48\n评分: 5\n歌词: 循环了一晚上的那一句\n```',
+    train:()=>{const d=T.parseDate(T.todayStr());return '```车票\n车次: G1\n从: 北京南 Beijingnan\n到: 上海虹桥 Shanghaihongqiao\n日期: '+d.y+'年'+String(d.mo).padStart(2,'0')+'月'+String(d.d).padStart(2,'0')+'日\n发车: 09:00\n车厢: 05\n座位: 12A\n席别: 二等座\n票价: ¥553.0\n乘客: 小咖\n检票: A12\n```';},
+  };
+
   /* ---------- 正文: a Markdown editor ----------
      A toolbar for the marks the page understands (render.js bodyBlocks), ⌘/Ctrl+B / I / K, and Enter carrying
      a list, checklist or quote on to the next line (Enter on an empty item ends it). Edits go through
      insertText, so ⌘/Ctrl+Z undoes them. The page beside the form is the preview. */
+  /* a NetEase song → its id: a link or an id here; the app's short links (163cn.tv) through the Worker */
+  async function songId(v){
+    const id=T.neteaseId(v)||T.neteaseId((/https?:\/\/(?:y\.)?music\.163\.com\/\S+/.exec(v)||[''])[0]);
+    if(id)return id;
+    return (await sendJson('POST','/api/admin/netease',{q:v})).id;
+  }
   function mdField(){
     const wrap=el('div','mdfield');
     const lab=el('label','sr',null);lab.textContent='正文';lab.htmlFor='f-body';
@@ -941,11 +1264,118 @@
       ['⤓','换页：后面的字从下一页写起',()=>block('+++\n')],   // the caret on the line after, ready to write on
     ];
     const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
-    TOOLS.forEach(([t,title,fn,cls])=>{
+    // in groups: the words, the lines, what goes between, and (below) what's stuck on
+    const GROUP=new Set([5,10]),sep=()=>{const x=el('span','mdsep');x.setAttribute('aria-hidden','true');bar.appendChild(x);};
+    TOOLS.forEach(([t,title,fn,cls],i)=>{
+      if(GROUP.has(i))sep();
       const b=el('button','mdb'+(cls?' mdb-'+cls:''),t);b.type='button';b.title=title;b.setAttribute('aria-label',title);
       b.addEventListener('mousedown',e=>e.preventDefault());   // keep the selection in the text
       b.onclick=fn;bar.appendChild(b);
     });
+    sep();
+    // 📎 贴一张: 账单 / 机票 / 车票 / 书籍 / 影视 / 音乐, each a filled-in example to write over (render.js TICKETS)
+    {
+      const wrap=el('span','mdstick'),b=el('button','mdb','📎 贴一张');b.type='button';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
+      b.title='贴一张：账单、机票、车票、书籍、影视、音乐';
+      const menu=el('div','mdpop');menu.setAttribute('role','menu');menu.hidden=true;
+      const close=()=>{menu.hidden=true;b.setAttribute('aria-expanded','false');};
+      [['🧾','账单','receipt'],['✈️','机票','flight'],['🚄','车票','train'],['🎟️','电影票','cinema'],['📖','书籍','book'],['🎬','影视','film'],['🎵','音乐','music']].forEach(([i,n,k])=>{
+        const o=el('button',null,i+' '+n);o.type='button';o.setAttribute('role','menuitem');
+        o.addEventListener('mousedown',e=>e.preventDefault());
+        o.onclick=()=>{close();block(TICKET_TPL[k]());};
+        menu.appendChild(o);
+      });
+      b.addEventListener('mousedown',e=>e.preventDefault());
+      b.onclick=()=>{menu.hidden=!menu.hidden;b.setAttribute('aria-expanded',String(!menu.hidden));};
+      document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
+      wrap.addEventListener('keydown',e=>{if(e.key==='Escape'){close();b.focus();}});
+      wrap.append(b,menu);bar.appendChild(wrap);
+    }
+    // 🎵 网易云: a song's link (or the app's 分享 text, or its id) → its link on a line of its own, which the page
+    // shows as a player (render.js neteaseLine). The song is looked up (Meting) to show which it is first
+    {
+      const wrap=el('span','mdstick'),b=el('button','mdb','🎵 网易云');b.type='button';b.title='贴一首网易云的歌：页上是一个能播的播放器';
+      const pane=el('div','mdpop mdlook');pane.hidden=true;
+      const q=el('input');q.type='text';q.placeholder='网易云歌曲链接、分享的文字，或歌曲 ID';q.setAttribute('aria-label','网易云歌曲');
+      const go=el('button','b small pri','贴上');go.type='button';
+      const card=el('label','check1'),cb=el('input');cb.type='checkbox';card.append(cb,el('span',null,'做成音乐卡片（可以再写评分、听到哪、一句歌词）'));
+      const say=el('div','hintx');
+      const row=el('div','mdlook-row');row.append(q,go);pane.append(row,card,say);
+      const close=()=>{pane.hidden=true;};
+      async function add(){
+        const v=q.value.trim();if(!v){q.focus();return;}
+        go.disabled=true;say.textContent='正在认……';
+        try{
+          const id=await songId(v);
+          const link='https://music.163.com/song?id='+id;
+          const x=await T.meting(id).catch(()=>null);
+          close();q.value='';
+          block(cb.checked?['```音乐','网易云: '+link,'评分:','听到:','歌词:','```'].join('\n'):link+'\n');
+          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+'。':'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，可以在「手帐设置 → 接入服务」换个接口试试。',x?'ok':'err');
+        }catch(e){say.textContent=e.message||'没认出来';}
+        finally{go.disabled=false;}
+      }
+      go.onclick=add;q.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add();}if(e.key==='Escape')close();});
+      b.addEventListener('mousedown',e=>e.preventDefault());
+      b.onclick=()=>{pane.hidden=!pane.hidden;if(!pane.hidden){say.textContent='在网易云 App 里点「分享 → 复制链接」，贴到这里。直接把链接粘进正文也行。';setTimeout(()=>q.focus(),0);}};
+      document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
+      wrap.append(b,pane);bar.appendChild(wrap);
+    }
+    // a NetEase song pasted into the words (the link, or the app's whole 分享 text): its link on a line of its own
+    ta.addEventListener('paste',e=>{
+      const v=(e.clipboardData&&e.clipboardData.getData('text/plain')||'').trim();
+      if(!v||v.includes('\n')||!/163cn\.(tv|link)\/|music\.163\.com\/\S*song/.test(v)||/^\[.*\]\(/.test(v))return;
+      e.preventDefault();
+      songId(v).then(id=>{block('https://music.163.com/song?id='+id+'\n');status('贴成了网易云播放器（页上能播）。','ok');},
+        ()=>{const [a,b2]=sel();put(a,b2,v);});
+    });
+    // 🔍 NeoDB: a name, an ISBN or a link (NeoDB's, or a page NeoDB knows: Goodreads, IMDb, Spotify, …) → NeoDB
+    // (the Worker asks) → pick one → its card, the cover kept in R2
+    {
+      const wrap=el('span','mdstick'),b=el('button','mdb','🔍 NeoDB');b.type='button';b.title='从 NeoDB 填：搜书名 / 片名 / 专辑，或贴链接';
+      const pane=el('div','mdpop mdlook');pane.hidden=true;
+      const kind=el('select');[['book','书籍'],['film','影视'],['music','音乐']].forEach(([v,n])=>{const o=el('option',null,n);o.value=v;kind.appendChild(o);});
+      const q=el('input');q.type='text';q.placeholder='书名 / 片名 / 专辑名 / ISBN，或 NeoDB 链接';
+      const go=el('button','b small pri','查找');go.type='button';
+      const say=el('div','hintx'),list=el('div','mdlook-list');
+      const row=el('div','mdlook-row');row.append(kind,q,go);pane.append(row,say,list);
+      const close=()=>{pane.hidden=true;};
+      const line=(k,v)=>v?k+': '+String(v).replace(/\s*\n\s*/g,' '):'';
+      const blockFor=(it,cover)=>{
+        const r=it.rating!=null?it.rating:'';
+        const L=it.kind==='book'?['```书籍',line('书名',it.title),line('作者',it.author),line('出版社',it.publisher),line('ISBN',it.isbn),line('封面',cover),line('评分',r&&r+'/10'),'进度:','书摘:']
+          :it.kind==='film'?['```影视',line('片名',it.title),line('年份',it.year),line('导演',it.director),line('主演',it.cast),line('类型',[it.series&&'剧集',it.genre].filter(Boolean).join(' / ')),line('评分',r),line('简介',it.brief),line('海报',cover),'短评:']
+          :['```音乐',line('歌名',it.title),line('歌手',it.artist),line('专辑',it.title),line('封面',cover),line('评分',r&&r+'/10'),'歌词:'];
+        return L.filter(Boolean).concat('```').join('\n');
+      };
+      async function pick(it){
+        say.textContent='正在把封面存下来……';
+        let cover='';
+        if(it.cover){try{cover=(await api('/api/admin/cover',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({url:it.cover})})).key;}catch(e){cover=it.cover;}}
+        close();block(blockFor(it,cover));status('已填好「'+it.title+'」，其余的自己写。','ok');
+      }
+      async function find(){
+        const v=q.value.trim();if(!v){q.focus();return;}
+        go.disabled=true;say.textContent='查找中……';list.textContent='';
+        try{
+          const r=await api('/api/admin/lookup',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({q:v,kind:kind.value})});
+          if(r.pending){say.textContent=r.message;return;}
+          say.textContent=r.items.length?'选一个：':'没找到，换个名字，或贴 NeoDB 上的链接试试。';
+          r.items.forEach(it=>{
+            const o=el('button','mdlook-item');o.type='button';
+            if(it.cover){const i=el('img');i.src=it.cover;i.alt='';i.referrerPolicy='no-referrer';i.loading='lazy';o.appendChild(i);}else o.appendChild(el('span','mdlook-noimg'));
+            const t=el('span');t.append(el('b',null,it.title+(it.year?'（'+it.year+'）':'')),el('small',null,[it.author||it.director||it.artist,it.rating!=null&&'★ '+it.rating].filter(Boolean).join(' · ')));
+            o.appendChild(t);o.onclick=()=>pick(it);list.appendChild(o);
+          });
+        }catch(e){say.textContent=e.message||'没查到';}
+        finally{go.disabled=false;}
+      }
+      go.onclick=find;q.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();find();}if(e.key==='Escape')close();});
+      b.addEventListener('mousedown',e=>e.preventDefault());
+      b.onclick=()=>{pane.hidden=!pane.hidden;if(!pane.hidden){say.textContent='搜名字，或贴 NeoDB 上这一条的链接（最准）。数据来自 neodb.social，书还会查 Open Library。';setTimeout(()=>q.focus(),0);}};
+      document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
+      wrap.append(b,pane);bar.appendChild(wrap);
+    }
     ta.addEventListener('keydown',e=>{
       const mod=e.metaKey||e.ctrlKey;
       if(mod&&!e.shiftKey&&!e.altKey){
@@ -971,7 +1401,17 @@
       ['```↵ 代码 ↵```','一块深色代码'],
       ['@09:10 站会：今天修什么？ #laptop','漫画格：时间 · 在做什么、对话气泡、小插画（相邻几行排成一条）'],
       ['空一行','分段；段落里换行就是换行'],
-      ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）']];
+      ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）'],
+      ['```账单 … ```','一张小票：# 标题、> 小字、--- 虚线、= 合计: ¥、* 分组: ¥、- 明细: ¥'],
+      ['```机票 … ```','登机牌：航空、航班、从、到、日期、起飞、到达、登机口、座位、舱位、乘客'],
+      ['```车票 … ```','火车票：车次、从、到、日期、发车、车厢、座位、席别、票价、乘客、检票'],
+      ['```书籍 … ```','一本书：封面、书名、作者、出版社、进度（132/360 或 65% 或 读完）、评分（4.5）、书摘、状态'],
+      ['```电影票 … ```','电影票（剧集也行）：片名、类型、日期、场次、影院 / 平台、影厅、座位、集数、导演、主演、评分、短评'],
+      ['```影视 … ```','一部片：海报、片名、年份、导演、主演、类型、集数、评分（9.4）、简介、短评、状态（看过 / 在追）'],
+      ['```音乐 … ```','一张唱片：封面、歌名、歌手、专辑、时长、听到（1:48）、评分、歌词；写「网易云: 歌曲链接」就能播放'],
+      ['https://music.163.com/song?id=…','单独一行的网易云歌曲链接：一个能播的播放器（直接粘贴链接或 App 分享的文字就行，「🎵 网易云」也可以）'],
+      ['连着写几张','叠成一沓，后一张压着前一张'],
+      ['封面: / 海报:','图片地址（https://…），或「🔍 NeoDB」存下来的图']];
     const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
     help.appendChild(tb);
     help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));
@@ -1108,13 +1548,13 @@
       if([...newLock.p1].length<4){status('口令至少 4 个字符（不想上锁就清空）。','err');const i=$('nl1');if(i)i.focus();return false;}
       if(newLock.p1!==newLock.p2){status('两次输入的口令不一样。','err');const i=$('nl2');if(i)i.focus();return false;}
     }
-    if(sel!=='settings'){
+    if(!isSet(sel)){
       if(!T.parseDate(draft.date)){status('请填日期。','err');return false;}
       if(!String(draft.title||'').trim()){status('标题不能为空。','err');const t=$('f-title');if(t)t.focus();return false;}
     }
     busy=true;status('正在保存……');
     try{
-      if(sel==='settings'){
+      if(isSet(sel)){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
         settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
         drawForm();status('已保存，刷新主页就能看到。','ok');
@@ -1141,7 +1581,7 @@
       return true;
     }catch(e){
       // a failed publish/unpublish shouldn't leave the button label lying about the state
-      if(sel!=='settings'&&sel!=='new'){const en=entries.find(x=>x.id===sel);if(en)draft.status=en.status;}
+      if(!isSet(sel)&&sel!=='new'){const en=entries.find(x=>x.id===sel);if(en)draft.status=en.status;}
       status(e.message||'保存失败，稍后再试。','err');return false;
     }
     finally{busy=false;}
@@ -1150,7 +1590,7 @@
     if(busy)return;busy=true;status('正在删除……');
     try{
       await api('/api/admin/entries/'+encodeURIComponent(sel),{method:'DELETE'});
-      entries=entries.filter(e=>e.id!==sel);sel=null;draft=null;base='';
+      entries=entries.filter(e=>e.id!==sel);sel=backTo;backTo=null;draft=null;base='';
       drawList();drawForm();
     }catch(e){status(e.message||'删除失败','err');}
     finally{busy=false;}
