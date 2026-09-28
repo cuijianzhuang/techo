@@ -843,6 +843,8 @@
     ['','api.injahow.cn（默认）'],
     ['https://api.i-meto.com/meting/api?server=:server&type=:type&id=:id&r=:r','api.i-meto.com'],
     ['https://meting.qjqq.cn/?server=:server&type=:type&id=:id','meting.qjqq.cn']];
+  // the song 试一下 plays when none is typed (https://music.163.com/song?id=187745)
+  const TRY_SONG='187745';
   function musicField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
     const f=field('Meting API 地址','metingApi','text',{ph:T.METING_DEFAULT,max:200,
@@ -856,11 +858,11 @@
     });
     inp.addEventListener('input',mark);mark();
     // try it: a song through the address as it is now (saved or not), from this browser, as readers will
-    const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（可空）';song.setAttribute('aria-label','试听的歌');
+    const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（空着用 '+TRY_SONG+'）';song.setAttribute('aria-label','试听的歌');
     const t=el('button','b small','试一下');t.type='button';row.append(song,t);
     const out=el('div','mtest');
     t.onclick=async()=>{
-      const id=T.neteaseId(song.value)||(!song.value.trim()&&'186016');
+      const id=T.neteaseId(song.value)||(!song.value.trim()&&TRY_SONG);
       if(!id){out.textContent='✗ 没认出歌曲 ID：贴 music.163.com 的歌曲链接，或者直接写数字 ID';out.className='mtest err';return;}
       t.disabled=true;out.className='mtest';out.textContent='正在取……';
       try{
