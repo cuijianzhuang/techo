@@ -195,6 +195,86 @@
     ['quote',/^\s*[>＞]\s?(.*)$/],
     ['panel',/^\s*[@＠](\d{1,2}[:：]\d{2})\s*(.*)$/],
   ];
+  /* ---------- 账单 / 机票 / 车票: the paper a day leaves behind, stuck on the page ----------
+     Written as a fenced block, a line per item, "名称: 内容" (a colon and a space, or a full-width colon).
+     账单 (```receipt), a till receipt: "# 标题", "> 居中的小字", "---" a dashed rule, "= 总计: ¥128" the big
+     total, "* 分组: ¥" a bold line, "- 明细: ¥" an indented one, "名称: 内容" a line; anything else, centred.
+     机票 (```flight) and 车票 (```train) take the items they know (航班、从、到、日期、座位 … see TICKET_KEYS),
+     whatever else is written is left off. All made of text nodes: nothing written is taken as HTML. */
+  const TICKET_NAMES={receipt:'receipt',bill:'receipt','账单':'receipt','小票':'receipt',flight:'flight','机票':'flight','登机牌':'flight',train:'train','车票':'train','火车票':'train'};
+  const TICKET_KEYS={
+    airline:['航空','航空公司','airline'],flight:['航班','航班号','flight'],from:['从','出发','起点','from'],to:['到','目的地','终点','to'],
+    date:['日期','date'],dep:['起飞','发车','出发时间','开车','dep','time'],arr:['到达','到达时间','arr'],gate:['登机口','检票','检票口','gate'],
+    seat:['座位','座','seat'],cls:['舱位','席别','等级','class'],name:['乘客','旅客','姓名','name'],boarding:['登机','登机时间','boarding'],
+    train:['车次','train'],car:['车厢','car'],price:['票价','价格','price'],no:['票号','no'],
+  };
+  const KEY_OF={};Object.entries(TICKET_KEYS).forEach(([k,names])=>names.forEach(n=>{KEY_OF[n.toLowerCase()]=k;}));
+  const kvOf=line=>{const m=/^\s*(.+?)\s*(?:：|:\s)\s*(.*?)\s*$/.exec(line);return m?[m[1],m[2]]:null;};
+  function ticketFields(lines){
+    const f={};
+    lines.forEach(l=>{const kv=kvOf(l);if(!kv)return;const k=KEY_OF[kv[0].toLowerCase()];if(k&&!f[k])f[k]=kv[1];});
+    return f;
+  }
+  // "PEK 北京首都" → code PEK, name 北京首都; "北京南 Beijingnan" → 北京南, Beijingnan
+  const place=v=>{const s=String(v||'').trim(),m=/^([A-Z]{3})\s+(.+)$/.exec(s);if(m)return{code:m[1],name:m[2]};const n=/^(\S+)\s+(.+)$/.exec(s);return n?{code:n[1],name:n[2]}:{code:s,name:''};};
+  const PLANE='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15.5v-1.8l-8-5V3.5a1.5 1.5 0 0 0-3 0v5.2l-8 5v1.8l8-2.5v5.3l-2 1.5V21l3.5-1 3.5 1v-1.2l-2-1.5V13z" fill="currentColor"/></svg>';
+  const TICKETS={
+    receipt(lines){
+      const r=el('div','jticket jreceipt');
+      lines.forEach(raw=>{
+        let l=raw.trim();if(!l)return;
+        let m;
+        if(/^[-=*_]{3,}$/.test(l)){r.appendChild(el('div','jr-hr'));return;}
+        if((m=/^#\s+(.+)$/.exec(l))){r.appendChild(el('div','jr-title',m[1]));return;}
+        if((m=/^[>＞]\s?(.*)$/.exec(l))){r.appendChild(el('div','jr-note',m[1]));return;}
+        if((m=/^=\s*(.+)$/.exec(l))){
+          const kv=kvOf(m[1]),t=el('div','jr-total');
+          if(kv)t.append(el('small',null,kv[0]),el('strong',null,kv[1]));else t.appendChild(el('strong',null,m[1]));
+          r.appendChild(t);return;
+        }
+        let cls='jr-row';
+        if((m=/^\*\s+(.+)$/.exec(l))){cls+=' jr-group';l=m[1];}
+        else if((m=/^-\s+(.+)$/.exec(l))){cls+=' jr-sub';l=m[1];}
+        const kv=kvOf(l);
+        if(!kv){r.appendChild(el('div','jr-text',l));return;}
+        const row=el('div',cls);row.append(el('span',null,kv[0]),el('span',null,kv[1]));r.appendChild(row);
+      });
+      return r;
+    },
+    flight(lines){
+      const f=ticketFields(lines),a=place(f.from),b=place(f.to);
+      const card=el('div','jticket jflight'),main=el('div','jf-main'),stub=el('div','jf-stub');
+      const band=el('div','jf-band');band.append(el('span',null,f.airline||'航空公司'),el('span',null,'登机牌 BOARDING PASS'));
+      const route=el('div','jf-route');
+      const port=(p,k)=>{const d=el('div','jf-port '+k);d.append(el('b',null,p.code||'—'),el('span',null,p.name));return d;};
+      const mid=el('div','jf-plane');mid.innerHTML=PLANE;   // (the drawing only; nothing written goes in here)
+      route.append(port(a,'from'),mid,port(b,'to'));
+      const fields=el('div','jf-fields');
+      [['日期 DATE',f.date],['起飞 DEP',f.dep],['到达 ARR',f.arr],['登机口 GATE',f.gate],['登机 BOARDING',f.boarding],['舱位 CLASS',f.cls]].filter(x=>x[1]).slice(0,4)
+        .forEach(([k,v])=>{const d=el('div');d.append(el('small',null,k),el('b',null,v));fields.appendChild(d);});
+      main.append(band,route,fields);
+      if(f.name){const n=el('div','jf-name');n.append(el('small',null,'旅客 PASSENGER'),el('b',null,f.name));main.appendChild(n);}
+      stub.append(el('small',null,'航班 FLIGHT'),el('b','jf-no',f.flight||'—'),el('small',null,'座位 SEAT'),el('b','jf-seat',f.seat||'—'),el('div','jf-bar'));
+      card.append(main,stub);
+      return card;
+    },
+    train(lines){
+      const f=ticketFields(lines),a=place(f.from),b=place(f.to);
+      const card=el('div','jticket jtrain');
+      // the red number in the corner: the same for the same ticket
+      let h=7;for(const ch of lines.join('|'))h=(h*31+ch.charCodeAt(0))>>>0;
+      const no=f.no||('Z'+String(h%100000000).padStart(8,'0'));
+      const top=el('div','jt-top');top.append(el('span','jt-no',no),el('span',null,f.gate?'检票：'+f.gate:''));
+      const st=(p)=>{const d=el('div','jt-st');const n=el('b',null,p.code||'—');n.appendChild(el('i',null,'站'));d.append(n,el('span',null,p.name));return d;};
+      const mid=el('div','jt-mid');mid.append(el('b',null,f.train||'—'),el('span','jt-arrow','⟶'));
+      const route=el('div','jt-route');route.append(st(a),mid,st(b));
+      const when=el('div','jt-row');when.append(el('span',null,[f.date,f.dep&&f.dep+'开'].filter(Boolean).join(' ')),el('span',null,[f.car&&f.car+'车',f.seat&&f.seat+'号'].filter(Boolean).join('')));
+      const pay=el('div','jt-row');pay.append(el('span',null,f.price?(/[¥￥]/.test(f.price)?f.price:'¥'+f.price)+(/元$/.test(f.price)?'':'元'):''),el('span',null,f.cls||''));
+      const who=el('div','jt-row jt-who');who.append(el('span',null,f.name||''),el('span','jt-qr'));
+      card.append(top,route,when,pay,who,el('div','jt-foot','买票请到12306　发货请到95306'));
+      return card;
+    },
+  };
   function bodyBlocks(body,into){
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
@@ -205,8 +285,11 @@
       let kind='p',m=null;
       for(const [k,re] of BLOCKS){m=re.exec(line);if(m){kind=k;break;}}
       if(kind==='fence'){
-        const code=[];
+        const code=[],info=((/^\s*```\s*(\S*)/.exec(line)||[])[1]||'').toLowerCase();
         while(++i<lines.length&&!/^\s*```/.test(lines[i]))code.push(lines[i]);
+        // ```receipt / ```flight / ```train (or 账单 / 机票 / 车票): a bill, a boarding pass, a train ticket
+        const card=TICKETS[TICKET_NAMES[info]];
+        if(card){open('ticket',card(code));run=null;continue;}
         const pre=open('code',el('pre','jcode'));pre.appendChild(el('code',null,code.join('\n')));run=null;continue;
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}

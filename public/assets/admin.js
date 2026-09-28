@@ -884,6 +884,13 @@
     return wrap;
   }
 
+  /* 账单 / 机票 / 车票 templates for the toolbar, dated today */
+  const TICKET_TPL={
+    receipt:()=>{const d=T.parseDate(T.todayStr());return '```账单\n# 今日账单\n> 慢慢花，好好记\n日期: '+d.y+'年'+d.mo+'月'+d.d+'日\n---\n= 合计: ¥128.00\n---\n* 早餐: ¥18.00\n- 豆浆油条: ¥8.00\n- 茶叶蛋: ¥10.00\n* 午饭: ¥45.00\n* 电影: ¥65.00\n---\n> 谢谢惠顾\n```';},
+    flight:()=>{const d=T.parseDate(T.todayStr());return '```机票\n航空: 中国国际航空\n航班: CA933\n从: PEK 北京首都\n到: CDG 巴黎戴高乐\n日期: '+d.mo+'月'+d.d+'日\n起飞: 13:30\n到达: 18:40\n登机口: E12\n座位: 32K\n舱位: 经济舱\n乘客: XIAO/KA\n```';},
+    train:()=>{const d=T.parseDate(T.todayStr());return '```车票\n车次: G1\n从: 北京南 Beijingnan\n到: 上海虹桥 Shanghaihongqiao\n日期: '+d.y+'年'+String(d.mo).padStart(2,'0')+'月'+String(d.d).padStart(2,'0')+'日\n发车: 09:00\n车厢: 05\n座位: 12A\n席别: 二等座\n票价: ¥553.0\n乘客: 小咖\n检票: A12\n```';},
+  };
+
   /* ---------- 正文: a Markdown editor ----------
      A toolbar for the marks the page understands (render.js bodyBlocks), ⌘/Ctrl+B / I / K, and Enter carrying
      a list, checklist or quote on to the next line (Enter on an empty item ends it). Edits go through
@@ -939,6 +946,10 @@
       ['—','分隔线',()=>block('---')],
       ['▦','漫画格',()=>block('@09:00 做什么：说的话 #laptop',7,14)],
       ['⤓','换页：后面的字从下一页写起',()=>block('+++\n')],   // the caret on the line after, ready to write on
+      // 账单 / 机票 / 车票: a filled-in example to write over (render.js TICKETS)
+      ['🧾','账单',()=>block(TICKET_TPL.receipt())],
+      ['✈','机票',()=>block(TICKET_TPL.flight())],
+      ['🚄','车票',()=>block(TICKET_TPL.train())],
     ];
     const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
     TOOLS.forEach(([t,title,fn,cls])=>{
@@ -971,7 +982,10 @@
       ['```↵ 代码 ↵```','一块深色代码'],
       ['@09:10 站会：今天修什么？ #laptop','漫画格：时间 · 在做什么、对话气泡、小插画（相邻几行排成一条）'],
       ['空一行','分段；段落里换行就是换行'],
-      ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）']];
+      ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）'],
+      ['```账单 … ```','一张小票：# 标题、> 小字、--- 虚线、= 合计: ¥、* 分组: ¥、- 明细: ¥'],
+      ['```机票 … ```','登机牌：航空、航班、从、到、日期、起飞、到达、登机口、座位、舱位、乘客'],
+      ['```车票 … ```','火车票：车次、从、到、日期、发车、车厢、座位、席别、票价、乘客、检票']];
     const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
     help.appendChild(tb);
     help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));
