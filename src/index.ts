@@ -376,7 +376,7 @@ const CARD_KEY = (id: string) => `cards/${id}.jpg`;
 const ENTRY_ID = /^[\w-]{1,64}$/;
 const escHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 /** Markdown → a line of plain words (render.js plainText) */
-const plainText = (md: string) => md.replace(/```[\s\S]*?```/g, " ").replace(/^\s*\+{3,}\s*$/gm, " ")
+const plainText = (md: string) => md.replace(/```[\s\S]*?```/g, " ").replace(/^\s*\+{3,}\s*(?:贴页|拼贴|collage)?\s*$/gim, " ")
   .replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm, "")
   .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|==|`|\*)/g, "").replace(/[#＃][a-z]+/g, "").replace(/\s+/g, " ").trim();
 /** a published page that isn't locked (the only kind with a card or a preview), or null */

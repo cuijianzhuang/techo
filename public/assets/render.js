@@ -169,7 +169,7 @@
   }
   /* the words without their marks, for a line of them somewhere else (the timeline page) */
   function plainText(md){
-    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*(?:贴页|拼贴|collage)?\s*$/gim,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
       .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
   }
   function panel(time,rest){
@@ -187,7 +187,7 @@
   const BLOCKS=[
     ['fence',/^\s*```/],
     ['h',/^\s*(#{1,3})\s+(.+)$/],
-    ['brk',/^\s*\+{3,}\s*$/],
+    ['brk',/^\s*\+{3,}\s*(贴页|拼贴|collage)?\s*$/i],
     ['hr',/^\s*([-*_])(\s*\1){2,}\s*$/],
     ['check',/^\s*(?:[-*+]\s+)?\[( |x|X|✓|√)\]\s+(.*)$/],
     ['ul',/^\s*[-*+•]\s+(.*)$/],
@@ -492,11 +492,12 @@
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
-    // a card taped on; one right after another: a pile, each on the one before (a stack of tickets that won't
-    // all lie flat) (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
+    // a card taped on; one right after another: a pile, each on the one before and a little lower, the top of
+    // each showing (what it is); a tap on one turns the ones over it back and brings it up (pickCard)
+    let loose=false;                          // after +++ 贴页: the cards lie each on its own (layCollage)
     const stick=(c,text)=>{
       fasten(c,text);
-      const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
+      const prev=into.lastElementChild,pile=n=>!loose&&n&&n.classList.contains('jticket');
       if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
       else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
       else open('ticket',c);
@@ -518,7 +519,8 @@
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
       if(kind==='hr'){open('hr',el('div','jhr'));run=null;continue;}
-      if(kind==='brk'){open('brk',el('div','jbrk'));run=null;continue;}   // +++: the words go on over the page (entryPages)
+      // +++: the words go on over the page (entryPages); +++ 贴页: the cards after it on a page of their own
+      if(kind==='brk'){loose=!!m[1];open('brk',el('div','jbrk'+(loose?' collage':'')));run=null;continue;}
       if(!run||run.kind!==kind){
         const node=kind==='check'?el('ul','check'):kind==='ul'?el('ul','jul'):kind==='ol'?el('ol','jol'):
           kind==='quote'?el('div','label jnote'):kind==='panel'?el('div','jcomic'):el('p');
@@ -536,8 +538,51 @@
       run.n++;
     }
     into.querySelectorAll('.jcomic').forEach(c=>c.classList.add('n'+Math.min(c.children.length,4)));
+    into.querySelectorAll('.jstack').forEach(st=>{
+      const cards=[...st.children],n=cards.length;
+      cards.forEach((c,i)=>{c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','叠着的第 '+(n-i)+' 张（共 '+n+' 张），点一下翻到最上面');});
+      st.appendChild(el('i','jst-n','1/'+n));
+    });
     return into;
   }
+  /* A pile: the card on top whole, the others' tops showing. A tap (or Enter) on one: the cards lying over it
+     lift and fall back under it, and it is on top; the one that was stays where it lies. The count in the
+     corner says which it is from the top. Pressing a card doesn't turn the page (book.js, book3d). */
+  function pickCard(c){
+    const st=c.parentNode,cards=[...st.querySelectorAll(':scope>.jticket')],n=cards.length;
+    const up=st.querySelector(':scope>.jticket.up')||cards[n-1];
+    if(c===up)return;
+    const k=cards.indexOf(c);
+    // over it: what lies later in the pile (drawn over it), and the one brought up before
+    const over=cards.filter((x,i)=>i>k||x===up);
+    const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // it on top, then the nearer the higher: every card keeps some of itself in sight
+    const bring=()=>{
+      cards.forEach((x,i)=>{x.classList.toggle('up',x===c&&k<n-1);x.style.zIndex=k<n-1?String(n-Math.abs(i-k)):'';});
+      over.forEach(x=>x.classList.remove('lift'));
+      const t=st.querySelector(':scope>.jst-n');if(t)t.textContent=(n-k)+'/'+n;
+    };
+    if(still){bring();return;}
+    over.forEach(x=>x.classList.add('lift'));
+    setTimeout(bring,170);
+  }
+  // only a card lying under another answers a press (the one on top is paper like the rest of the page: a
+  // finger on it still turns the page)
+  let pressOnCard=false;
+  const onTop=c=>{const st=c.parentNode;return c===(st.querySelector(':scope>.jticket.up')||[...st.querySelectorAll(':scope>.jticket')].pop());};
+  const cardOf=e=>{const c=e.target.closest&&e.target.closest('.jstack>.jticket');return c&&!onTop(c)?c:null;};
+  ['pointerdown','mousedown','touchstart'].forEach(k=>document.addEventListener(k,e=>{
+    pressOnCard=!!cardOf(e)&&!e.target.closest('button,a,input');
+    if(pressOnCard)e.stopPropagation();
+  },true));
+  ['pointerup','mouseup','touchend'].forEach(k=>document.addEventListener(k,e=>{if(pressOnCard)e.stopPropagation();},true));
+  document.addEventListener('click',e=>{
+    const c=cardOf(e);if(!c||e.target.closest('button,a,input'))return;
+    e.stopPropagation();pickCard(c);
+  });
+  document.addEventListener('keydown',e=>{
+    if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.jstack>.jticket')){e.preventDefault();e.stopPropagation();pickCard(e.target);}
+  });
 
   /* A diary page. entryShell: the paper, its date and (the first page) the title, the stamp and the photos,
      with an empty .jtext for the words; a page carrying on from the one before says so at its top instead.
@@ -610,8 +655,10 @@
      they fit), otherwise they run on at RUN_FS a block at a time (a paragraph, a list, a quote, a comic strip,
      a code block …): a paragraph that doesn't fit what's left of a page is split after a sentence, a list or
      a comic strip after an item, and a heading never ends a page. A +++ line starts a new page. A block too
-     big even for a page of its own is cut off at its foot, as a page always was. */
-  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17;
+     big even for a page of its own is cut off at its foot, as a page always was. A card that doesn't fit what's
+     left goes to the top of the next page, and the words after it fill the room first. +++ 贴页 lays the cards
+     after it out on a page of their own (layCollage). */
+  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17,FILL_MIN=90,Z_MIN=.6;
   const over=t=>t.scrollHeight>t.clientHeight+1;
   const SENTENCE=/[^。！？!?；;…]*[。！？!?；;…]+[”’」』）)\]]*\s*|[^。！？!?；;…]+/g;
   function entryPages(en,side){
@@ -630,17 +677,54 @@
     const words=()=>[...s.tx.children].filter(c=>!c.classList.contains('jph'));
     // a heading never ends a page: it goes over with what follows it
     const keepHeading=()=>{const w=words(),l=w[w.length-1];if(w.length>1&&l.classList.contains('jh')){s.tx.removeChild(l);queue.unshift(l);}};
+    // a card (or a pile) that doesn't fit what's left of a page waits for the next one, and what comes after it
+    // fills the room it leaves, as far as it goes (not past a +++); the next page starts with the card. Only
+    // when that room is worth it (FILL_MIN): a sliver isn't
+    let later=[];
+    const room=()=>{const w=words(),l=w[w.length-1];return l?s.tx.getBoundingClientRect().bottom-l.getBoundingClientRect().bottom:s.tx.clientHeight;};
+    const turn=(...first)=>{keepHeading();queue.unshift(...later,...first);later=[];next();};
+    /* 贴页 (+++ 贴页 up to the next +++): the cards on a page of their own, each as it is, a little askew, one
+       over the corner of the one before, down the page left and right; smaller together (--z) if that's what
+       it takes to have them all there, and what still doesn't fit on another such page. Words in the section
+       follow the cards. */
+    const layCollage=()=>{
+      const sec=[];while(queue.length&&!queue[0].classList.contains('jbrk'))sec.push(queue.shift());
+      const cards=sec.filter(x=>x.matches('.jticket')),rest=sec.filter(x=>!x.matches('.jticket'));
+      if(!cards.length){queue.unshift(...rest);return;}
+      if(words().length){keepHeading();next();}
+      s.p.classList.add('collage');
+      const box=el('div','jcollage');s.tx.appendChild(box);box.append(...cards);
+      if(!queue.length&&!rest.length)entryEnd(s,en,true);     // the last page: its foot takes room too
+      const shrink=()=>{let z=1;box.style.setProperty('--z',z);
+        while(over(s.tx)&&z>Z_MIN){z=Math.max(Z_MIN,Math.round((z-.05)*100)/100);box.style.setProperty('--z',z);}};
+      shrink();
+      const more=[];while(over(s.tx)&&box.children.length>1)more.unshift(box.removeChild(box.lastElementChild));
+      if(more.length){
+        // as many pages as it takes, the cards shared out evenly among them (not a crowded page and a lone card)
+        const fit=box.children.length,all=fit+more.length,per=Math.ceil(all/Math.ceil(all/fit));
+        while(box.children.length>per)more.unshift(box.removeChild(box.lastElementChild));
+        entryEnd(s,en,false);shrink();
+      }
+      queue.unshift(...(more.length?[el('div','jbrk collage'),...more]:[]),...rest);
+    };
     const run=()=>{
-      while(queue.length){
+      while(queue.length||later.length){
+        if(!queue.length){turn();continue;}
         const b=queue.shift();
-        if(b.classList.contains('jbrk')){if(words().length)next();continue;}
+        if(b.classList.contains('jbrk')){
+          if(later.length)turn(b);
+          else if(b.classList.contains('collage'))layCollage();
+          else if(words().length)next();
+          continue;
+        }
         s.tx.appendChild(b);
         if(!over(s.tx))continue;
         s.tx.removeChild(b);
         const [rest,some]=splitBlock(b,s.tx);
         if(!rest)continue;
         if(!some&&!words().length){s.tx.appendChild(rest);continue;}   // too big for any page: cut off
-        queue.unshift(rest);keepHeading();next();
+        if(!some&&rest.matches('.jticket,.jstack')&&room()>=FILL_MIN){later.push(rest);continue;}
+        queue.unshift(rest);turn();
       }
     };
     next();
