@@ -983,19 +983,46 @@ app.post("/api/admin/netease", async (c) => {
 
 /* 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐), asked by the Worker: a Meting API that wants a token
    gets it (the admin-only setting metingToken, or the secret METING_TOKEN: it never reaches a page), and nobody's
-   browser minds where the API lives. What
-   the API answers is taken down to one song's title, artist, cover, sound and words; a cover or a sound that is
-   the API's own address again (…?type=url&id=…, which would want the token too) is followed here to where it
-   leads (NetEase's servers), and words there are fetched and handed over as they are. */
+   browser minds where the API lives. What the API answers ([…], {data: […]}, {data: {…}}, {result: {songs: […]}}…)
+   is taken down to one song's title, artist, cover, sound and words. A cover or a sound that is the API's own
+   address again (…?type=url&id=…, which would want the token too) is followed here to where it leads (NetEase's
+   servers); one that only comes with the token is handed out through /api/meting/file. What the song doesn't say
+   is asked for (type=url, pic, lrc), and then of NetEase itself: a song NetEase won't play (a VIP one, one taken
+   down) still has its name, its singer and its cover. */
 const METING_DEFAULT = "https://api.injahow.cn/meting/";
-type Song = { title: string; artist: string; url: string; pic: string; lrc: string };
-async function metingSong(token: string, api: string, id: string): Promise<Song | null> {
+type Song = { title: string; artist: string; url: string; pic: string; lrc: string; why?: string };
+const metingUrl = (api: string, type: string, id: string) => {
   const base = (api || METING_DEFAULT).trim();
-  const u = /:id/.test(base)
-    ? base.replace(":server", "netease").replace(":type", "song").replace(":id", encodeURIComponent(id)).replace(":r", String(Math.random()).slice(2))
-    : base + (base.includes("?") ? "&" : "?") + "server=netease&type=song&id=" + encodeURIComponent(id);
-  const headers: Record<string, string> = { accept: "application/json", "user-agent": UA["User-Agent"] };
-  if (token) headers.authorization = "Bearer " + token;
+  return /:id/.test(base)
+    ? base.replace(":server", "netease").replace(":type", type).replace(":id", encodeURIComponent(id)).replace(":r", String(Math.random()).slice(2))
+    : base + (base.includes("?") ? "&" : "?") + "server=netease&type=" + type + "&id=" + encodeURIComponent(id);
+};
+const metingHeaders = (token: string) => {
+  const h: Record<string, string> = { accept: "application/json", "user-agent": UA["User-Agent"] };
+  if (token) h.authorization = "Bearer " + token;
+  return h;
+};
+// the song in an answer, however it's wrapped
+const SONG_KEYS = ["url", "title", "name", "pic", "cover", "lrc", "author", "artist"];
+function songIn(j: unknown, depth = 0): Record<string, unknown> | null {
+  if (!j || typeof j !== "object" || depth > 4) return null;
+  if (Array.isArray(j)) return songIn(j[0], depth + 1);
+  const o = j as Record<string, unknown>;
+  if (SONG_KEYS.filter((k) => typeof o[k] === "string" && o[k]).length >= 2) return o;
+  for (const k of ["data", "result", "songs", "song", "list", "items"]) { const x = songIn(o[k], depth + 1); if (x) return x; }
+  return SONG_KEYS.some((k) => typeof o[k] === "string" && o[k]) ? o : null;
+}
+const str = (x: Record<string, unknown> | null, ...ks: string[]) => {
+  for (const k of ks) {
+    const v = x?.[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    // artist: ["周杰伦"] or [{name: "周杰伦"}]
+    if (Array.isArray(v)) { const n = v.map((a) => (typeof a === "string" ? a : (a as { name?: unknown })?.name)).filter((a) => typeof a === "string" && a); if (n.length) return n.join(" / "); }
+  }
+  return "";
+};
+async function metingSong(token: string, api: string, id: string): Promise<Song | null> {
+  const u = metingUrl(api, "song", id), headers = metingHeaders(token);
   const r = await fetch(u, { headers });
   if (!r.ok) {
     // what it says, if it says: {"success":false,"error":"需要 API Token…"}
@@ -1004,27 +1031,70 @@ async function metingSong(token: string, api: string, id: string): Promise<Song 
     throw new Error(asks ? (token ? "Meting 接口不认这个 token" : "Meting 接口要 token：在「手帐设置 → 接入服务 → 网易云音乐」填上")
       : "Meting 接口拒绝了请求（" + r.status + (said ? "：" + said.slice(0, 80) : "") + "）" + (r.status === 403 ? "，可能不让 Cloudflare 访问，换一个接口试试" : ""));
   }
-  const j = (await r.json().catch(() => null)) as unknown;
-  const x = (Array.isArray(j) ? j[0] : (j as { data?: unknown[] })?.data?.[0] ?? j) as Record<string, unknown> | undefined;
-  if (!x || typeof x !== "object") return null;
-  const s = (k: string) => (typeof x[k] === "string" ? (x[k] as string) : "");
+  const text = await r.text().catch(() => "");
+  let j: unknown = null;
+  try { j = JSON.parse(text); } catch { /* not JSON: said below */ }
+  const x = songIn(j);
   const own = (v: string) => { try { return new URL(v).origin === new URL(u).origin; } catch { return false; } };
-  // the API's own address: where it leads (a sound, a picture), without the token going any further
-  const follow = async (v: string) => {
-    if (!v || !own(v)) return v;
+  /* a sound or a cover: where the API's own address leads; what it answers with, if that's a link; handed out
+     through the Worker if it's the thing itself (it wanted the token) */
+  const media = async (v: string, t: "url" | "pic", hop = 0): Promise<string> => {
+    if (!v || !/^https?:\/\//.test(v)) return "";
+    if (!own(v)) return v;
     const f = await fetch(v, { headers, redirect: "manual" }).catch(() => null);
-    const to = f && f.headers.get("location");
-    return to ? new URL(to, v).toString() : v;
+    if (!f) return "";
+    const to = f.headers.get("location");
+    if (to) return new URL(to, v).toString();
+    if (!f.ok) return "";
+    const type = f.headers.get("content-type") || "";
+    if (/json/.test(type)) {
+      const y = songIn(await f.json().catch(() => null));
+      const w = str(y, t === "url" ? "url" : "pic", ...(t === "pic" ? ["cover"] : []));
+      return hop < 1 && w !== v ? media(w, t, hop + 1) : "";
+    }
+    f.body?.cancel();
+    return /^(audio|image|video)\/|octet-stream/.test(type) ? "/api/meting/file?t=" + t + "&id=" + id : "";
   };
-  const lrcOf = async (v: string) => {
-    if (!v || !/^https?:/.test(v)) return v;
+  const words = async (v: string) => {
+    if (!v) return "";
+    if (!/^https?:/.test(v)) return v;
     if (!own(v)) return v;
     const f = await fetch(v, { headers }).catch(() => null);
-    return f && f.ok ? (await f.text()).slice(0, 20000) : "";
+    if (!f || !f.ok) return "";
+    const t = (await f.text()).slice(0, 20000);
+    if (/^\s*[[{]/.test(t) && !/^\s*\[\d/.test(t)) { try { const y = JSON.parse(t) as Record<string, unknown>, w = str(songIn(y) || y, "lrc", "lyric"); return /^https?:/.test(w) ? "" : w; } catch { return ""; } }
+    return /\[\d+:\d/.test(t) ? t : "";
   };
-  const [url, pic, lrc] = await Promise.all([follow(s("url")), follow(s("pic") || s("cover")), lrcOf(s("lrc"))]);
-  if (!url) return null;
-  return { title: s("title") || s("name"), artist: s("author") || s("artist"), url, pic, lrc };
+  let [url, pic, lrc] = await Promise.all([media(str(x, "url"), "url"), media(str(x, "pic", "cover"), "pic"), words(str(x, "lrc", "lyric"))]);
+  // what the song didn't say: asked for one by one
+  [url, pic, lrc] = await Promise.all([
+    url || media(metingUrl(api, "url", id), "url"),
+    pic || media(metingUrl(api, "pic", id), "pic"),
+    lrc || words(metingUrl(api, "lrc", id)),
+  ]);
+  let title = str(x, "title", "name"), artist = str(x, "author", "artist", "artists", "ar");
+  // and then of NetEase: its own link to the sound (which leads to its 404 page when it won't play), its details
+  if (!url) {
+    const f = await fetch("https://music.163.com/song/media/outer/url?id=" + id + ".mp3", { headers: { "user-agent": UA["User-Agent"] }, redirect: "manual" }).catch(() => null);
+    const to = f?.headers.get("location") || "";
+    if (/^https?:\/\//.test(to) && !/music\.163\.com\/(?:#\/)?404/.test(to)) url = to.replace(/^http:/, "https:");
+  }
+  if (!title || !pic) {
+    const d = await fetch("https://music.163.com/api/song/detail/?id=" + id + "&ids=%5B" + id + "%5D", { headers: { "user-agent": UA["User-Agent"], referer: "https://music.163.com/" } })
+      .then((f) => (f.ok ? f.json() : null)).catch(() => null) as { songs?: { name?: string; artists?: { name?: string }[]; album?: { picUrl?: string } }[] } | null;
+    const n = d?.songs?.[0];
+    if (n) {
+      title ||= n.name || "";
+      artist ||= (n.artists || []).map((a) => a.name).filter(Boolean).join(" / ");
+      pic ||= (n.album?.picUrl || "").replace(/^http:/, "https:");
+    }
+  }
+  if (!url && !title) {
+    if (x) return null;
+    // an answer not understood: what it was, for 试一下
+    throw new Error("没认出 Meting 接口的回答：" + (text.trim().slice(0, 120) || "（空的）"));
+  }
+  return { title, artist, url, pic, lrc, ...(url ? {} : { why: "在网易云放不了（VIP 或下架）" }) };
 }
 const songReply = async (c: C, api: string, token: string) => {
   const id = (c.req.query("id") || "").trim();
@@ -1041,6 +1111,22 @@ const songReply = async (c: C, api: string, token: string) => {
 };
 const metingToken = (env: Env, s: Record<string, string>) => s.metingToken || env.METING_TOKEN || "";
 app.get("/api/meting", async (c) => { const s = await loadSettings(c.env); return songReply(c, s.metingApi || "", metingToken(c.env, s)); });
+/* a sound or a cover that only comes with the token: fetched here from the journal's Meting API, a piece at a
+   time as the player asks (Range) */
+app.get("/api/meting/file", async (c) => {
+  const id = (c.req.query("id") || "").trim(), t = c.req.query("t") === "pic" ? "pic" : "url";
+  if (!/^\d{3,12}$/.test(id)) return bad(c, 400, "要网易云的歌曲 ID");
+  const s = await loadSettings(c.env), headers = metingHeaders(metingToken(c.env, s));
+  delete headers.accept;
+  const range = c.req.header("range");
+  if (range) headers.range = range;
+  const f = await fetch(metingUrl(s.metingApi || "", t, id), { headers }).catch(() => null);
+  const type = f?.headers.get("content-type") || "";
+  if (!f || !f.ok || !/^(audio|image|video)\/|octet-stream/.test(type)) { f?.body?.cancel(); return bad(c, 404, "这首歌放不了"); }
+  const out = new Headers({ "content-type": type, "cache-control": "public, max-age=600" });
+  for (const k of ["content-length", "content-range", "accept-ranges"]) { const v = f.headers.get(k); if (v) out.set(k, v); }
+  return new Response(f.body, { status: f.status, headers: out });
+});
 /* 试一下 in 手帐设置: an address not saved yet (only for the one signed in: otherwise anyone could send the
    Worker anywhere) */
 app.get("/api/admin/meting", async (c) => {

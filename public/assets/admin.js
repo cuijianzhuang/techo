@@ -854,9 +854,10 @@
         const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT,ti.value.trim());
         out.textContent='';out.className='mtest ok';
         if(x.pic){const i=el('img');i.src=x.pic;i.alt='';i.referrerPolicy='no-referrer';out.appendChild(i);}
-        const au=el('audio');au.controls=true;au.preload='none';au.src=x.url;
-        const tx=el('span');tx.append(el('b',null,'✓ '+(x.title||'（没有歌名）')),el('small',null,(x.artist||'')+(x.lrc?' · 有歌词':' · 没有歌词')));
-        out.append(tx,au);
+        // found, but NetEase won't play it: the API is fine, the song isn't
+        const tx=el('span');tx.append(el('b',null,(x.url?'✓ ':'△ ')+(x.title||'（没有歌名）')),el('small',null,(x.artist||'')+(x.url?(x.lrc?' · 有歌词':' · 没有歌词'):' · '+(x.why||'放不了')+'。接口是通的，换一首试试')));
+        out.appendChild(tx);
+        if(x.url){const au=el('audio');au.controls=true;au.preload='none';au.src=x.url;out.appendChild(au);}
       }catch(e){out.textContent='✗ 没取到：'+(e&&/[\u4e00-\u9fff]/.test(e.message)?e.message:'这个接口现在用不了，或者这首歌放不了（VIP / 下架）。换个接口或换首歌再试。');out.className='mtest err';}
       finally{t.disabled=false;}
     };
@@ -1321,7 +1322,7 @@
           const x=await T.meting(id).catch(()=>null);
           close();q.value='';
           block(cb.checked?['```音乐','网易云: '+link,'评分:','听到:','歌词:','```'].join('\n'):link+'\n');
-          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+'。':'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，可以在「手帐设置 → 接入服务」换个接口试试。',x?'ok':'err');
+          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+(x.url?'。':'，不过'+(x.why||'这首歌放不了')+'。'):'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，可以在「手帐设置 → 接入服务」换个接口试试。',x?'ok':'err');
         }catch(e){say.textContent=e.message||'没认出来';}
         finally{go.disabled=false;}
       }
