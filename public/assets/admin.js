@@ -39,7 +39,7 @@
     {key:'look',title:'外观',sum:'封面 · 纸张 · 扉页 · 封底',parts:['cover','paper','readme','back']},
     {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
     {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
-    {key:'svc',title:'接入服务',sum:'网易云音乐 · 地图 · AI',parts:['music','map','ai']}];
+    {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI',parts:['music','weather','map','ai']}];
   const isSet=v=>typeof v==='string'&&v.startsWith('set:');
   SET_PAGES.forEach(pg=>{
     const b=el('button','item mi');b.type='button';b.dataset.set=pg.key;
@@ -247,6 +247,7 @@
         mode:()=>['翻页方式','首页的书怎么翻。',[bookModeField()]],
         samples:()=>['示例页',null,[samplesField()]],
         music:()=>['网易云音乐','日记里的网易云歌曲：正文里单独一行贴歌曲链接，或 ```音乐 卡片里写「网易云: 链接」，就是一个能播的播放器。歌名、封面、歌词和声音从 Meting API 取。',[musicField()]],
+        weather:()=>['天气','编辑页「地点和天气」查天气用的。填了和风天气就用和风（和手机天气 App 的说法一样）；没填、或者和风查不到的日子，用 Open-Meteo（中国气象局的模型，免费不用 key）。',[weatherField()]],
         map:()=>['地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]],
         ai:()=>['AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]],
         contact:()=>['联系方式','显示在「写信给我」那一页。',[
@@ -871,6 +872,34 @@
     w.append(f,chips,trow,row,out);
     return w;
   }
+  /* 手帐设置 → 接入服务 → 天气: 和风天气's key and API Host (both admin only), and today's weather in Beijing to
+     try them (with what's typed, before saving) */
+  function weatherField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const kf=field('和风天气 KEY','qweatherKey','password',{max:100,ph:'控制台 → 项目管理 → 凭据 里的 API KEY',
+      hint:'在 console.qweather.com 注册，建一个项目，凭据选 API KEY。只存在后台，由 Worker 带着去查，读者的网页上看不到。留空就用 Open-Meteo。'});
+    const ki=kf.querySelector('input');ki.autocomplete='off';ki.spellcheck=false;
+    const eye=el('button','b small','显示');eye.type='button';eye.onclick=()=>{const on=ki.type==='password';ki.type=on?'text':'password';eye.textContent=on?'隐藏':'显示';};
+    const krow=el('div','drow');krow.style.alignItems='start';eye.style.marginTop='22px';krow.append(kf,eye);
+    const hf=field('API Host','qweatherHost','text',{max:120,ph:'abc123xyz.re.qweatherapi.com',
+      hint:'控制台 → 设置 里的 API Host，每个账号不一样。留空用旧的公共地址 devapi.qweather.com（新账号可能用不了）。'});
+    const hi=hf.querySelector('input');
+    const acts=el('div','photo-actions'),t=el('button','b small','试一下'),out=el('span','hintx');
+    t.type='button';acts.append(t,out);
+    t.onclick=async()=>{
+      if(!ki.value.trim()&&!settings.qweatherKey){out.textContent='先填 KEY';out.style.color='var(--red)';return;}
+      t.disabled=true;out.textContent='正在查北京今天的天气……';out.style.color='';
+      try{
+        const r=await fetch('/api/admin/weather?date='+T.todayStr()+'&lat=39.9&lon=116.4&host='+encodeURIComponent(hi.value.trim()),{credentials:'same-origin',headers:ki.value.trim()?{'x-qweather-key':ki.value.trim()}:{}});
+        const j=await r.json().catch(()=>({}));
+        if(!r.ok||!j.weather)throw new Error(j.error||'没查到（'+r.status+'）');
+        out.textContent='✓ 北京今天：'+j.weather;out.style.color='var(--olive)';
+      }catch(e){out.textContent='✗ '+e.message;out.style.color='var(--red)';}
+      finally{t.disabled=false;}
+    };
+    w.append(krow,hf,acts);
+    return w;
+  }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
   function mapField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
@@ -1102,16 +1131,62 @@
   const WMO={0:'晴',1:'晴间多云',2:'多云',3:'阴',45:'雾',48:'雾凇',51:'毛毛雨',53:'毛毛雨',55:'毛毛雨',56:'冻毛毛雨',57:'冻毛毛雨',
     61:'小雨',63:'中雨',65:'大雨',66:'冻雨',67:'冻雨',71:'小雪',73:'中雪',75:'大雪',77:'雪粒',80:'阵雨',81:'阵雨',82:'强阵雨',
     85:'阵雪',86:'阵雪',95:'雷阵雨',96:'雷阵雨伴冰雹',99:'雷阵雨伴冰雹'};
+  /* Open-Meteo's code for a day is the worst hour of it: an hour of drizzle at 3 a.m. makes a sunny day "毛毛雨".
+     So the day is read the way a Chinese forecast says it, from its hours: the morning (6–13) and the afternoon
+     and evening (14–21) each by what most of it was — rain or snow only when it came down for two hours or more
+     (how much, by the national 12-hour amounts: 小雨 under 5 mm, 中雨 under 15, 大雨 under 30, then 暴雨),
+     otherwise by the clouds (under 35% 晴, under 75% 多云, else 阴), fog when it lay three hours — and "X转Y"
+     when the two differ. */
+  function halfDay(hs){
+    const wet=hs.filter(h=>h.code>=51&&(h.mm>=.1||h.code>=95)),n=hs.length||1;
+    if(wet.length>=2){
+      const mm=wet.reduce((a,h)=>a+h.mm,0),snow=wet.filter(h=>h.code>=71&&h.code<=77||h.code>=85&&h.code<=86).length*2>wet.length;
+      if(wet.some(h=>h.code>=95))return '雷阵雨';
+      if(snow)return mm<2.5?'小雪':mm<5?'中雪':mm<10?'大雪':'暴雪';
+      if(wet.every(h=>h.code<=57)&&mm<1)return '毛毛雨';
+      const shower=wet.filter(h=>h.code>=80).length*2>wet.length;
+      return mm<5?(shower?'阵雨':'小雨'):mm<15?'中雨':mm<30?'大雨':'暴雨';
+    }
+    if(hs.filter(h=>h.code===45||h.code===48).length>=3)return '雾';
+    const cc=hs.reduce((a,h)=>a+h.cloud,0)/n;
+    return cc<35?'晴':cc<75?'多云':'阴';
+  }
+  /* a day's weather: 和风天气 through the Worker when it has a key (today, the week ahead, the last ten days);
+     else, or when it can't say, Open-Meteo — the China Meteorological Administration's model (CMA GRAPES) for
+     the days it has, its usual models for the rest, the archive (ERA5) for long ago */
+  let qwSaid='';   // why 和风天气 didn't answer the last time (shown with Open-Meteo's answer)
+  const wxNote=()=>qwSaid?'（和风天气：'+qwSaid+'，这次用的 Open-Meteo）':'';
   async function weatherOn(date,lat,lon){
+    qwSaid='';
+    try{
+      const r=await fetch('/api/admin/weather?date='+date+'&lat='+lat+'&lon='+lon,{credentials:'same-origin'});
+      const j=await r.json().catch(()=>({}));
+      if(r.ok&&j.weather)return j.weather;
+      if(!j.off)qwSaid=j.error||('和风天气 '+r.status);
+    }catch(e){qwSaid='和风天气连不上';}
+    return openMeteo(date,lat,lon);
+  }
+  async function openMeteo(date,lat,lon){
     const days=(Date.parse(date+'T00:00:00Z')-Date.parse(T.todayStr()+'T00:00:00Z'))/864e5;
     if(days>15)throw new Error('太远的日子还查不到天气');
     const host=days<-85?'https://archive-api.open-meteo.com/v1/archive':'https://api.open-meteo.com/v1/forecast';
-    const u=host+'?latitude='+lat+'&longitude='+lon+'&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&start_date='+date+'&end_date='+date;
-    const r=await fetch(u);if(!r.ok)throw new Error('天气没查到（'+r.status+'）');
-    const d=(await r.json()).daily||{},code=d.weather_code&&d.weather_code[0];
-    if(code==null)throw new Error('那一天的天气还没有');
+    const ask=async model=>{
+      const u=host+'?latitude='+lat+'&longitude='+lon+'&hourly=weather_code,precipitation,cloud_cover&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&start_date='+date+'&end_date='+date+(model?'&models='+model:'');
+      const r=await fetch(u);if(!r.ok)throw new Error('天气没查到（'+r.status+'）');
+      const j=await r.json(),d=j.daily||{};
+      if(!d.weather_code||d.weather_code[0]==null||d.temperature_2m_max[0]==null)throw new Error('那一天的天气还没有');
+      return j;
+    };
+    const j=days<-85?await ask(''):await ask('cma_grapes_global').catch(()=>ask(''));
+    const d=j.daily,code=d.weather_code[0];
     const lo=Math.round(d.temperature_2m_min[0]),hi=Math.round(d.temperature_2m_max[0]);
-    return (WMO[code]||'—')+' '+(lo===hi?hi:lo+'~'+hi)+'°';
+    let say=WMO[code]||'—';
+    const h=j.hourly||{},hours=(h.time||[]).map((t,i)=>({at:+t.slice(11,13),code:h.weather_code[i],mm:h.precipitation&&h.precipitation[i]||0,cloud:h.cloud_cover&&h.cloud_cover[i]||0})).filter(x=>x.code!=null);
+    if(hours.length>=20){
+      const am=halfDay(hours.filter(x=>x.at>=6&&x.at<=13)),pm=halfDay(hours.filter(x=>x.at>=14&&x.at<=21));
+      say=am===pm?am:am+'转'+pm;
+    }
+    return say+' '+(lo===hi?hi:lo+'~'+hi)+'°';
   }
   // a place's name, "城市 · 附近": from Mapbox when there's a token (streets and landmarks, in Chinese), else
   // from BigDataCloud (free, no key)
@@ -1168,7 +1243,7 @@
             const la=+ll.lat.toFixed(2),lo=+ll.lng.toFixed(2);set('geo',la+','+lo);
             const [name,w]=await Promise.all([placeAt(ll.lat,ll.lng).catch(()=>''),weatherOn(draft.date,la,lo).catch(()=>'')]);
             if(name)set('place',name);if(w)set('weather',w);
-            status('已按地图上的位置填好'+(name?'地点':'坐标')+(w?'和天气':'')+'，记得保存。','ok');
+            status('已按地图上的位置填好'+(name?'地点':'坐标')+(w?'和天气':'')+'，记得保存。'+wxNote(),'ok');
           });
           map.on('click',e=>pick(e.lngLat));
           pin.on('dragend',()=>pick(pin.getLngLat()));
@@ -1187,12 +1262,12 @@
       const [la,lo]=await here();set('geo',la+','+lo);
       const [name,w]=await Promise.all([placeAt(la,lo).catch(()=>''),weatherOn(draft.date,la,lo).catch(e=>{status(e.message,'err');return '';})]);
       if(name)set('place',name);if(w)set('weather',w);
-      if(w)status('已填好地点和天气，记得保存。','ok');
+      if(w)status('已填好地点和天气，记得保存。'+wxNote(),'ok');
     });
     wx.onclick=()=>run(wx,async()=>{
       const c=coords();if(!c)throw new Error('先填坐标，或者点「获取位置和天气」');
       if(!T.parseDate(draft.date))throw new Error('先填日期');
-      set('weather',await weatherOn(draft.date,c[0],c[1]));status('已按坐标查到 '+draft.date+' 的天气，记得保存。','ok');
+      set('weather',await weatherOn(draft.date,c[0],c[1]));status('已按坐标查到 '+draft.date+' 的天气，记得保存。'+wxNote(),'ok');
     });
     wrap.append(h,row,r2,pickBox,el('span','hintx','坐标只保留两位小数（大约 1 公里），因为手帐是公开的。天气按这一页的日期查。'));
     return wrap;

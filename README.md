@@ -177,7 +177,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 - **照片**：最多 3 张，每张有自己的说明。一张时贴在正文旁边，字绕着排；两三张时在标题下面错落排一排。上传前会先压到 1600px；从页上拿掉的照片会从 R2 删掉。
 - **小插画**：点选，最多两个：晴天、多云、下雨、月亮、猫、书、电脑、bug、植物、吃面、公交、骑车、音乐、心、星星、来信、拍照。漫画格里 `#` 后面写的是它们的英文名（编辑器里「能写的格式」有对照表）。画在 `public/assets/render.js` 的 `STICKERS` 里（64×64 的线稿 SVG），新增一个要同时加到 `src/index.ts` 的 `STICKERS`。
-- **地点和天气**：点「📍 获取位置和天气」，浏览器定位后自动填地名和这一页那天的天气（Open-Meteo，免费、不用 key），也可以手填。地名配了 Mapbox 时用 Mapbox（能到街道和地标），没配时用 BigDataCloud。配了 Mapbox 还可以点「🗺 在地图上选」，在地图上点一下或拖图钉。写在页眉右上角，鼠标停上去显示坐标；坐标只保留两位小数（大约 1 公里），因为手帐是公开的。有坐标的页会贴一张小地图（可在设置里关掉）。
+- **地点和天气**：点「📍 获取位置和天气」，浏览器定位后自动填地名和这一页那天的天气，也可以手填。天气默认问**和风天气**（在「手帐设置 → 接入服务 → 天气」填 KEY 和 API Host；今天和往后一周用预报的白天 / 夜间，写成「多云转小雨」，最近 10 天用历史天气），没配、或者和风查不到的日子，用 **Open-Meteo**（免费、不用 key；先用中国气象局的 CMA GRAPES 模型，没有再用它默认的模型，很久以前的用 ERA5 存档）。Open-Meteo 的天气按那天逐小时的数据、照国内天气预报的说法来写：上午（6–13 点）和下午到晚上（14–21 点）各看大部分时候怎样，不一样就写「多云转小雨」；下了两个小时以上才算雨雪，雨量分小雨 / 中雨 / 大雨 / 暴雨，没下就按云量分晴 / 多云 / 阴。夜里下一阵毛毛雨，不会再把一个晴天写成「毛毛雨」。地名配了 Mapbox 时用 Mapbox（能到街道和地标），没配时用 BigDataCloud。配了 Mapbox 还可以点「🗺 在地图上选」，在地图上点一下或拖图钉。写在页眉右上角，鼠标停上去显示坐标；坐标只保留两位小数（大约 1 公里），因为手帐是公开的。有坐标的页会贴一张小地图（可在设置里关掉）。
 - **照片自带的信息**：上传照片时读出拍摄时间和 GPS。新写的页如果日期还是今天，就改成拍摄那天；还没填地点的页，按照片的位置填坐标、地名和那天的天气。只填空着的项，改完不会自动保存。上传的照片都会重新压一遍，相机写进去的 EXIF（包括精确位置）不会留在公开的图片里。
 - **AI 补全**：标题下面的「✨ AI 补全空着的项」根据正文补上还空着的标题、英文小注、页眉小字、印章、页脚引文（只用出处确定的名句，拿不准就留空）和插画。已经写了的不动，补完不会自动保存。
 - **单独上锁**：编辑页最下面可以给这一页设口令；「随手记」里可以给今天整天设口令（这一天的所有页都锁上，包括还没写的）。
@@ -209,6 +209,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 **接入服务**
 - **网易云音乐**：Meting API 的地址（留空用默认的 `https://api.injahow.cn/meting/`）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`；只填了域名（`https://music.example/`）而那里是介绍页时，自动改问 `https://music.example/api`。下面有几个公共接口可以一点就换，「试一下」用填着的地址取一首歌（在浏览器里取，和读者看到的一样），能取到会显示歌名、封面和一个能播的小播放器。
   - **Meting token**：接口提示「需要 API Token，请使用 Authorization: Bearer <token>」时，把 token 填在这里（输入框默认遮住，可以点「显示」）。手帐里所有的 Meting 请求都经过 Worker（`/api/meting`），由 Worker 带上 `Authorization: Bearer` 去问；歌曲、封面地址如果又指回这个接口，Worker 会替浏览器跟到真正的地址（网易云的服务器），歌词直接取回文字；只有带着 token 才给的音频、图片，由 Worker 转过来（`/api/meting/file`）。接口的回答认几种常见格式（数组、`data`/`result` 里的对象），缺播放地址、封面、歌词时再按 `type=url` / `pic` / `lrc` 去问，还缺的问网易云自己（歌名、歌手、封面，以及免费歌的播放地址）。「试一下」取到歌但放不了时显示 △ 和原因（说明接口是通的，是这首歌的问题）；实在认不出接口的回答，会把回答的开头显示出来。token 和 AI 的设置一样只在后台，不会出现在 `/api/settings` 和网页里。不想存在设置里，也可以设成 Worker 密钥：`npx wrangler secret put METING_TOKEN`（设置里空着时用它）。
+- **天气**：[和风天气](https://console.qweather.com) 的 KEY 和 API Host。注册后建一个项目、凭据选 API KEY；API Host 在控制台「设置」里，每个账号不一样（像 `abc123.re.qweatherapi.com`，留空用旧的 `devapi.qweather.com`）。两项都只在后台，Worker 带着 `X-QW-Api-Key` 去查（`/api/admin/weather`），不会出现在网页里。「试一下」查北京今天的天气。KEY 不对、额度用完、查不到的日子，编辑页会说一句和风的原因，然后用 Open-Meteo 的结果。
 - **地图**：Mapbox 的 access token，要用公开的 `pk.` 开头的那种。在 [account.mapbox.com](https://account.mapbox.com/access-tokens/) 新建一个，URL restrictions 填你的域名，别人拿去也用不了。token 会出现在网页里，这是 Mapbox 公开 token 的正常用法。配上后才有足迹地图页、页上的小地图、后台的选点地图和 Mapbox 地名；「有坐标的日记页上贴一张小地图」可以单独关掉。
 - **AI**：写草稿和补全用的接口格式、地址和模型（见[接哪个 AI](#接哪个-ai)）。
 
@@ -341,6 +342,7 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 | POST | `/api/admin/lookup` | 查书、影视、音乐（`{"q": "书名或链接", "kind": "book\|film\|music"}`，数据来自 NeoDB，ISBN 退到 Open Library）；贴链接时 NeoDB 还在抓会返回 `{"pending": true}` |
 | POST | `/api/admin/cover` | 把一张远程封面存进 R2（`{"url": "https://…"}`，≤10MB 的图片），返回 `{"key": "p/….jpg"}` |
 | GET | `/api/admin/meting?id=&api=` | 「试一下」：用还没保存的 Meting 地址（和请求头 `x-meting-token` 里的 token）取一首歌 |
+| GET | `/api/admin/weather?date=&lat=&lon=` | 和风天气查那天的天气：`{"weather": "多云转小雨 15~25°"}`；没配 KEY 时 404 `{"off": true}`。「试一下」用请求头 `x-qweather-key` 和 `&host=` 带上还没保存的 KEY 和 Host |
 | POST | `/api/admin/netease` | 认出一首网易云的歌（`{"q": "链接、App 分享的文字或 ID"}`，`163cn.tv` 短链接跟着跳转去认），返回 `{"id": "186016"}` |
 
 ## 友链
