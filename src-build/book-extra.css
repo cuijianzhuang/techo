@@ -469,6 +469,17 @@ button.jbar::before{content:"";position:absolute;left:0;right:0;top:-8px;bottom:
 @keyframes jmu-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.jmusic.playing .jmu-disc{animation:none}}
 .jmusic.failed .jmu-play{background:#9a9a9a}
+/* how loud: a speaker (mutes) and a small slider, in the red of the bar */
+.jp .jtext .jmu-progress .jmu-vol{flex:none;display:flex;align-items:center;gap:3px;margin-left:2px;color:#d43c33}
+.jmu-mute{appearance:none;flex:none;width:22px;height:22px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:none;color:inherit;cursor:pointer}
+.jmu-mute:hover{background:rgba(212,60,51,.1)}
+.jmu-mute svg{display:block}
+.jmu-vol input{appearance:none;-webkit-appearance:none;color:inherit;width:50px;height:5px;margin:0;border-radius:3px;cursor:pointer;
+  background:linear-gradient(90deg,currentColor var(--v,80%),rgba(40,40,40,.12) var(--v,80%))}
+.jmu-vol input::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
+.jmu-vol input::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
+.jmu-mute:focus-visible,.jmu-vol input:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.jmusic.failed .jmu-vol{opacity:.4}
 
 .jp .jtext .jcode{margin:0;padding:8px 11px;border-radius:3px;background:#2d3a3f;color:#e8e4da;font:400 12.5px/1.55 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 1px 2px rgba(0,0,0,.18)}
 .jp .jtext strong{font-weight:400;background:linear-gradient(transparent 72%,rgba(217,87,59,.28) 72% 92%,transparent 92%)}

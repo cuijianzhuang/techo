@@ -161,7 +161,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **胶带和回形针**：每张卡片用一两条彩色和纸胶带贴在页上（颜色和位置随内容变），小票用回形针夹住。
 - **叠起来**：卡片连着写（中间不隔别的内容）就叠成一摞，每张往下错开一点、歪一点，露出上面一条（写着是什么）。点露出的那条，盖在它上面的卡片掀起来又落到它下面，它就在最上面了；离它越近的叠得越高，每张都留一点在外面，都点得到。右上角的「1/3」是最上面这张是从上往下第几张。手机、电脑、平面和立体的书都一样；最上面那张和纸一样，按住它照常翻页。一摞太高、这一页剩下的地方放不下时，卡片先挨得紧一点（最紧每张露出 44px，还看得见是什么）；还放不下，这一页有别的内容就整摞挪到下一页，一整页都放不下才拆成两摞，各自重新数「1/n」。
 - **图片**：`封面` / `海报` 可以写 `https://` 开头的图片地址，或上传照片后得到的 `p/….jpg`。
-- **网易云播放器**：正文里单独一行贴网易云的歌曲链接（`https://music.163.com/song?id=186016`）就是一个播放器。在编辑器里直接粘贴链接、或 App 里「分享 → 复制链接」得到的那段文字（包括 `163cn.tv` 短链接）都会自动变成这样一行；工具栏的「🎵 网易云」也能贴，还可以勾上「做成音乐卡片」，再写评分、听到哪、一句歌词。音乐卡片里写 `网易云: 链接或 ID` 也一样。歌名、歌手、封面没写的会自动填上；点 ▶ 播放，唱片转起来，进度条可以点着跳，歌词跟着走。同一时间只放一首。靠 [Meting API](https://github.com/metowolf/Meting) 取歌，默认用 `api.injahow.cn/meting/`，可以在「手帐设置 → 接入服务」换（见下）。VIP 和下架的歌放不了（卡片会变灰，信息照样显示）。
+- **网易云播放器**：正文里单独一行贴网易云的歌曲链接（`https://music.163.com/song?id=186016`）就是一个播放器。在编辑器里直接粘贴链接、或 App 里「分享 → 复制链接」得到的那段文字（包括 `163cn.tv` 短链接）都会自动变成这样一行；工具栏的「🎵 网易云」也能贴，还可以勾上「做成音乐卡片」，再写评分、听到哪、一句歌词。音乐卡片里写 `网易云: 链接或 ID` 也一样。歌名、歌手、封面没写的会自动填上；点 ▶ 播放，唱片转起来，进度条可以点着跳，歌词跟着走。进度条右边是音量：拖小滑块调大小，点喇叭静音 / 取消静音；所有播放器用同一个音量，这台浏览器会记住。同一时间只放一首。靠 [Meting API](https://github.com/metowolf/Meting) 取歌，默认用 `api.injahow.cn/meting/`，可以在「手帐设置 → 接入服务」换（见下）。VIP 和下架的歌放不了：卡片变灰，歌名、歌手、封面照样显示，下面写「在网易云放不了（VIP 或下架）」。
 - **🔍 NeoDB**：编辑器工具栏的「🔍 NeoDB」按书名、片名、专辑名或 ISBN 在 [NeoDB](https://neodb.social)（开放的书影音数据库）里搜，也可以贴 NeoDB 上这一条的链接（最准）。点一个结果就插入填好的书籍、影视或音乐卡片，封面存到自己的 R2。按 ISBN 查书时 NeoDB 没有就查 [Open Library](https://openlibrary.org)。想用别的 NeoDB 实例，给 Worker 设环境变量 `NEODB_URL`（比如 `https://neodb.example.com`）。
 
 空一行分段，段落里换行就是换行。没有照片时大约 250 字写满一页。
@@ -208,7 +208,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 
 **接入服务**
 - **网易云音乐**：Meting API 的地址（留空用默认的 `https://api.injahow.cn/meting/`）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`。下面有几个公共接口可以一点就换，「试一下」用填着的地址取一首歌（在浏览器里取，和读者看到的一样），能取到会显示歌名、封面和一个能播的小播放器。
-  - **Meting token**：接口提示「需要 API Token，请使用 Authorization: Bearer <token>」时，把 token 填在这里（输入框默认遮住，可以点「显示」）。手帐里所有的 Meting 请求都经过 Worker（`/api/meting`），由 Worker 带上 `Authorization: Bearer` 去问；歌曲、封面地址如果又指回这个接口，Worker 会替浏览器跟到真正的地址（网易云的服务器），歌词直接取回文字。token 和 AI 的设置一样只在后台，不会出现在 `/api/settings` 和网页里。不想存在设置里，也可以设成 Worker 密钥：`npx wrangler secret put METING_TOKEN`（设置里空着时用它）。
+  - **Meting token**：接口提示「需要 API Token，请使用 Authorization: Bearer <token>」时，把 token 填在这里（输入框默认遮住，可以点「显示」）。手帐里所有的 Meting 请求都经过 Worker（`/api/meting`），由 Worker 带上 `Authorization: Bearer` 去问；歌曲、封面地址如果又指回这个接口，Worker 会替浏览器跟到真正的地址（网易云的服务器），歌词直接取回文字；只有带着 token 才给的音频、图片，由 Worker 转过来（`/api/meting/file`）。接口的回答认几种常见格式（数组、`data`/`result` 里的对象），缺播放地址、封面、歌词时再按 `type=url` / `pic` / `lrc` 去问，还缺的问网易云自己（歌名、歌手、封面，以及免费歌的播放地址）。「试一下」取到歌但放不了时显示 △ 和原因（说明接口是通的，是这首歌的问题）；实在认不出接口的回答，会把回答的开头显示出来。token 和 AI 的设置一样只在后台，不会出现在 `/api/settings` 和网页里。不想存在设置里，也可以设成 Worker 密钥：`npx wrangler secret put METING_TOKEN`（设置里空着时用它）。
 - **地图**：Mapbox 的 access token，要用公开的 `pk.` 开头的那种。在 [account.mapbox.com](https://account.mapbox.com/access-tokens/) 新建一个，URL restrictions 填你的域名，别人拿去也用不了。token 会出现在网页里，这是 Mapbox 公开 token 的正常用法。配上后才有足迹地图页、页上的小地图、后台的选点地图和 Mapbox 地名；「有坐标的日记页上贴一张小地图」可以单独关掉。
 - **AI**：写草稿和补全用的接口格式、地址和模型（见[接哪个 AI](#接哪个-ai)）。
 
@@ -313,7 +313,8 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 | GET | `/api/entries` | 已发布的日记页（按日期）；上了锁、没给口令的只有日期。口令令牌放在 `X-Techo-Keys` 请求头里 |
 | POST | `/api/unlock` | 用口令换一个 12 小时有效的令牌（`{"scope", "password"}`） |
 | GET | `/api/settings` | 手帐设置（没设置过的项返回默认值；不含 AI 三项） |
-| GET | `/api/meting?id=` | 网易云歌曲（经 Meting，带上设置里的 token）：`{title, artist, url, pic, lrc}` |
+| GET | `/api/meting?id=` | 网易云歌曲（经 Meting，带上设置里的 token）：`{title, artist, url, pic, lrc}`；放不了的歌 `url` 为空，另有 `why` |
+| GET | `/api/meting/file?id=&t=url\|pic` | 只有带 token 才给的音频 / 封面，由 Worker 转发（支持 `Range`） |
 | GET | `/img/p/<uuid>.<ext>` | 照片；上了锁的页的照片要带 `?k=令牌` |
 | GET | `/p/:id` | 一页的分享链接：带 Open Graph 标签的小页面，打开后跳到 `/#e-<id>` |
 | GET | `/card/:id.jpg` | 一页的分享卡片（1200×630）；草稿和上了锁的页是 404 |

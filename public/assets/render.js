@@ -272,7 +272,7 @@
     const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id+(token?'|'+token:'');
     if(!metingCache.has(ck)){
       const viaWorker=()=>fetch(api?'/api/admin/meting?id='+encodeURIComponent(id)+'&api='+encodeURIComponent(api):'/api/meting?id='+encodeURIComponent(id),{headers:Object.assign({accept:'application/json'},api&&token?{'x-meting-token':token}:{}),credentials:'same-origin'})
-        .then(r=>r.json().catch(()=>({})).then(j=>{if(!r.ok||!j.url){const e=new Error(j.error||'meting '+r.status);e.said=r.status!==404&&!!j.error;throw e;}return j;}));
+        .then(r=>r.json().catch(()=>({})).then(j=>{if(!r.ok||!(j.url||j.title)){const e=new Error(j.error||'meting '+r.status);e.said=r.status!==404&&!!j.error;throw e;}return j;}));
       const direct=()=>{
         const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
           :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
@@ -323,8 +323,8 @@
       if(audio&&!audio.paused){audio.pause();return;}
       if(!audio){
         const song=card.__song||await meting(neteaseId(f.netease||f.link)).catch(()=>null);
-        if(!song||!song.url){card.classList.add('failed');q('.jmu-lyric').textContent='这首歌放不了（换个 Meting 接口试试）';return;}
-        audio=new Audio(song.url);audio.preload='auto';
+        if(!song||!song.url){card.classList.add('failed');q('.jmu-lyric').textContent=song&&song.why||'这首歌放不了（换个 Meting 接口试试）';return;}
+        audio=new Audio(song.url);audio.preload='auto';audio.volume=volume.muted?0:volume.level;
         audio.addEventListener('timeupdate',tick);audio.addEventListener('loadedmetadata',tick);
         ['play','pause','ended'].forEach(k=>audio.addEventListener(k,paint));
         audio.addEventListener('error',()=>{q('.jmu-lyric').textContent='这首歌放不了（可能要会员，或接口失效）';paint();});
@@ -339,7 +339,29 @@
       if(!audio||!audio.duration)return;
       const r=e.currentTarget.getBoundingClientRect();audio.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*audio.duration;tick();
     });
+    // how loud: a speaker (a press mutes it and back) and a slider, the same for every song and kept for next time
+    const vol=q('.jmu-vol'),mute=q('.jmu-mute'),range=q('.jmu-vol input');
+    const paintVol=()=>{const v=volume.muted?0:volume.level;range.value=String(Math.round(v*100));range.style.setProperty('--v',Math.round(v*100)+'%');
+      mute.innerHTML=v===0?MUTE_ICON:v<.5?VOL_LOW_ICON:VOL_ICON;mute.setAttribute('aria-label',volume.muted?'取消静音':'静音');mute.setAttribute('aria-pressed',String(volume.muted));};
+    volume.cards.add(paintVol);paintVol();
+    ['pointerdown','mousedown','mouseup','touchstart','touchend','touchmove','pointermove','wheel'].forEach(k=>vol.addEventListener(k,stop,{passive:true}));
+    range.addEventListener('input',()=>{const v=+range.value/100;setVolume(v,v===0);});
+    mute.addEventListener('click',e=>{e.stopPropagation();setVolume(volume.muted&&volume.level===0?.6:volume.level,!volume.muted);});
+    vol.addEventListener('click',stop);
+    vol.addEventListener('keydown',e=>{if(/^Arrow|^Page|^Home$|^End$/.test(e.key))e.stopPropagation();});
   }
+  // one loudness for all the players (the one playing follows at once), remembered in this browser
+  const volume={level:.8,muted:false,cards:new Set()};
+  try{const v=JSON.parse(localStorage.getItem('techo.volume')||'null');if(v&&typeof v.level==='number')volume.level=Math.max(0,Math.min(1,v.level)),volume.muted=!!v.muted;}catch(e){}
+  function setVolume(level,muted){
+    volume.level=Math.max(0,Math.min(1,level));volume.muted=muted;
+    if(playing)playing.volume=muted?0:volume.level;
+    volume.cards.forEach(p=>p());
+    try{localStorage.setItem('techo.volume',JSON.stringify({level:volume.level,muted}));}catch(e){}
+  }
+  const VOL_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 5h2.2L7 2.2v9.6L3.7 9H1.5z" fill="currentColor"/><path d="M9.2 4.6a3.2 3.2 0 0 1 0 4.8M10.8 3a5.4 5.4 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  const VOL_LOW_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 5h2.2L7 2.2v9.6L3.7 9H1.5z" fill="currentColor"/><path d="M9.2 4.6a3.2 3.2 0 0 1 0 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+  const MUTE_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 5h2.2L7 2.2v9.6L3.7 9H1.5z" fill="currentColor"/><path d="M9 5l3.5 4M12.5 5L9 9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
   const PLANE='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15.5v-1.8l-8-5V3.5a1.5 1.5 0 0 0-3 0v5.2l-8 5v1.8l8-2.5v5.3l-2 1.5V21l3.5-1 3.5 1v-1.2l-2-1.5V13z" fill="currentColor"/></svg>';
   const TICKETS={
     book(lines){
@@ -419,6 +441,7 @@
         const sk=el(ne?'button':'div','jbar knob');const fill=el('i');fill.style.width=(L&&a!=null?Math.round(Math.min(1,a/L)*100):0)+'%';sk.appendChild(fill);
         if(ne){sk.type='button';sk.setAttribute('aria-label','播放进度');}
         pr.append(el('span','jmu-at',f.at||'0:00'),sk,el('span','jmu-len',f.length||'--:--'));info.appendChild(pr);
+        if(ne){const v=el('span','jmu-vol'),m=el('button','jmu-mute'),r=el('input');m.type='button';r.type='range';r.min='0';r.max='100';r.step='5';r.setAttribute('aria-label','音量');v.append(m,r);pr.appendChild(v);}
       }
       const st=stars(f.rating);if(st)info.appendChild(st);
       const ly=el('div','jmu-lyric',f.quote?'♫ '+f.quote:'');if(f.quote||ne)info.appendChild(ly);
@@ -432,6 +455,7 @@
           if(!f.artist&&!f.album&&song.artist)by.textContent=song.artist;
           if(!src&&song.pic){sleeve.textContent='';sleeve.appendChild(picture(song.pic,song.title));}
           card.dataset.src=song.url||'';card.__song=song;
+          if(!song.url){card.classList.add('failed');if(!f.quote)ly.textContent=song.why||'这首歌放不了';}
         }).catch(e=>{console.warn('techo: meting',e);if(!f.title)tt.textContent='这首歌没加载上';card.classList.add('failed');});
         wirePlayer(card,f);
       }
