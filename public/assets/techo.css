@@ -461,10 +461,19 @@ html{scrollbar-gutter:stable}
 .jticket .jclip::after{content:"";position:absolute;left:2px;right:2px;top:5px;bottom:9px;border:2.5px solid #9aa3a8;border-top:0;border-radius:0 0 6px 6px}
 /* a pile: cards one right after another lie on each other, each a little lower and askew; the pointer lifts one to the top */
 .jp .jtext .jstack{clear:both;display:grid;margin:16px 0 14px}
-.jp .jtext .jstack>.jticket{grid-area:1/1;align-self:start;max-width:calc(100% - 22px);margin:calc(var(--i) * 72px) auto 0;transition:transform .2s ease,box-shadow .2s ease}
+.jp .jtext .jstack{position:relative;perspective:900px}
+.jp .jtext .jstack>.jticket{grid-area:1/1;align-self:start;max-width:calc(100% - 22px);margin:calc(var(--i) * 72px) auto 0;cursor:pointer;
+  transform-origin:50% 0;transition:transform .2s ease,box-shadow .2s ease,rotate .17s ease-in-out}
 .jp .jtext .jstack>.jticket:nth-child(odd){transform:translateX(-5px) rotate(calc(-1.4deg + var(--i) * .4deg))}
 .jp .jtext .jstack>.jticket:nth-child(even){transform:translateX(6px) rotate(1.3deg)}
-.jp .jtext .jstack>.jticket:hover{z-index:5;transform:translateY(-4px) rotate(0);box-shadow:0 2px 4px rgba(40,30,10,.2),0 12px 26px rgba(40,30,10,.22)}
+/* a tap brings one up: the cards over it lift at their top edge, fall back under it */
+.jp .jtext .jstack>.jticket.lift{rotate:x -62deg;z-index:99!important}
+.jp .jtext .jstack>.jticket:hover{box-shadow:0 2px 4px rgba(40,30,10,.2),0 10px 22px rgba(40,30,10,.2)}
+.jp .jtext .jstack>.jticket:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+/* which of the pile is on top, from the top: 1/3 */
+.jst-n{position:absolute;right:6px;top:-15px;z-index:6;padding:1px 7px;border-radius:9px;background:var(--paper);border:1px solid var(--grid-strong);
+  color:var(--ink-soft);font:600 10px/1.4 var(--print);font-style:normal;letter-spacing:.5px;font-variant-numeric:tabular-nums;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.jp .jtext .jstack>.jticket{transition:none}}
 /* shared by 书籍 / 影视 / 音乐: five stars filled so far, and a bar */
 .jstars{position:relative;display:inline-block;align-self:flex-start;font:400 14px/1 var(--print);letter-spacing:0;white-space:nowrap}
 .jstars .off{color:#d6d0c2}

@@ -492,11 +492,11 @@
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
-    // a card taped on; one right after another: a pile, each on the one before (a stack of tickets that won't
-    // all lie flat) (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
+    // a card taped on; one right after another: a pile, each on the one before and a little lower, the top of
+    // each showing (what it is); a tap on one turns the ones over it back and brings it up (pickCard)
     const stick=(c,text)=>{
       fasten(c,text);
-      const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
+      const prev=into.lastElementChild,pile=n=>n&&n.classList.contains('jticket');
       if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
       else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
       else open('ticket',c);
@@ -536,8 +536,51 @@
       run.n++;
     }
     into.querySelectorAll('.jcomic').forEach(c=>c.classList.add('n'+Math.min(c.children.length,4)));
+    into.querySelectorAll('.jstack').forEach(st=>{
+      const cards=[...st.children],n=cards.length;
+      cards.forEach((c,i)=>{c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','叠着的第 '+(n-i)+' 张（共 '+n+' 张），点一下翻到最上面');});
+      st.appendChild(el('i','jst-n','1/'+n));
+    });
     return into;
   }
+  /* A pile: the card on top whole, the others' tops showing. A tap (or Enter) on one: the cards lying over it
+     lift and fall back under it, and it is on top; the one that was stays where it lies. The count in the
+     corner says which it is from the top. Pressing a card doesn't turn the page (book.js, book3d). */
+  function pickCard(c){
+    const st=c.parentNode,cards=[...st.querySelectorAll(':scope>.jticket')],n=cards.length;
+    const up=st.querySelector(':scope>.jticket.up')||cards[n-1];
+    if(c===up)return;
+    const k=cards.indexOf(c);
+    // over it: what lies later in the pile (drawn over it), and the one brought up before
+    const over=cards.filter((x,i)=>i>k||x===up);
+    const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // it on top, then the nearer the higher: every card keeps some of itself in sight
+    const bring=()=>{
+      cards.forEach((x,i)=>{x.classList.toggle('up',x===c&&k<n-1);x.style.zIndex=k<n-1?String(n-Math.abs(i-k)):'';});
+      over.forEach(x=>x.classList.remove('lift'));
+      const t=st.querySelector(':scope>.jst-n');if(t)t.textContent=(n-k)+'/'+n;
+    };
+    if(still){bring();return;}
+    over.forEach(x=>x.classList.add('lift'));
+    setTimeout(bring,170);
+  }
+  // only a card lying under another answers a press (the one on top is paper like the rest of the page: a
+  // finger on it still turns the page)
+  let pressOnCard=false;
+  const onTop=c=>{const st=c.parentNode;return c===(st.querySelector(':scope>.jticket.up')||[...st.querySelectorAll(':scope>.jticket')].pop());};
+  const cardOf=e=>{const c=e.target.closest&&e.target.closest('.jstack>.jticket');return c&&!onTop(c)?c:null;};
+  ['pointerdown','mousedown','touchstart'].forEach(k=>document.addEventListener(k,e=>{
+    pressOnCard=!!cardOf(e)&&!e.target.closest('button,a,input');
+    if(pressOnCard)e.stopPropagation();
+  },true));
+  ['pointerup','mouseup','touchend'].forEach(k=>document.addEventListener(k,e=>{if(pressOnCard)e.stopPropagation();},true));
+  document.addEventListener('click',e=>{
+    const c=cardOf(e);if(!c||e.target.closest('button,a,input'))return;
+    e.stopPropagation();pickCard(c);
+  });
+  document.addEventListener('keydown',e=>{
+    if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.jstack>.jticket')){e.preventDefault();e.stopPropagation();pickCard(e.target);}
+  });
 
   /* A diary page. entryShell: the paper, its date and (the first page) the title, the stamp and the photos,
      with an empty .jtext for the words; a page carrying on from the one before says so at its top instead.
