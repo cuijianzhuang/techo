@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>账本 · 手帐</title>
+<meta name="description" content="手帐里的小票，按月算好：每个月花了多少，花在哪儿。">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<!-- Every 账单 in the diary, added up: this month and this year, a column a month, and one month (the latest,
+     or the one picked) by what it went on, with its receipts. Filled by /assets/bills.js. -->
+<link rel="stylesheet" href="/assets/cards.css">
+<link rel="stylesheet" href="/assets/keep.css">
+</head>
+<body>
+<header class="kp-top">
+  <a class="kp-back" href="/">← 回到手帐</a><a class="kp-back" href="/timeline/">时间线</a><a class="kp-back" href="/shelf/">书架</a><a class="kp-back" href="/tickets/">票夹</a><a class="kp-back" href="/bills/" aria-current="page">账本</a>
+  <h1>账本</h1>
+  <p class="kp-sub">where the money went</p>
+  <p class="kp-stat" id="stat"></p>
+</header>
+<main class="kp-main" id="book"><p class="kp-msg">正在翻开账本……</p></main>
+<script src="/assets/render.js"></script>
+<script src="/assets/keep.js"></script>
+<script src="/assets/bills.js"></script>
+</body>
+</html>

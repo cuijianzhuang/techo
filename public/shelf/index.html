@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>书架 · 手帐</title>
+<meta name="description" content="手帐里读过的书、看过的片、听过的歌。">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<!-- Every 书籍, 影视 and 音乐 card in the diary, on a shelf: the books standing on wooden shelves a year to a
+     shelf, the films' posters on the wall, the records in a crate. One opens as it is in the diary, with the
+     days it was written on. Filled by /assets/shelf.js. -->
+<link rel="stylesheet" href="/assets/cards.css">
+<link rel="stylesheet" href="/assets/keep.css">
+</head>
+<body>
+<header class="kp-top">
+  <a class="kp-back" href="/">← 回到手帐</a><a class="kp-back" href="/timeline/">时间线</a><a class="kp-back" href="/shelf/" aria-current="page">书架</a><a class="kp-back" href="/tickets/">票夹</a><a class="kp-back" href="/bills/">账本</a>
+  <h1>书架</h1>
+  <p class="kp-sub">read, watched, listened</p>
+  <p class="kp-stat" id="stat"></p>
+  <nav class="kp-tabs" id="tabs" aria-label="书、影、音"></nav>
+</header>
+<main class="kp-main" id="shelf"><p class="kp-msg">正在把书搬上书架……</p></main>
+<script src="/assets/render.js"></script>
+<script src="/assets/keep.js"></script>
+<script src="/assets/shelf.js"></script>
+</body>
+</html>

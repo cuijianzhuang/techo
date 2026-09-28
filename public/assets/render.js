@@ -488,6 +488,19 @@
      #/song?id=…): its player, as if written as ```音乐 with 网易云: <link> */
   const NETEASE_LINE=/^[ \t]*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*[ \t]*$/gm;
   const neteaseLine=l=>/^\s*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*\s*$/.test(l)&&neteaseId(l.trim());
+  /* the cards in a page's words, for the shelf (/shelf/) and the ticket folder (/tickets/): [{kind, lines}] in
+     the order written; and one of them drawn as on the page */
+  function cardsOf(body){
+    const out=[],ls=String(body||'').replace(/\r\n?/g,'\n').split('\n');
+    for(let i=0;i<ls.length;i++){
+      const m=/^\s*```\s*(\S*)/.exec(ls[i]);
+      if(!m){if(neteaseLine(ls[i]))out.push({kind:'music',lines:['网易云: '+ls[i].trim()]});continue;}
+      const code=[];while(++i<ls.length&&!/^\s*```/.test(ls[i]))code.push(ls[i]);
+      const k=TICKET_NAMES[m[1].toLowerCase()];if(k)out.push({kind:k,lines:code});
+    }
+    return out;
+  }
+  const cardNode=(kind,lines)=>{const c=TICKETS[kind](lines);fasten(c,lines.join('|'));return c;};
   function bodyBlocks(body,into){
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
@@ -1337,9 +1350,11 @@
       const f=el('footer','foot');
       // the same days as cards, with their words, doodles and photos: the timeline page (/timeline/)
       const all=el('a','tlp-all','整页看 →');all.href='/timeline/';
-      const left=el('span');left.append('点一行，翻到那一天 · ',all);
+      const left=el('span');left.append('点一行翻过去 · ',all);
       // where they were written: the map page (/map/), when there's a Mapbox token
       if(site.mapboxToken){const mp=el('a','tlp-all','地图 →');mp.href='/map/';left.append(' · ',mp);}
+      // what was stuck in it, kept together: the shelf, the ticket folder and the bills (/shelf/, /tickets/, /bills/)
+      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
       f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;
@@ -1513,5 +1528,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();
