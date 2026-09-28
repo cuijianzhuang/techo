@@ -17,6 +17,8 @@
     if(settings.siteTitle)document.title=label+' · '+settings.siteTitle;
     T.nightTheme(settings);
     {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}
+    // 足迹, when the journal has a map
+    if(settings.mapboxToken){const tl=document.querySelector('.kp-back[href="/timeline/"]');if(tl){const m=el('a','kp-back','足迹');m.href='/map/';tl.after(m);}}
     const entries=T.sortEntries((e.entries||[]).filter(en=>!en.locked&&en.body&&parseDate(en.date))).reverse();   // newest first
     return {entries,settings};
   }

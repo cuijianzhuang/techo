@@ -120,3 +120,54 @@ h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-
 :root[data-theme="dark"] .kp-pocket{background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px rgba(200,210,220,.18)}
 :root[data-theme="dark"] .tk-date{color:var(--desk-ink)}
 @media (max-width:520px){.tk-pockets{grid-template-columns:1fr}.kp-pocket .jtext{zoom:.66}}
+
+/* ================= 账本 ================= */
+/* one hue for the money (checked against the desk, light and dark: 3:1 or more, inside the lightness band) */
+:root{--bar:#727f22;--rule:rgba(90,84,76,.16)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bar:#8a9a33;--rule:rgba(235,230,218,.12)}}
+:root[data-theme="dark"]{--bar:#8a9a33;--rule:rgba(235,230,218,.12)}
+.bl-tiles{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;margin:22px 0 6px}
+.bl-tile{display:grid;align-content:start;gap:4px;padding:14px 16px;border-radius:8px;background:rgba(255,255,255,.28);box-shadow:inset 0 0 0 1px var(--rule)}
+.bl-label{color:var(--desk-ink);font:500 12.5px/1.2 var(--print)}
+.bl-value{color:var(--desk-strong);font:600 30px/1.1 var(--print);font-variant-numeric:proportional-nums;letter-spacing:-.5px}
+.bl-tile.hero .bl-value{font-size:48px}
+.bl-note{color:var(--desk-ink);font:400 12px/1.3 var(--print)}
+/* a column a month */
+.bl-plot{position:relative;height:180px;margin:6px 0 34px 44px}
+.bl-axis{position:absolute;inset:0;pointer-events:none}
+.bl-grid{position:absolute;left:0;right:0;height:0;border-top:1px solid var(--rule)}
+.bl-grid span{position:absolute;right:calc(100% + 8px);top:-8px;color:var(--desk-ink);font:400 11px/16px var(--print);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bl-cols{position:absolute;inset:0;display:flex}
+.bl-col{appearance:none;border:0;background:transparent;padding:0;flex:1;min-width:0;height:100%;position:relative;cursor:pointer;display:flex;justify-content:center;align-items:flex-end;border-radius:4px}
+.bl-col:hover,.bl-col:focus-visible{background:rgba(120,110,90,.07)}
+.bl-bar{display:block;width:min(24px,60%);border-radius:4px 4px 0 0;background:var(--bar);transition:filter .12s ease}
+.bl-bar.none{height:0!important}
+.bl-col:hover .bl-bar,.bl-col:focus-visible .bl-bar{filter:brightness(1.12)}
+.bl-col[aria-pressed="true"] .bl-bar{box-shadow:0 0 0 2px var(--desk),0 0 0 3.5px var(--bar)}
+.bl-mo{position:absolute;top:calc(100% + 6px);left:0;right:0;text-align:center;color:var(--desk-ink);font:400 11px/1.2 var(--print);white-space:nowrap}
+.bl-col[aria-pressed="true"] .bl-mo{color:var(--desk-strong);font-weight:600}
+.bl-tip{position:absolute;z-index:3;display:grid;gap:1px;padding:6px 10px;border-radius:6px;pointer-events:none;white-space:nowrap;
+  background:var(--desk-strong);color:var(--desk);box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.bl-tip b{font:600 14px/1.2 var(--print)}
+.bl-tip span{font:400 11px/1.3 var(--print);opacity:.8}
+.bl-table{margin:0 0 6px;color:var(--desk-ink);font:400 12.5px/1.5 var(--print)}
+.bl-table summary{cursor:pointer;width:max-content}
+.bl-table table{border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums}
+.bl-table th,.bl-table td{padding:3px 18px 3px 0;text-align:left;color:var(--desk-strong)}
+.bl-table th{color:var(--desk-ink);font-weight:500}
+/* what a month went on: a bar a thing, the amount at its end */
+.bl-sub{margin:18px 0 8px;color:var(--desk-ink);font:500 13px/1.2 var(--print)}
+.bl-cats{list-style:none;margin:0 0 6px;padding:0;display:grid;gap:8px;max-width:640px}
+.bl-cats li{display:grid;grid-template-columns:minmax(4em,9em) 1fr;gap:12px;align-items:center}
+.bl-name{color:var(--desk-strong);font:400 17px/1.2 var(--hand);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bl-track{display:flex;align-items:center;gap:8px;min-width:0}
+.bl-track i{display:block;flex:none;height:12px;width:calc((100% - 120px) * var(--k));min-width:2px;border-radius:0 4px 4px 0;background:var(--bar)}
+.bl-amt{color:var(--desk-strong);font:500 13px/1 var(--print);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:640px){
+  .bl-tiles{grid-template-columns:1fr 1fr}.bl-tile.hero{grid-column:1/-1}
+  .bl-tile.hero .bl-value{font-size:42px}.bl-value{font-size:24px}
+  .bl-mo{font-size:9.5px}
+  .bl-cats li{grid-template-columns:5.5em 1fr;gap:8px}
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .bl-tile{background:rgba(255,255,255,.04)}}
+:root[data-theme="dark"] .bl-tile{background:rgba(255,255,255,.04)}

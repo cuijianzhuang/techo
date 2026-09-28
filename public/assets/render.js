@@ -1350,11 +1350,11 @@
       const f=el('footer','foot');
       // the same days as cards, with their words, doodles and photos: the timeline page (/timeline/)
       const all=el('a','tlp-all','整页看 →');all.href='/timeline/';
-      const left=el('span');left.append('点一行，翻到那一天 · ',all);
+      const left=el('span');left.append('点一行翻过去 · ',all);
       // where they were written: the map page (/map/), when there's a Mapbox token
       if(site.mapboxToken){const mp=el('a','tlp-all','地图 →');mp.href='/map/';left.append(' · ',mp);}
-      // what was stuck in it, kept together: the shelf (/shelf/) and the ticket folder (/tickets/)
-      {const sh=el('a','tlp-all','书架');sh.href='/shelf/';const tk=el('a','tlp-all','票夹');tk.href='/tickets/';left.append(' · ',sh,' · ',tk);}
+      // what was stuck in it, kept together: the shelf, the ticket folder and the bills (/shelf/, /tickets/, /bills/)
+      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
       f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;

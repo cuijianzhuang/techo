@@ -1,6 +1,6 @@
-/* The ticket folder (/tickets/): every 机票, 车票, 电影票 and 账单 written in the diary, in clear pockets, a month
-   to a leaf, newest first, each with a line of what the month held (flights, trains, films, what the bills came
-   to). #flight / #train / #cinema / #receipt shows one kind. A ticket opens as it is in the diary. */
+/* The ticket folder (/tickets/): every 机票, 车票 and 电影票 written in the diary, in clear pockets, a month to a
+   leaf, newest first, each with a line of what the month held (flights, trains, films). #flight / #train /
+   #cinema shows one kind. A ticket opens as it is in the diary. (账单 have a book of their own: /bills/.) */
 (async function(){
   "use strict";
   const T=window.Techo,K=window.Keep,{el,parseDate}=T;
@@ -9,21 +9,17 @@
   try{({entries}=await K.load('票夹'));}
   catch(err){console.warn('techo tickets:',err);K.say(box,'暂时翻不开票夹，过一会儿再来。<br><a href="/">回到手帐</a>');return;}
 
-  const KINDS=[['all','全部'],['flight','机票'],['train','车票'],['cinema','电影票'],['receipt','账单']];
+  const KINDS=[['all','全部'],['flight','机票'],['train','车票'],['cinema','电影票']];
   const tickets=[];
-  entries.forEach(en=>T.cardsOf(en.body).forEach(c=>{if(['flight','train','cinema','receipt'].includes(c.kind))tickets.push({kind:c.kind,lines:c.lines,en});}));
-  // 账单: its total (= 合计: ¥128.00), as a number
-  const total=lines=>{for(const l of lines){const m=/^\s*=\s*(.+)$/.exec(l);if(m){const kv=T.kvOf(m[1]),v=(kv?kv[1]:m[1]).replace(/[,，\s]/g,''),n=/-?\d+(?:\.\d+)?/.exec(v);if(n)return +n[0];}}return 0;};
-  const money=v=>'¥'+(Math.round(v*100)/100).toLocaleString('zh-CN',{minimumFractionDigits:v%1?2:0,maximumFractionDigits:2});
+  entries.forEach(en=>T.cardsOf(en.body).forEach(c=>{if(['flight','train','cinema'].includes(c.kind))tickets.push({kind:c.kind,lines:c.lines,en});}));
   const count=(list,k)=>list.filter(t=>t.kind===k).length;
   // what a set of tickets comes to, in words
   function sum(list){
-    const out=[],f=count(list,'flight'),tr=count(list,'train'),c=count(list,'cinema'),rs=list.filter(t=>t.kind==='receipt');
+    const out=[],f=count(list,'flight'),tr=count(list,'train'),c=count(list,'cinema');
     if(f)out.push('飞了 '+f+' 趟');if(tr)out.push('火车 '+tr+' 趟');if(c)out.push('看了 '+c+' 场电影');
-    if(rs.length){const s=rs.reduce((a,t)=>a+total(t.lines),0);out.push(rs.length+' 张账单'+(s?'，共 '+money(s):''));}
     return out.join(' · ');
   }
-  if(!tickets.length){K.say(box,'票夹还空着。<br>在日记里写 <code>```机票</code>、<code>```车票</code>、<code>```电影票</code> 或 <code>```账单</code>，就会夹到这里。');return;}
+  if(!tickets.length){K.say(box,'票夹还空着。<br>在日记里写 <code>```机票</code>、<code>```车票</code> 或 <code>```电影票</code>，就会夹到这里。');return;}
   stat.textContent=tickets.length+' 张　·　'+sum(tickets);
 
   let at=(KINDS.find(k=>'#'+k[0]===location.hash)||KINDS[0])[0];
@@ -49,7 +45,7 @@
         const b=el('button','kp-pocket');b.type='button';
         const jp=el('div','jp'),tx=el('div','jtext');tx.appendChild(T.cardNode(t.kind,t.lines));jp.appendChild(tx);
         b.append(jp,el('span','tk-date',K.dayOf(t.en)+' · '+(t.en.title||'（无题）')));
-        b.setAttribute('aria-label',{flight:'机票',train:'车票',cinema:'电影票',receipt:'账单'}[t.kind]+'，'+K.dayOf(t.en));
+        b.setAttribute('aria-label',{flight:'机票',train:'车票',cinema:'电影票'}[t.kind]+'，'+K.dayOf(t.en));
         b.onclick=()=>K.show(t.kind,t.lines,[t.en]);
         pockets.appendChild(b);
       });
