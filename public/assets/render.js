@@ -653,8 +653,9 @@
      they fit), otherwise they run on at RUN_FS a block at a time (a paragraph, a list, a quote, a comic strip,
      a code block …): a paragraph that doesn't fit what's left of a page is split after a sentence, a list or
      a comic strip after an item, and a heading never ends a page. A +++ line starts a new page. A block too
-     big even for a page of its own is cut off at its foot, as a page always was. */
-  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17;
+     big even for a page of its own is cut off at its foot, as a page always was. A card that doesn't fit what's
+     left goes to the top of the next page, and the words after it fill the room first. */
+  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17,FILL_MIN=90;
   const over=t=>t.scrollHeight>t.clientHeight+1;
   const SENTENCE=/[^。！？!?；;…]*[。！？!?；;…]+[”’」』）)\]]*\s*|[^。！？!?；;…]+/g;
   function entryPages(en,side){
@@ -673,17 +674,25 @@
     const words=()=>[...s.tx.children].filter(c=>!c.classList.contains('jph'));
     // a heading never ends a page: it goes over with what follows it
     const keepHeading=()=>{const w=words(),l=w[w.length-1];if(w.length>1&&l.classList.contains('jh')){s.tx.removeChild(l);queue.unshift(l);}};
+    // a card (or a pile) that doesn't fit what's left of a page waits for the next one, and what comes after it
+    // fills the room it leaves, as far as it goes (not past a +++); the next page starts with the card. Only
+    // when that room is worth it (FILL_MIN): a sliver isn't
+    let later=[];
+    const room=()=>{const w=words(),l=w[w.length-1];return l?s.tx.getBoundingClientRect().bottom-l.getBoundingClientRect().bottom:s.tx.clientHeight;};
+    const turn=(...first)=>{keepHeading();queue.unshift(...later,...first);later=[];next();};
     const run=()=>{
-      while(queue.length){
+      while(queue.length||later.length){
+        if(!queue.length){turn();continue;}
         const b=queue.shift();
-        if(b.classList.contains('jbrk')){if(words().length)next();continue;}
+        if(b.classList.contains('jbrk')){if(later.length)turn(b);else if(words().length)next();continue;}
         s.tx.appendChild(b);
         if(!over(s.tx))continue;
         s.tx.removeChild(b);
         const [rest,some]=splitBlock(b,s.tx);
         if(!rest)continue;
         if(!some&&!words().length){s.tx.appendChild(rest);continue;}   // too big for any page: cut off
-        queue.unshift(rest);keepHeading();next();
+        if(!some&&rest.matches('.jticket,.jstack')&&room()>=FILL_MIN){later.push(rest);continue;}
+        queue.unshift(rest);turn();
       }
     };
     next();
