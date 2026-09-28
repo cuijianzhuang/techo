@@ -207,7 +207,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **联系方式**：邮箱、GitHub。
 
 **接入服务**
-- **网易云音乐**：Meting API 的地址（留空用默认的 `https://api.injahow.cn/meting/`）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`。下面有几个公共接口可以一点就换，「试一下」用填着的地址取一首歌（在浏览器里取，和读者看到的一样），能取到会显示歌名、封面和一个能播的小播放器。
+- **网易云音乐**：Meting API 的地址（留空用默认的 `https://api.injahow.cn/meting/`）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`；只填了域名（`https://music.example/`）而那里是介绍页时，自动改问 `https://music.example/api`。下面有几个公共接口可以一点就换，「试一下」用填着的地址取一首歌（在浏览器里取，和读者看到的一样），能取到会显示歌名、封面和一个能播的小播放器。
   - **Meting token**：接口提示「需要 API Token，请使用 Authorization: Bearer <token>」时，把 token 填在这里（输入框默认遮住，可以点「显示」）。手帐里所有的 Meting 请求都经过 Worker（`/api/meting`），由 Worker 带上 `Authorization: Bearer` 去问；歌曲、封面地址如果又指回这个接口，Worker 会替浏览器跟到真正的地址（网易云的服务器），歌词直接取回文字；只有带着 token 才给的音频、图片，由 Worker 转过来（`/api/meting/file`）。接口的回答认几种常见格式（数组、`data`/`result` 里的对象），缺播放地址、封面、歌词时再按 `type=url` / `pic` / `lrc` 去问，还缺的问网易云自己（歌名、歌手、封面，以及免费歌的播放地址）。「试一下」取到歌但放不了时显示 △ 和原因（说明接口是通的，是这首歌的问题）；实在认不出接口的回答，会把回答的开头显示出来。token 和 AI 的设置一样只在后台，不会出现在 `/api/settings` 和网页里。不想存在设置里，也可以设成 Worker 密钥：`npx wrangler secret put METING_TOKEN`（设置里空着时用它）。
 - **地图**：Mapbox 的 access token，要用公开的 `pk.` 开头的那种。在 [account.mapbox.com](https://account.mapbox.com/access-tokens/) 新建一个，URL restrictions 填你的域名，别人拿去也用不了。token 会出现在网页里，这是 Mapbox 公开 token 的正常用法。配上后才有足迹地图页、页上的小地图、后台的选点地图和 Mapbox 地名；「有坐标的日记页上贴一张小地图」可以单独关掉。
 - **AI**：写草稿和补全用的接口格式、地址和模型（见[接哪个 AI](#接哪个-ai)）。

@@ -1002,6 +1002,20 @@ const metingHeaders = (token: string) => {
   if (token) h.authorization = "Bearer " + token;
   return h;
 };
+/* the API asked; an address of the site rather than of its API (https://music.example/ for
+   https://music.example/api, as some Meting servers have it) answers with its page, not a song: then …/api */
+async function metingGet(api: string, type: string, id: string, headers: Record<string, string>) {
+  let r = await fetch(metingUrl(api, type, id), { headers });
+  const base = (api || METING_DEFAULT).trim();
+  let root = false;
+  try { root = !/:id/.test(base) && new URL(base).pathname === "/"; } catch { /* not a URL: said by fetch */ }
+  if (root && (r.status === 404 || (r.ok && /html/.test(r.headers.get("content-type") || "")))) {
+    r.body?.cancel();
+    api = new URL(base).origin + "/api";
+    r = await fetch(metingUrl(api, type, id), { headers });
+  }
+  return { r, api };
+}
 // the song in an answer, however it's wrapped
 const SONG_KEYS = ["url", "title", "name", "pic", "cover", "lrc", "author", "artist"];
 function songIn(j: unknown, depth = 0): Record<string, unknown> | null {
@@ -1021,9 +1035,9 @@ const str = (x: Record<string, unknown> | null, ...ks: string[]) => {
   }
   return "";
 };
-async function metingSong(token: string, api: string, id: string): Promise<Song | null> {
-  const u = metingUrl(api, "song", id), headers = metingHeaders(token);
-  const r = await fetch(u, { headers });
+async function metingSong(token: string, asked: string, id: string): Promise<Song | null> {
+  const headers = metingHeaders(token);
+  const { r, api } = await metingGet(asked, "song", id, headers), u = metingUrl(api, "song", id);
   if (!r.ok) {
     // what it says, if it says: {"success":false,"error":"需要 API Token…"}
     const said = await r.json().then((j) => { const o = (j || {}) as { error?: unknown; message?: unknown }; return String(o.error || o.message || ""); }).catch(() => "");
@@ -1044,7 +1058,8 @@ async function metingSong(token: string, api: string, id: string): Promise<Song 
     const f = await fetch(v, { headers, redirect: "manual" }).catch(() => null);
     if (!f) return "";
     const to = f.headers.get("location");
-    if (to) return new URL(to, v).toString();
+    // NetEase's servers answer https too: a page on https won't play or show them over http
+    if (to) return new URL(to, v).toString().replace(/^http:\/\/(?=[^/]*\.(?:126|163)\.net\/)/, "https://");
     if (!f.ok) return "";
     const type = f.headers.get("content-type") || "";
     if (/json/.test(type)) {
@@ -1120,7 +1135,7 @@ app.get("/api/meting/file", async (c) => {
   delete headers.accept;
   const range = c.req.header("range");
   if (range) headers.range = range;
-  const f = await fetch(metingUrl(s.metingApi || "", t, id), { headers }).catch(() => null);
+  const f = await metingGet(s.metingApi || "", t, id, headers).then((x) => x.r).catch(() => null);
   const type = f?.headers.get("content-type") || "";
   if (!f || !f.ok || !/^(audio|image|video)\/|octet-stream/.test(type)) { f?.body?.cancel(); return bad(c, 404, "这首歌放不了"); }
   const out = new Headers({ "content-type": type, "cache-control": "public, max-age=600" });
