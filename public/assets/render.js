@@ -265,17 +265,26 @@
   const METING_DEFAULT='https://api.injahow.cn/meting/';
   const neteaseId=v=>{const s=String(v||'').trim();if(!s)return '';if(/^\d{3,12}$/.test(s))return s;const m=/music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(s)||/[?&]id=(\d+)/.exec(/163\.com/.test(s)?s:'');return m?m[1]:'';};
   const metingCache=new Map();
-  // api: another Meting API than the journal's (its 试一下 in 手帐设置)
-  function meting(id,api){
-    const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id;
+  // api (and token): another Meting API than the journal's, as typed in 手帐设置 for its 试一下. Asked through the
+  // Worker (/api/meting, which carries the API's token when it wants one); straight from here only if that can't
+  // answer
+  function meting(id,api,token){
+    const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id+(token?'|'+token:'');
     if(!metingCache.has(ck)){
-      const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
-        :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
-      metingCache.set(ck,fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
-        const x=Array.isArray(j)?j[0]:j&&(j.data&&j.data[0]||j);
-        if(!x||!x.url)throw new Error('meting: no song '+id);
-        return{title:x.title||x.name||'',artist:x.author||x.artist||'',url:x.url,pic:x.pic||x.cover||'',lrc:x.lrc||''};
-      }));
+      const viaWorker=()=>fetch(api?'/api/admin/meting?id='+encodeURIComponent(id)+'&api='+encodeURIComponent(api):'/api/meting?id='+encodeURIComponent(id),{headers:Object.assign({accept:'application/json'},api&&token?{'x-meting-token':token}:{}),credentials:'same-origin'})
+        .then(r=>r.json().catch(()=>({})).then(j=>{if(!r.ok||!j.url){const e=new Error(j.error||'meting '+r.status);e.said=r.status!==404&&!!j.error;throw e;}return j;}));
+      const direct=()=>{
+        const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
+          :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
+        return fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
+          const x=Array.isArray(j)?j[0]:j&&(j.data&&j.data[0]||j);
+          if(!x||!x.url)throw new Error('meting: no song '+id);
+          return{title:x.title||x.name||'',artist:x.author||x.artist||'',url:x.url,pic:x.pic||x.cover||'',lrc:x.lrc||''};
+        });
+      };
+      // the Worker said what's wrong (a token wanted, a song that can't play): that's the answer; it couldn't be
+      // reached (a page opened without it): straight from here
+      metingCache.set(ck,viaWorker().catch(e=>e.said||e.message.startsWith('这首歌')?Promise.reject(e):direct()));
       metingCache.get(ck).catch(()=>metingCache.delete(ck));
     }
     return metingCache.get(ck);

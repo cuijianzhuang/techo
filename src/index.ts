@@ -21,6 +21,8 @@ type Env = {
       when it isn't set. Without either the AI features are off. */
   AI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  /** secret: the token for a Meting API that asks for one, when 手帐设置 has none (`wrangler secret put METING_TOKEN`) */
+  METING_TOKEN?: string;
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
   /** rate limit for password guesses (wrangler.jsonc "ratelimits"); missing: no limit */
@@ -165,7 +167,11 @@ const SETTING_DEFAULTS: Record<string, string> = {
   // (/map/), the little maps on the pages, the admin's map and its place names. Empty: no maps.
   mapboxToken: "", mapOnPage: "show",
   // 网易云 on the pages: a Meting API (any public one, or one's own; "" = the default in render.js)
-  metingApi: "",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
+  metingApi: "",
+  // …and its token, for an API that wants one (sent by the Worker as Authorization: Bearer). Admin only
+  // (PRIVATE_SETTINGS): never in /api/settings or the page. METING_TOKEN, a Worker secret, is used without it.
+  metingToken: "",
+  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
   // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
@@ -175,7 +181,7 @@ const SETTING_DEFAULTS: Record<string, string> = {
 const PAPER_STYLES = ["grid", "lined", "dots", "plain"], PAPER_TONES = ["cream", "white", "aged", "mint"];
 const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine"];
 /** settings only the admin sees: kept out of /api/settings and the page */
-const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel"]);
+const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel", "metingToken"]);
 const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
 /** the AI as configured (the admin's settings, the Worker's key) */
 const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";
@@ -188,7 +194,7 @@ async function aiConfig(env: Env): Promise<AiConfig> {
 const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
   readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
-  aiBaseUrl: 200, aiModel: 80, mapboxToken: 300, metingApi: 200,
+  aiBaseUrl: 200, aiModel: 80, mapboxToken: 300, metingApi: 200, metingToken: 300,
 };
 const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
 const MAX_COVER_PHOTOS = 4;
@@ -229,6 +235,7 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   if (v.paperTone !== undefined && !PAPER_TONES.includes(v.paperTone)) return { ok: false, error: "paperTone 只能是 " + PAPER_TONES.join(" / ") };
   if (v.mapboxToken && !/^pk\.[\w.-]+$/.test(v.mapboxToken)) return { ok: false, error: "Mapbox token 要用公开的那种（pk. 开头）" };
   if (v.metingApi && !/^https:\/\/[^\s]+$/i.test(v.metingApi)) return { ok: false, error: "Meting API 要以 https:// 开头" };
+  if (v.metingToken && /\s/.test(v.metingToken)) return { ok: false, error: "Meting token 里不能有空格或换行" };
   if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
@@ -668,7 +675,7 @@ app.delete("/api/admin/entries/:id", async (c) => {
 });
 
 /* the admin's view of the settings: all of them, and whether the AI has its key */
-const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!aiKey(env) } });
+const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!aiKey(env) }, meting: { secretSet: !!env.METING_TOKEN } });
 app.get("/api/admin/settings", async (c) => c.json(await adminSettings(c.env)));
 
 /* 测试连接: one short question with the AI as configured (or as about to be saved: format / base / model in the body) */
@@ -972,6 +979,76 @@ app.post("/api/admin/netease", async (c) => {
     url = new URL(next, url).toString();
   }
   return bad(c, 404, "没认出是哪首歌：贴网易云的歌曲链接、分享的那段文字，或者歌曲 ID");
+});
+
+/* 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐), asked by the Worker: a Meting API that wants a token
+   gets it (the admin-only setting metingToken, or the secret METING_TOKEN: it never reaches a page), and nobody's
+   browser minds where the API lives. What
+   the API answers is taken down to one song's title, artist, cover, sound and words; a cover or a sound that is
+   the API's own address again (…?type=url&id=…, which would want the token too) is followed here to where it
+   leads (NetEase's servers), and words there are fetched and handed over as they are. */
+const METING_DEFAULT = "https://api.injahow.cn/meting/";
+type Song = { title: string; artist: string; url: string; pic: string; lrc: string };
+async function metingSong(token: string, api: string, id: string): Promise<Song | null> {
+  const base = (api || METING_DEFAULT).trim();
+  const u = /:id/.test(base)
+    ? base.replace(":server", "netease").replace(":type", "song").replace(":id", encodeURIComponent(id)).replace(":r", String(Math.random()).slice(2))
+    : base + (base.includes("?") ? "&" : "?") + "server=netease&type=song&id=" + encodeURIComponent(id);
+  const headers: Record<string, string> = { accept: "application/json", "user-agent": UA["User-Agent"] };
+  if (token) headers.authorization = "Bearer " + token;
+  const r = await fetch(u, { headers });
+  if (!r.ok) {
+    // what it says, if it says: {"success":false,"error":"需要 API Token…"}
+    const said = await r.json().then((j) => { const o = (j || {}) as { error?: unknown; message?: unknown }; return String(o.error || o.message || ""); }).catch(() => "");
+    const asks = r.status === 401 || /token/i.test(said);
+    throw new Error(asks ? (token ? "Meting 接口不认这个 token" : "Meting 接口要 token：在「手帐设置 → 接入服务 → 网易云音乐」填上")
+      : "Meting 接口拒绝了请求（" + r.status + (said ? "：" + said.slice(0, 80) : "") + "）" + (r.status === 403 ? "，可能不让 Cloudflare 访问，换一个接口试试" : ""));
+  }
+  const j = (await r.json().catch(() => null)) as unknown;
+  const x = (Array.isArray(j) ? j[0] : (j as { data?: unknown[] })?.data?.[0] ?? j) as Record<string, unknown> | undefined;
+  if (!x || typeof x !== "object") return null;
+  const s = (k: string) => (typeof x[k] === "string" ? (x[k] as string) : "");
+  const own = (v: string) => { try { return new URL(v).origin === new URL(u).origin; } catch { return false; } };
+  // the API's own address: where it leads (a sound, a picture), without the token going any further
+  const follow = async (v: string) => {
+    if (!v || !own(v)) return v;
+    const f = await fetch(v, { headers, redirect: "manual" }).catch(() => null);
+    const to = f && f.headers.get("location");
+    return to ? new URL(to, v).toString() : v;
+  };
+  const lrcOf = async (v: string) => {
+    if (!v || !/^https?:/.test(v)) return v;
+    if (!own(v)) return v;
+    const f = await fetch(v, { headers }).catch(() => null);
+    return f && f.ok ? (await f.text()).slice(0, 20000) : "";
+  };
+  const [url, pic, lrc] = await Promise.all([follow(s("url")), follow(s("pic") || s("cover")), lrcOf(s("lrc"))]);
+  if (!url) return null;
+  return { title: s("title") || s("name"), artist: s("author") || s("artist"), url, pic, lrc };
+}
+const songReply = async (c: C, api: string, token: string) => {
+  const id = (c.req.query("id") || "").trim();
+  if (!/^\d{3,12}$/.test(id)) return bad(c, 400, "要网易云的歌曲 ID");
+  try {
+    const song = await metingSong(token, api, id);
+    if (!song) return bad(c, 404, "这首歌放不了（VIP、下架，或者接口没找到）");
+    // the sound's address from NetEase is good for a while, not for ever
+    c.header("Cache-Control", "public, max-age=600");
+    return c.json(song);
+  } catch (e) {
+    return bad(c, 500, e instanceof Error ? e.message : "Meting 接口连不上");
+  }
+};
+const metingToken = (env: Env, s: Record<string, string>) => s.metingToken || env.METING_TOKEN || "";
+app.get("/api/meting", async (c) => { const s = await loadSettings(c.env); return songReply(c, s.metingApi || "", metingToken(c.env, s)); });
+/* 试一下 in 手帐设置: an address not saved yet (only for the one signed in: otherwise anyone could send the
+   Worker anywhere) */
+app.get("/api/admin/meting", async (c) => {
+  const api = (c.req.query("api") || "").trim();
+  if (api && !/^https:\/\/[^\s]+$/i.test(api)) return bad(c, 400, "Meting API 要以 https:// 开头");
+  // (with the token as typed, not saved yet, too)
+  const s = await loadSettings(c.env), tok = (c.req.header("x-meting-token") || "").trim();
+  return songReply(c, api || s.metingApi || "", tok || metingToken(c.env, s));
 });
 
 app.all("/api/*", (c) => bad(c, 404, "没有这个接口"));
