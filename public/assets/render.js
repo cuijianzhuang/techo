@@ -169,7 +169,7 @@
   }
   /* the words without their marks, for a line of them somewhere else (the timeline page) */
   function plainText(md){
-    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
       .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
   }
   function panel(time,rest){
@@ -230,7 +230,7 @@
   }
   // "PEK 北京首都" → code PEK, name 北京首都; "北京南 Beijingnan" → 北京南, Beijingnan
   const place=v=>{const s=String(v||'').trim(),m=/^([A-Z]{3})\s+(.+)$/.exec(s);if(m)return{code:m[1],name:m[2]};const n=/^(\S+)\s+(.+)$/.exec(s);return n?{code:n[1],name:n[2]}:{code:s,name:''};};
-  // 封面 / 海报: a picture of the journal's own (p/<uuid>.jpg, from 从豆瓣填 or an upload) or a web address
+  // 封面 / 海报: a picture of the journal's own (p/<uuid>.jpg, from 🔍 NeoDB or an upload) or a web address
   const imgSrc=v=>{const s=String(v||'').trim();return /^p\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/.test(s)?'/img/'+s:/^https:\/\/\S+$/.test(s)?s:'';};
   const picture=(src,alt)=>{const i=el('img');i.src=src;i.alt=alt||'';i.loading='lazy';i.decoding='async';i.referrerPolicy='no-referrer';return i;};
   // a series rather than a film (剧情 is a genre, not a series)
@@ -259,25 +259,26 @@
     const t=el('i','jtape '+(h%2?'tl':'tr'));t.style.setProperty('--tape',TAPES[h%TAPES.length]);card.appendChild(t);
     if(h%3===0){const b=el('i','jtape '+(h%2?'br':'bl'));b.style.setProperty('--tape',TAPES[(h>>3)%TAPES.length]);card.appendChild(b);}
   }
-  /* ---------- 网易云 through Meting (手帐设置 → 音乐): a song's name, singer, cover, words and sound ----------
+  /* ---------- 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐): a song's name, singer, cover, words and sound ----------
      "网易云: 186016" or a music.163.com link. The Meting API is any of the public ones (or one's own); its
      answers differ a little (title / name, author / artist), both are taken. */
   const METING_DEFAULT='https://api.injahow.cn/meting/';
   const neteaseId=v=>{const s=String(v||'').trim();if(!s)return '';if(/^\d{3,12}$/.test(s))return s;const m=/music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(s)||/[?&]id=(\d+)/.exec(/163\.com/.test(s)?s:'');return m?m[1]:'';};
   const metingCache=new Map();
-  function meting(id){
-    if(!metingCache.has(id)){
-      const base=(site.metingApi||METING_DEFAULT).trim();
+  // api: another Meting API than the journal's (its 试一下 in 手帐设置)
+  function meting(id,api){
+    const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id;
+    if(!metingCache.has(ck)){
       const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
         :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
-      metingCache.set(id,fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
+      metingCache.set(ck,fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
         const x=Array.isArray(j)?j[0]:j&&(j.data&&j.data[0]||j);
         if(!x||!x.url)throw new Error('meting: no song '+id);
         return{title:x.title||x.name||'',artist:x.author||x.artist||'',url:x.url,pic:x.pic||x.cover||'',lrc:x.lrc||''};
       }));
-      metingCache.get(id).catch(()=>metingCache.delete(id));
+      metingCache.get(ck).catch(()=>metingCache.delete(ck));
     }
-    return metingCache.get(id);
+    return metingCache.get(ck);
   }
   // "[01:23.45]words" lines → [[seconds, words], …]
   function lrcLines(text){
@@ -483,31 +484,36 @@
       return card;
     },
   };
+  /* a line that is only a NetEase song link (music.163.com/song?id=…, the app's y.music.163.com/m/song?id=…,
+     #/song?id=…): its player, as if written as ```音乐 with 网易云: <link> */
+  const NETEASE_LINE=/^[ \t]*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*[ \t]*$/gm;
+  const neteaseLine=l=>/^\s*https?:\/\/(?:y\.)?music\.163\.com\/\S*song\S*\s*$/.test(l)&&neteaseId(l.trim());
   function bodyBlocks(body,into){
     const lines=String(body||'').replace(/\r\n?/g,'\n').split('\n');
     let run=null;                              // the block lines are going into: {kind, node}
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
+    // a card taped on; one right after another: a pile, each on the one before (a stack of tickets that won't
+    // all lie flat) (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
+    const stick=(c,text)=>{
+      fasten(c,text);
+      const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
+      if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
+      else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
+      else open('ticket',c);
+      [...(c.parentNode.classList.contains('jstack')?c.parentNode.children:[])].forEach((t,i)=>t.style.setProperty('--i',i));
+    };
     for(let i=0;i<lines.length;i++){
       const line=lines[i];
       if(!line.trim()){run=null;continue;}     // an empty line ends whatever block this was
       let kind='p',m=null;
       for(const [k,re] of BLOCKS){m=re.exec(line);if(m){kind=k;break;}}
+      if(kind==='p'&&neteaseLine(line)){stick(TICKETS.music(['网易云: '+line.trim()]),line);run=null;continue;}
       if(kind==='fence'){
         const code=[],info=((/^\s*```\s*(\S*)/.exec(line)||[])[1]||'').toLowerCase();
         while(++i<lines.length&&!/^\s*```/.test(lines[i]))code.push(lines[i]);
         // ```receipt / ```flight / ```train (or 账单 / 机票 / 车票): a bill, a boarding pass, a train ticket
         const card=TICKETS[TICKET_NAMES[info]];
-        if(card){
-          const c=card(code);fasten(c,code.join('|'));
-          // one right after another: a pile, each on the one before (a stack of tickets that won't all lie flat)
-          // (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
-          const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
-          if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
-          else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
-          else open('ticket',c);
-          [...(c.parentNode.classList.contains('jstack')?c.parentNode.children:[])].forEach((t,i)=>t.style.setProperty('--i',i));
-          run=null;continue;
-        }
+        if(card){stick(card(code),code.join('|'));run=null;continue;}
         const pre=open('code',el('pre','jcode'));pre.appendChild(el('code',null,code.join('\n')));run=null;continue;
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
@@ -1423,5 +1429,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT};
 })();

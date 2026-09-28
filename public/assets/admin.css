@@ -270,3 +270,50 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .main>.form:not(:has(.actbar)){padding-bottom:40px}
 .admin .danger:empty{display:none}
 .admin .danger{padding-top:2px}
+
+/* ================= the menu: 写 at the top, the pages in the middle (they scroll), 设置 at the foot ================= */
+.admin{--toph:61px}
+.admin .top{position:sticky;top:0;z-index:20;height:var(--toph);box-sizing:border-box;align-items:center;flex-wrap:nowrap;padding-block:0;background:var(--desk)}
+.admin .top h1{white-space:nowrap}
+.admin .wrap{min-height:calc(100vh - var(--toph))}
+.admin .side{position:sticky;top:var(--toph);align-self:start;height:calc(100vh - var(--toph));box-sizing:border-box;overflow:hidden;gap:1px}
+.admin .side .list{flex:1;min-height:60px;max-height:none}
+.admin .snav,.admin .setnav{display:grid;gap:1px;align-content:start;flex:none}
+.admin .side>*{flex-shrink:0}
+.admin .side>.list{flex-shrink:1}
+.admin .setnav{padding-bottom:4px}
+.admin .item.mi{grid-template-columns:20px minmax(0,1fr);column-gap:10px;align-items:center;padding:7px 10px}
+.admin .item.mi .ico{grid-row:1 / span 2;color:var(--ink-soft)}
+.admin .item.mi b{font:500 14px/1.25 var(--print);padding-right:0}
+.admin .item.mi span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin .item.mi[aria-current="true"] .ico{color:var(--olive)}
+.admin .item.mi.new b{color:var(--red-deep)}
+.admin .item.mi.new .ico{color:var(--red)}
+.admin .side .sect{padding:12px 10px 5px}
+.admin .setnav .item.mi{padding:6px 10px}
+.admin .setnav .item.mi span{font-size:10.5px}
+.admin .secnav{top:var(--toph)}
+.admin .card[id]{scroll-margin-top:calc(var(--toph) + 56px)}
+.admin .pv{top:calc(var(--toph) + 16px)}
+/* the editor's toolbar in groups */
+.admin .mdsep{flex:none;width:1px;align-self:stretch;margin:4px 3px;background:#d9d1ba}
+.admin .chip.pre{text-decoration:none;color:var(--ink-soft)}
+.admin .chip.pre[aria-pressed="true"]{color:var(--ink)}
+.admin .mdlook .check1{font-size:12.5px;margin:2px 0 6px}
+/* 网易云音乐: trying the Meting API */
+.admin .drow input{min-width:0}
+.admin .mtest{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:400 13px/1.4 var(--print);color:var(--ink-soft)}
+.admin .mtest:empty{display:none}
+.admin .mtest.ok{color:var(--ink)}
+.admin .mtest.err{color:var(--red-deep)}
+.admin .mtest img{width:44px;height:44px;object-fit:cover;border-radius:4px;flex:none}
+.admin .mtest span{display:grid;gap:1px;min-width:0}
+.admin .mtest small{color:var(--ink-soft);font-size:11.5px}
+.admin .mtest audio{height:32px;max-width:100%;flex:1 1 220px}
+@media (max-width:700px){
+  .admin{--toph:49px}
+  .admin .top{position:static;height:auto;min-height:var(--toph)}
+  .admin .side{position:static;height:auto;overflow:visible}
+  .admin .secnav{top:0}
+  .admin .card[id]{scroll-margin-top:56px}
+}

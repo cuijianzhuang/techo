@@ -21,17 +21,21 @@
   <button class="b small logout" id="logout" type="button" hidden>退出</button>
 </header>
 <div class="wrap" id="app">
+  <!-- the menu: 写 (today, a new page, 随手记), the pages written, and 设置 in four parts (admin.js SET_PAGES) -->
   <aside class="side">
-    <button class="item new" id="newBtn" type="button"><b>＋ 新写一页</b><span id="today"></span></button>
-    <button class="item" id="jotsBtn" type="button"><b>随手记</b><span>今晚写成一页草稿</span></button>
+    <nav class="snav" aria-label="写">
+      <button class="item mi" id="homeBtn" type="button" data-ico="home"><b>今天</b><span id="today"></span></button>
+      <button class="item mi new" id="newBtn" type="button" data-ico="new"><b>新写一页</b><span>写今天，或补哪一天</span></button>
+      <button class="item mi" id="jotsBtn" type="button" data-ico="jots"><b>随手记</b><span>今晚写成一页草稿</span></button>
+    </nav>
     <div class="sect" id="countLabel">已写的页</div>
     <div class="lfind">
       <input type="search" id="q" placeholder="搜标题、正文、日期" aria-label="搜索已写的页" autocomplete="off">
       <div class="lfilter" id="lfilter" role="group" aria-label="按状态筛选"></div>
     </div>
     <div class="list" id="list"></div>
-    <div class="sect">设置</div>
-    <button class="item" id="settingsBtn" type="button"><b>手帐设置</b><span>标题 · 封面 · 扉页 · 联系方式</span></button>
+    <div class="sect">手帐设置</div>
+    <nav class="setnav" id="setnav" aria-label="手帐设置"></nav>
   </aside>
   <main class="main" id="main">
     <div class="empty-state hand">正在加载……</div>

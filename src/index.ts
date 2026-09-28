@@ -15,7 +15,7 @@ type Env = {
   ADMIN_GITHUB_LOGIN: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
-  /** 从豆瓣填: another NeoDB instance than neodb.social (NeoDB is federated) */
+  /** 🔍 NeoDB: another NeoDB instance than neodb.social (NeoDB is federated) */
   NEODB_URL?: string;
   /** secret: the key for the AI set in 手帐设置 → AI (`wrangler secret put AI_API_KEY`); ANTHROPIC_API_KEY is read
       when it isn't set. Without either the AI features are off. */
@@ -844,11 +844,10 @@ app.post("/api/admin/photos", async (c) => {
   return c.json({ key, url: `/img/${key}` }, 201);
 });
 
-/* ---------------- 从豆瓣填: a book, a film or an album, looked up ----------------
-   Douban has had no open API since 2018 and turns away requests from servers like this one, so the looking up
-   goes to NeoDB (neodb.social), an open catalogue that takes in Douban's entries: a Douban (or NeoDB, IMDb,
-   Goodreads …) link is fetched from it, anything else searched in it. An ISBN NeoDB doesn't know is tried at
-   Open Library. What comes back is the few fields the page's cards use. */
+/* ---------------- 🔍 NeoDB: a book, a film or an album, looked up ----------------
+   In NeoDB (neodb.social), an open catalogue of books, films and music: a link (NeoDB's own, or a page it
+   knows how to take in: Goodreads, IMDb, Spotify …) is fetched from it, anything else searched in it. An ISBN
+   NeoDB doesn't know is tried at Open Library. What comes back is the few fields the page's cards use. */
 const NEODB = "https://neodb.social";
 const UA = { "User-Agent": "techo-journal (+https://github.com/cuijianzhuang/techo)", Accept: "application/json" };
 type Found = { kind: "book" | "film" | "music"; title: string; year?: string; author?: string; publisher?: string; isbn?: string;
@@ -874,12 +873,12 @@ app.post("/api/admin/lookup", async (c) => {
   const o = (await c.req.json().catch(() => null)) as { q?: unknown; kind?: unknown } | null;
   const q = typeof o?.q === "string" ? o.q.trim().slice(0, 300) : "";
   const kind = o?.kind === "film" || o?.kind === "music" ? o.kind : "book";
-  if (!q) return bad(c, 400, "写一个豆瓣链接，或者书名 / 片名 / 专辑名");
+  if (!q) return bad(c, 400, "写书名 / 片名 / 专辑名，或者 NeoDB 链接");
   const neodb = (c.env.NEODB_URL || NEODB).replace(/\/+$/, "");
   try {
     if (/^https?:\/\//i.test(q)) {
       const r = await fetch(`${neodb}/api/catalog/fetch?url=${encodeURIComponent(q)}`, { headers: UA });
-      if (r.status === 202) return c.json({ items: [], pending: true, message: "NeoDB 正在从豆瓣抓这一条，过十几秒再点一次查找" });
+      if (r.status === 202) return c.json({ items: [], pending: true, message: "NeoDB 正在收录这一条，过十几秒再点一次查找" });
       if (!r.ok) return bad(c, 404, `NeoDB 没认出这个链接（${r.status}）`);
       const it = fromNeodb((await r.json()) as Record<string, unknown>, neodb);
       return c.json({ items: it ? [it] : [] });
@@ -904,7 +903,7 @@ app.post("/api/admin/lookup", async (c) => {
     return bad(c, 500, "查的时候出错了（NeoDB 连不上？），稍后再试");
   }
 });
-/* a cover found by 从豆瓣填, kept as the journal's own picture (p/<uuid>) so the page doesn't lean on another site */
+/* a cover found by 🔍 NeoDB, kept as the journal's own picture (p/<uuid>) so the page doesn't lean on another site */
 app.post("/api/admin/cover", async (c) => {
   const o = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
   const url = typeof o?.url === "string" ? o.url.trim() : "";
@@ -918,6 +917,30 @@ app.post("/api/admin/cover", async (c) => {
   const key = `p/${crypto.randomUUID()}.${ext}`;
   await c.env.PHOTOS.put(key, buf, { httpMetadata: { contentType: type } });
   return c.json({ key }, 201);
+});
+
+/* a NetEase share (the app's "分享…的单曲《…》: https://163cn.tv/xxxx (来自@网易云音乐)", or a music.163.com
+   link) → the song's id. The short links only say where they go by redirecting, which a browser can't read
+   across sites; only NetEase's own hosts are followed. */
+const NETEASE_HOSTS = /^(?:163cn\.tv|163cn\.link|(?:y\.)?music\.163\.com)$/i;
+const songIdOf = (u: string) => /music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(u)?.[1] || (/music\.163\.com/.test(u) ? /[?&]id=(\d+)/.exec(u)?.[1] : undefined);
+app.post("/api/admin/netease", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as { q?: unknown } | null;
+  const q = typeof o?.q === "string" ? o.q.trim().slice(0, 500) : "";
+  if (/^\d{3,12}$/.test(q)) return c.json({ id: q });
+  let url = /https?:\/\/[^\s()（）]+/.exec(q)?.[0] || "";
+  for (let hop = 0; url && hop < 4; hop++) {
+    const id = songIdOf(url);
+    if (id) return c.json({ id });
+    let host = "";
+    try { host = new URL(url).hostname; } catch { break; }
+    if (!NETEASE_HOSTS.test(host)) break;
+    const r = await fetch(url, { redirect: "manual", headers: { "User-Agent": UA["User-Agent"] } }).catch(() => null);
+    const next = r && r.headers.get("location");
+    if (!next) break;
+    url = new URL(next, url).toString();
+  }
+  return bad(c, 404, "没认出是哪首歌：贴网易云的歌曲链接、分享的那段文字，或者歌曲 ID");
 });
 
 app.all("/api/*", (c) => bad(c, 404, "没有这个接口"));

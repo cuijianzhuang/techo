@@ -6,12 +6,44 @@
   const main=$('main'),list=$('list');
   let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
-  let sel=null;            // entry id | 'new' | 'settings' | 'jots' | null
+  let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | null (今天)
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
   let busy=false;
 
-  $('today').textContent='今天是 '+T.todayStr();
+  $('today').textContent=T.todayStr().replace(/-/g,'.');
+
+  /* ---------- the menu ---------- */
+  // line icons for the menu (constant markup)
+  const ICONS={
+    home:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
+    new:'<path d="M4.5 19.5l1-4.2L16.3 4.5a2 2 0 012.9 0l.3.3a2 2 0 010 2.9L8.7 18.5z"/><path d="M14.5 6.3l3.2 3.2"/>',
+    jots:'<rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/>',
+    look:'<path d="M6 3.5h11.5a1 1 0 011 1v15a1 1 0 01-1 1H6a1.5 1.5 0 01-1.5-1.5v-14A1.5 1.5 0 016 3.5z"/><path d="M8 3.5v17M11 8h5"/>',
+    read:'<path d="M3 5.5c3-1.2 6-1 9 1v13c-3-2-6-2.2-9-1z"/><path d="M21 5.5c-3-1.2-6-1-9 1v13c3-2 6-2.2 9-1z"/>',
+    site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/>',
+    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>'};
+  function icon(k){
+    const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    s.setAttribute('viewBox','0 0 24 24');s.setAttribute('width','18');s.setAttribute('height','18');s.setAttribute('aria-hidden','true');
+    s.setAttribute('class','ico');s.setAttribute('fill','none');s.setAttribute('stroke','currentColor');s.setAttribute('stroke-width','1.6');
+    s.setAttribute('stroke-linecap','round');s.setAttribute('stroke-linejoin','round');s.innerHTML=ICONS[k];
+    return s;
+  }
+  document.querySelectorAll('.item[data-ico]').forEach(b=>b.prepend(icon(b.dataset.ico)));
+  /* 手帐设置 in four parts, each a page of its own: what the journal looks like, how it's read, the site, and
+     the services it's plugged into. The parts are the sections (SECTS, in drawForm) */
+  const SET_PAGES=[
+    {key:'look',title:'外观',sum:'封面 · 纸张 · 扉页 · 封底',parts:['cover','paper','readme','back']},
+    {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
+    {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
+    {key:'svc',title:'接入服务',sum:'网易云音乐 · 地图 · AI',parts:['music','map','ai']}];
+  const isSet=v=>typeof v==='string'&&v.startsWith('set:');
+  SET_PAGES.forEach(pg=>{
+    const b=el('button','item mi');b.type='button';b.dataset.set=pg.key;
+    b.append(icon(pg.key),el('b',null,pg.title),el('span',null,pg.sum));
+    b.onclick=()=>select('set:'+pg.key);$('setnav').appendChild(b);
+  });
 
   /* ---------- API ---------- */
   async function api(path,opt){
@@ -77,14 +109,15 @@
       it.onclick=()=>select(en.id);
       list.appendChild(it);
     });
+    $('homeBtn').setAttribute('aria-current',sel===null?'true':'false');
     $('newBtn').setAttribute('aria-current',sel==='new'?'true':'false');
-    $('settingsBtn').setAttribute('aria-current',sel==='settings'?'true':'false');
     $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
+    document.querySelectorAll('#setnav .item').forEach(b=>b.setAttribute('aria-current',sel==='set:'+b.dataset.set?'true':'false'));
   }
   $('q').addEventListener('input',e=>{listQuery=e.target.value;drawList();});
+  $('homeBtn').onclick=()=>select(null);
   $('newBtn').onclick=()=>select('new');
   $('jotsBtn').onclick=()=>select('jots');
-  $('settingsBtn').onclick=()=>select('settings');
 
   const dirty=()=>draft&&JSON.stringify(stripLocal(draft))!==base;
   function stripLocal(d){
@@ -97,7 +130,9 @@
   /* switching away from unsaved changes asks first, inline */
   function select(id,force){
     if(busy)return;
-    if(!force&&dirty()&&id!==sel){
+    // the settings' parts are one set of settings: going from one to another keeps what's been changed
+    const across=isSet(id)&&isSet(sel);
+    if(!force&&dirty()&&id!==sel&&!across){
       const box=main.querySelector('.unsaved');if(box)box.remove();
       const u=el('div','unsaved');u.append('这一页有改动还没保存。');
       const sv=el('button','b small pri','保存');sv.type='button';sv.onclick=async()=>{if(await save())select(id,true);};
@@ -108,7 +143,8 @@
       return;
     }
     sel=id;
-    if(id==='settings'){draft=Object.assign({},settings);}
+    if(across){drawList();drawForm();changed();if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);return;}
+    if(isSet(id)){draft=Object.assign({},settings);}
     else if(id==='jots'){draft=null;}
     else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
@@ -145,7 +181,7 @@
     const a=main.querySelector('.actbar');if(a)a.classList.toggle('dirty',!!d);
   }
   function drawPreview(){
-    if(!pvbox||!draft||sel==='settings')return;
+    if(!pvbox||!draft||isSet(sel))return;
     pvbox.textContent='';
     // as it will be in the book: as many pages as it takes, one at a time with ‹ › when there are more
     const ps=T.entryPages(draft,'r');
@@ -176,7 +212,7 @@
     return a;
   }
   /* on a phone the list and a page take turns: this goes back to the list */
-  function backBtn(){const b=el('button','b small back','← 列表');b.type='button';b.onclick=()=>select(null);return b;}
+  function backBtn(){const b=el('button','b small back','← 菜单');b.type='button';b.onclick=()=>select(null);return b;}
   function head(title,extra){
     const h=el('div','fhead');h.append(backBtn(),el('h2',null,title));
     if(extra)h.appendChild(extra);
@@ -189,47 +225,49 @@
     if(!sel||!draft){drawHome();return;}
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
-    if(sel==='settings'){
+    if(isSet(sel)){
+      const pg=SET_PAGES.find(p=>'set:'+p.key===sel)||SET_PAGES[0];
       // each section a card; the chips at the top go straight to one
-      const nav=el('nav','secnav');nav.setAttribute('aria-label','设置分区');
-      const cards=[];
-      const sect=(t,hint,nodes)=>{
-        const c=card(t,nodes,{hint});c.id='set-'+cards.length;cards.push(c);
-        const b=el('button','chip on',t);b.type='button';b.onclick=()=>c.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b);
-        return c;
-      };
-      f.append(head('手帐设置'),nav,
-        sect('网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。',[
+      const nav=el('nav','secnav');nav.setAttribute('aria-label','这一部分的设置');
+      const SECTS={
+        site:()=>['网站','浏览器标签上的标题，和搜索、分享链接里显示的一句介绍。',[
           field('网站标题','siteTitle','text',{max:40}),
-          field('一句介绍','siteDesc','text',{max:120})]),
-        sect('封面',null,[
+          field('一句介绍','siteDesc','text',{max:120})]],
+        cover:()=>['封面',null,[
           coverStyleField(),
           field('封面大字','coverTitle','text',{max:16,hint:'第一个「.」会变成绿色的小圆点，比如 cui.log'}),
           field('大字下面的一行','coverSub','text',{max:40}),
           coverStickerField(),
-          coverPhotoField()]),
-        sect('纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]),
-        sect('扉页','翻开封面后第一页的 README。',[
+          coverPhotoField()]],
+        paper:()=>['纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]],
+        readme:()=>['扉页','翻开封面后第一页的 README。',[
           field('whoami（名字）','readmeName','text',{max:30}),
           field('cat role（在做什么）','readmeRole','text',{max:40}),
           field('ls ~/life（生活里有什么）','readmeLife','text',{max:60}),
           field('从哪天开始记','readmeSince','text',{max:20,ph:'2026-09'}),
-          field('小咖旁边那句话','readmeSign','text',{max:30})]),
-        sect('封底',null,[
+          field('小咖旁边那句话','readmeSign','text',{max:30})]],
+        back:()=>['封底',null,[
           field('封底大字','backTitle','text',{max:12}),
-          field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]),
-        sect('加密','给整本手帐设一个口令。',[lockField('book')]),
-        sect('翻页方式','首页的书怎么翻。',[bookModeField()]),
-        sect('示例页',null,[samplesField()]),
-        sect('音乐','日记页上的网易云卡片（```音乐 里写「网易云: 歌曲ID」）用 Meting API 取歌名、封面、歌词和声音。',[
-          field('Meting API 地址','metingApi','text',{ph:'https://api.injahow.cn/meting/',max:200,
-            hint:'留空用默认的公共接口。公共接口时好时坏，放不了就换一个，比如 https://api.i-meto.com/meting/api?server=:server&type=:type&id=:id（:server :type :id 会被替换），或者自己搭一个 Meting。'})]),
-        sect('地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]),
-        sect('AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]),
-        sect('联系方式','显示在「写信给我」那一页。',[
+          field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]],
+        lock:()=>['加密','给整本手帐设一个口令（马上生效，不用点保存）。',[lockField('book')]],
+        mode:()=>['翻页方式','首页的书怎么翻。',[bookModeField()]],
+        samples:()=>['示例页',null,[samplesField()]],
+        music:()=>['网易云音乐','日记里的网易云歌曲：正文里单独一行贴歌曲链接，或 ```音乐 卡片里写「网易云: 链接」，就是一个能播的播放器。歌名、封面、歌词和声音从 Meting API 取。',[musicField()]],
+        map:()=>['地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]],
+        ai:()=>['AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]],
+        contact:()=>['联系方式','显示在「写信给我」那一页。',[
           field('邮箱','email','email',{ph:'you@example.com',max:120}),
           field('GitHub 地址','github','url',{ph:'https://github.com/你的用户名',hint:'要以 https:// 开头',max:200}),
-          field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60})]));
+          field('链接上显示的文字（可空）','githubText','text',{ph:'github.com/你的用户名',max:60})]]};
+      const cards=pg.parts.map((k,i)=>{
+        const [t,hint,nodes]=SECTS[k]();
+        const c=card(t,nodes,{hint});c.id='set-'+k;
+        const b=el('button','chip on',t);b.type='button';b.onclick=()=>c.scrollIntoView({behavior:'smooth',block:'start'});nav.appendChild(b);
+        return c;
+      });
+      f.append(head('手帐设置 · '+pg.title),el('div','hintx',pg.sum));
+      if(cards.length>2)f.appendChild(nav);
+      f.append(...cards);
       const s=el('button','b pri','保存设置');s.type='submit';
       f.append(actBar([s]));main.appendChild(f);return;
     }
@@ -661,6 +699,44 @@
     w.append(pick,row,key,acts);
     return w;
   }
+  /* 手帐设置 → 接入服务 → 网易云音乐: which Meting API (a few known ones, or one's own), and a song to try it on */
+  const METING_PRESETS=[
+    ['','api.injahow.cn（默认）'],
+    ['https://api.i-meto.com/meting/api?server=:server&type=:type&id=:id&r=:r','api.i-meto.com'],
+    ['https://meting.qjqq.cn/?server=:server&type=:type&id=:id','meting.qjqq.cn']];
+  function musicField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const f=field('Meting API 地址','metingApi','text',{ph:T.METING_DEFAULT,max:200,
+      hint:'留空用默认的公共接口。可以写成带占位符的 …?server=:server&type=:type&id=:id（:server :type :id :r 会被替换）；没有占位符的，后面会加上 server=netease&type=song&id=…。公共接口时好时坏，放不了就换一个，或者自己搭一个 Meting（github.com/metowolf/Meting-API）。'});
+    const inp=f.querySelector('input');
+    const chips=el('div','chips');
+    const mark=()=>chips.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===(inp.value.trim()))));
+    METING_PRESETS.forEach(([v,n])=>{
+      const b=el('button','chip pre',n);b.type='button';b.dataset.v=v;
+      b.onclick=()=>{inp.value=v;draft.metingApi=v;changed();mark();};chips.appendChild(b);
+    });
+    inp.addEventListener('input',mark);mark();
+    // try it: a song through the address as it is now (saved or not), from this browser, as readers will
+    const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（可空）';song.setAttribute('aria-label','试听的歌');
+    const t=el('button','b small','试一下');t.type='button';row.append(song,t);
+    const out=el('div','mtest');
+    t.onclick=async()=>{
+      const id=T.neteaseId(song.value)||(!song.value.trim()&&'186016');
+      if(!id){out.textContent='✗ 没认出歌曲 ID：贴 music.163.com 的歌曲链接，或者直接写数字 ID';out.className='mtest err';return;}
+      t.disabled=true;out.className='mtest';out.textContent='正在取……';
+      try{
+        const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT);
+        out.textContent='';out.className='mtest ok';
+        if(x.pic){const i=el('img');i.src=x.pic;i.alt='';i.referrerPolicy='no-referrer';out.appendChild(i);}
+        const au=el('audio');au.controls=true;au.preload='none';au.src=x.url;
+        const tx=el('span');tx.append(el('b',null,'✓ '+(x.title||'（没有歌名）')),el('small',null,(x.artist||'')+(x.lrc?' · 有歌词':' · 没有歌词')));
+        out.append(tx,au);
+      }catch(e){out.textContent='✗ 没取到：这个接口现在用不了，或者这首歌放不了（VIP / 下架）。换个接口或换首歌再试。';out.className='mtest err';}
+      finally{t.disabled=false;}
+    };
+    w.append(f,chips,row,out);
+    return w;
+  }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
   function mapField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
@@ -902,6 +978,12 @@
      A toolbar for the marks the page understands (render.js bodyBlocks), ⌘/Ctrl+B / I / K, and Enter carrying
      a list, checklist or quote on to the next line (Enter on an empty item ends it). Edits go through
      insertText, so ⌘/Ctrl+Z undoes them. The page beside the form is the preview. */
+  /* a NetEase song → its id: a link or an id here; the app's short links (163cn.tv) through the Worker */
+  async function songId(v){
+    const id=T.neteaseId(v)||T.neteaseId((/https?:\/\/(?:y\.)?music\.163\.com\/\S+/.exec(v)||[''])[0]);
+    if(id)return id;
+    return (await sendJson('POST','/api/admin/netease',{q:v})).id;
+  }
   function mdField(){
     const wrap=el('div','mdfield');
     const lab=el('label','sr',null);lab.textContent='正文';lab.htmlFor='f-body';
@@ -955,11 +1037,15 @@
       ['⤓','换页：后面的字从下一页写起',()=>block('+++\n')],   // the caret on the line after, ready to write on
     ];
     const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
-    TOOLS.forEach(([t,title,fn,cls])=>{
+    // in groups: the words, the lines, what goes between, and (below) what's stuck on
+    const GROUP=new Set([5,10]),sep=()=>{const x=el('span','mdsep');x.setAttribute('aria-hidden','true');bar.appendChild(x);};
+    TOOLS.forEach(([t,title,fn,cls],i)=>{
+      if(GROUP.has(i))sep();
       const b=el('button','mdb'+(cls?' mdb-'+cls:''),t);b.type='button';b.title=title;b.setAttribute('aria-label',title);
       b.addEventListener('mousedown',e=>e.preventDefault());   // keep the selection in the text
       b.onclick=fn;bar.appendChild(b);
     });
+    sep();
     // 📎 贴一张: 账单 / 机票 / 车票 / 书籍 / 影视 / 音乐, each a filled-in example to write over (render.js TICKETS)
     {
       const wrap=el('span','mdstick'),b=el('button','mdb','📎 贴一张');b.type='button';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
@@ -978,13 +1064,51 @@
       wrap.addEventListener('keydown',e=>{if(e.key==='Escape'){close();b.focus();}});
       wrap.append(b,menu);bar.appendChild(wrap);
     }
-    // 🔍 从豆瓣填: a Douban link, an ISBN or a name → NeoDB (the Worker asks) → pick one → its card, the cover
-    // kept in R2
+    // 🎵 网易云: a song's link (or the app's 分享 text, or its id) → its link on a line of its own, which the page
+    // shows as a player (render.js neteaseLine). The song is looked up (Meting) to show which it is first
     {
-      const wrap=el('span','mdstick'),b=el('button','mdb','🔍 豆瓣');b.type='button';b.title='从豆瓣填：贴豆瓣链接，或搜书名 / 片名 / 专辑';
+      const wrap=el('span','mdstick'),b=el('button','mdb','🎵 网易云');b.type='button';b.title='贴一首网易云的歌：页上是一个能播的播放器';
+      const pane=el('div','mdpop mdlook');pane.hidden=true;
+      const q=el('input');q.type='text';q.placeholder='网易云歌曲链接、分享的文字，或歌曲 ID';q.setAttribute('aria-label','网易云歌曲');
+      const go=el('button','b small pri','贴上');go.type='button';
+      const card=el('label','check1'),cb=el('input');cb.type='checkbox';card.append(cb,el('span',null,'做成音乐卡片（可以再写评分、听到哪、一句歌词）'));
+      const say=el('div','hintx');
+      const row=el('div','mdlook-row');row.append(q,go);pane.append(row,card,say);
+      const close=()=>{pane.hidden=true;};
+      async function add(){
+        const v=q.value.trim();if(!v){q.focus();return;}
+        go.disabled=true;say.textContent='正在认……';
+        try{
+          const id=await songId(v);
+          const link='https://music.163.com/song?id='+id;
+          const x=await T.meting(id).catch(()=>null);
+          close();q.value='';
+          block(cb.checked?['```音乐','网易云: '+link,'评分:','听到:','歌词:','```'].join('\n'):link+'\n');
+          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+'。':'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，可以在「手帐设置 → 接入服务」换个接口试试。',x?'ok':'err');
+        }catch(e){say.textContent=e.message||'没认出来';}
+        finally{go.disabled=false;}
+      }
+      go.onclick=add;q.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();add();}if(e.key==='Escape')close();});
+      b.addEventListener('mousedown',e=>e.preventDefault());
+      b.onclick=()=>{pane.hidden=!pane.hidden;if(!pane.hidden){say.textContent='在网易云 App 里点「分享 → 复制链接」，贴到这里。直接把链接粘进正文也行。';setTimeout(()=>q.focus(),0);}};
+      document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
+      wrap.append(b,pane);bar.appendChild(wrap);
+    }
+    // a NetEase song pasted into the words (the link, or the app's whole 分享 text): its link on a line of its own
+    ta.addEventListener('paste',e=>{
+      const v=(e.clipboardData&&e.clipboardData.getData('text/plain')||'').trim();
+      if(!v||v.includes('\n')||!/163cn\.(tv|link)\/|music\.163\.com\/\S*song/.test(v)||/^\[.*\]\(/.test(v))return;
+      e.preventDefault();
+      songId(v).then(id=>{block('https://music.163.com/song?id='+id+'\n');status('贴成了网易云播放器（页上能播）。','ok');},
+        ()=>{const [a,b2]=sel();put(a,b2,v);});
+    });
+    // 🔍 NeoDB: a name, an ISBN or a link (NeoDB's, or a page NeoDB knows: Goodreads, IMDb, Spotify, …) → NeoDB
+    // (the Worker asks) → pick one → its card, the cover kept in R2
+    {
+      const wrap=el('span','mdstick'),b=el('button','mdb','🔍 NeoDB');b.type='button';b.title='从 NeoDB 填：搜书名 / 片名 / 专辑，或贴链接';
       const pane=el('div','mdpop mdlook');pane.hidden=true;
       const kind=el('select');[['book','书籍'],['film','影视'],['music','音乐']].forEach(([v,n])=>{const o=el('option',null,n);o.value=v;kind.appendChild(o);});
-      const q=el('input');q.type='text';q.placeholder='豆瓣链接，或书名 / 片名 / 专辑名 / ISBN';
+      const q=el('input');q.type='text';q.placeholder='书名 / 片名 / 专辑名 / ISBN，或 NeoDB 链接';
       const go=el('button','b small pri','查找');go.type='button';
       const say=el('div','hintx'),list=el('div','mdlook-list');
       const row=el('div','mdlook-row');row.append(kind,q,go);pane.append(row,say,list);
@@ -1009,7 +1133,7 @@
         try{
           const r=await api('/api/admin/lookup',{method:'POST',headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify({q:v,kind:kind.value})});
           if(r.pending){say.textContent=r.message;return;}
-          say.textContent=r.items.length?'选一个：':'没找到，换个名字或贴豆瓣链接试试。';
+          say.textContent=r.items.length?'选一个：':'没找到，换个名字，或贴 NeoDB 上的链接试试。';
           r.items.forEach(it=>{
             const o=el('button','mdlook-item');o.type='button';
             if(it.cover){const i=el('img');i.src=it.cover;i.alt='';i.referrerPolicy='no-referrer';i.loading='lazy';o.appendChild(i);}else o.appendChild(el('span','mdlook-noimg'));
@@ -1021,7 +1145,7 @@
       }
       go.onclick=find;q.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();find();}if(e.key==='Escape')close();});
       b.addEventListener('mousedown',e=>e.preventDefault());
-      b.onclick=()=>{pane.hidden=!pane.hidden;if(!pane.hidden){say.textContent='贴一个豆瓣链接最准；也可以搜名字。数据来自 NeoDB。';setTimeout(()=>q.focus(),0);}};
+      b.onclick=()=>{pane.hidden=!pane.hidden;if(!pane.hidden){say.textContent='搜名字，或贴 NeoDB 上这一条的链接（最准）。数据来自 neodb.social，书还会查 Open Library。';setTimeout(()=>q.focus(),0);}};
       document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
       wrap.append(b,pane);bar.appendChild(wrap);
     }
@@ -1057,9 +1181,10 @@
       ['```书籍 … ```','一本书：封面、书名、作者、出版社、进度（132/360 或 65% 或 读完）、评分（4.5）、书摘、状态'],
       ['```电影票 … ```','电影票（剧集也行）：片名、类型、日期、场次、影院 / 平台、影厅、座位、集数、导演、主演、评分、短评'],
       ['```影视 … ```','一部片：海报、片名、年份、导演、主演、类型、集数、评分（9.4）、简介、短评、状态（看过 / 在追）'],
-      ['```音乐 … ```','一张唱片：封面、歌名、歌手、专辑、时长、听到（1:48）、评分、歌词；写「网易云: 歌曲ID」或贴网易云链接就能播放'],
+      ['```音乐 … ```','一张唱片：封面、歌名、歌手、专辑、时长、听到（1:48）、评分、歌词；写「网易云: 歌曲链接」就能播放'],
+      ['https://music.163.com/song?id=…','单独一行的网易云歌曲链接：一个能播的播放器（直接粘贴链接或 App 分享的文字就行，「🎵 网易云」也可以）'],
       ['连着写几张','叠成一沓，后一张压着前一张'],
-      ['封面: / 海报:','图片地址（https://…），或「🔍 从豆瓣填」存下来的图']];
+      ['封面: / 海报:','图片地址（https://…），或「🔍 NeoDB」存下来的图']];
     const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
     help.appendChild(tb);
     help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));
@@ -1196,13 +1321,13 @@
       if([...newLock.p1].length<4){status('口令至少 4 个字符（不想上锁就清空）。','err');const i=$('nl1');if(i)i.focus();return false;}
       if(newLock.p1!==newLock.p2){status('两次输入的口令不一样。','err');const i=$('nl2');if(i)i.focus();return false;}
     }
-    if(sel!=='settings'){
+    if(!isSet(sel)){
       if(!T.parseDate(draft.date)){status('请填日期。','err');return false;}
       if(!String(draft.title||'').trim()){status('标题不能为空。','err');const t=$('f-title');if(t)t.focus();return false;}
     }
     busy=true;status('正在保存……');
     try{
-      if(sel==='settings'){
+      if(isSet(sel)){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
         settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
         drawForm();status('已保存，刷新主页就能看到。','ok');
@@ -1229,7 +1354,7 @@
       return true;
     }catch(e){
       // a failed publish/unpublish shouldn't leave the button label lying about the state
-      if(sel!=='settings'&&sel!=='new'){const en=entries.find(x=>x.id===sel);if(en)draft.status=en.status;}
+      if(!isSet(sel)&&sel!=='new'){const en=entries.find(x=>x.id===sel);if(en)draft.status=en.status;}
       status(e.message||'保存失败，稍后再试。','err');return false;
     }
     finally{busy=false;}
