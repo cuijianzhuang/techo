@@ -6,7 +6,8 @@
   const main=$('main'),list=$('list');
   let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
-  let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | null (今天)
+  let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | 'pages' (文章管理) | null (今天)
+  let fromPages=false;     // the page open was picked in 文章管理: its back button goes there
   let draft=null;          // working copy of the selected thing
   let base='';             // JSON of draft when loaded, to detect changes
   let busy=false;
@@ -19,6 +20,7 @@
     home:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/>',
     new:'<path d="M4.5 19.5l1-4.2L16.3 4.5a2 2 0 012.9 0l.3.3a2 2 0 010 2.9L8.7 18.5z"/><path d="M14.5 6.3l3.2 3.2"/>',
     jots:'<rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/>',
+    pages:'<path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11"/><circle cx="4.8" cy="6.5" r=".9"/><circle cx="4.8" cy="12" r=".9"/><circle cx="4.8" cy="17.5" r=".9"/>',
     look:'<path d="M6 3.5h11.5a1 1 0 011 1v15a1 1 0 01-1 1H6a1.5 1.5 0 01-1.5-1.5v-14A1.5 1.5 0 016 3.5z"/><path d="M8 3.5v17M11 8h5"/>',
     read:'<path d="M3 5.5c3-1.2 6-1 9 1v13c-3-2-6-2.2-9-1z"/><path d="M21 5.5c-3-1.2-6-1-9 1v13c3-2 6-2.2 9-1z"/>',
     site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/>',
@@ -72,52 +74,39 @@
   $('logout').onclick=async()=>{try{await api('/api/admin/logout',{method:'POST'});}catch(e){}location.reload();};
   const sendJson=(method,path,obj)=>api(path,{method,headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(obj)});
 
-  /* ---------- list: search, filter by status, grouped by month ---------- */
-  let listQuery='',listFilter='all';
-  const FILTERS=[['all','全部'],['draft','草稿'],['published','已发布']];
+  /* ---------- the menu's list: the few pages written last (all of them: 文章管理) ---------- */
+  const RECENT=6;
   const plain=en=>[en.title,en.latin,en.aside,en.body,en.note,en.place,en.weather,en.quote,en.date,en.date.replace(/-0?/g,'/')].join('\n').toLowerCase();
+  const lockNote=en=>en.locked?'🔒 单独上锁':dayLocks.has(en.date)?'🔒 这一天上锁':'';
   function drawList(){
     list.textContent='';
     const nd=entries.filter(e=>e.status==='draft').length;
-    $('countLabel').textContent='已写的页 · '+entries.length;
-    const fl=$('lfilter');fl.textContent='';
-    FILTERS.forEach(([k,label])=>{
-      const n=k==='all'?entries.length:k==='draft'?nd:entries.length-nd;
-      const b=el('button',null,label+' '+n);b.type='button';b.setAttribute('aria-pressed',listFilter===k?'true':'false');
-      b.onclick=()=>{listFilter=k;drawList();};
-      fl.appendChild(b);
-    });
-    const q=listQuery.trim().toLowerCase();
-    const shown=T.sortEntries(entries).reverse().filter(en=>
-      (listFilter==='all'||(listFilter==='draft')===(en.status==='draft'))&&(!q||plain(en).includes(q)));
-    if(!shown.length){
-      list.appendChild(el('div','lempty',entries.length?'没有找到。':'还没有写过。点上面「新写一页」开始。'));
-    }
-    let month='';
-    shown.forEach(en=>{
-      const d=T.parseDate(en.date),m=d?d.y+' 年 '+d.mo+' 月':'';
-      if(m!==month){month=m;list.appendChild(el('div','lmonth',m));}
+    $('pagesSum').textContent=entries.length?'共 '+entries.length+' 页'+(nd?' · 草稿 '+nd:''):'搜索 · 筛选 · 批量发布';
+    const recent=T.sortEntries(entries).reverse().slice(0,RECENT);
+    if(!recent.length)list.appendChild(el('div','lempty','还没有写过。点上面「新写一页」开始。'));
+    recent.forEach(en=>{
+      const d=T.parseDate(en.date);
       const it=el('button','item'+(en.status==='draft'?' draft':''));it.type='button';it.dataset.id=en.id;
       it.setAttribute('aria-current',sel===en.id?'true':'false');
       const t=el('b',null,en.title||'（无题）');
       if(en.status==='draft')t.appendChild(el('em','tag','草稿'));
-      const meta=el('span',null,(d?d.mo+'/'+d.d:en.date)+((en.photos&&en.photos.length)||en.photoKey?' · 有照片':'')+(en.locked?' · 🔒 单独上锁':dayLocks.has(en.date)?' · 🔒 这一天上锁':''));
-      const gist=T.plainText(en.body);
-      it.append(t,meta);
-      if(gist)it.appendChild(el('i','gist',gist.length>30?gist.slice(0,30)+'…':gist));
+      it.append(t,el('span',null,[d?d.mo+'/'+d.d:en.date,lockNote(en)].filter(Boolean).join(' · ')));
       (en.stickers||[]).slice(0,2).forEach(k=>{const g=T.stickerSvg(k,18);if(g){g.classList.add('lstk');it.appendChild(g);}});
       it.onclick=()=>select(en.id);
       list.appendChild(it);
     });
+    // a page further back, open: 文章管理 is where it came from
+    const older=sel&&entries.some(e=>e.id===sel)&&!recent.some(e=>e.id===sel);
     $('homeBtn').setAttribute('aria-current',sel===null?'true':'false');
     $('newBtn').setAttribute('aria-current',sel==='new'?'true':'false');
     $('jotsBtn').setAttribute('aria-current',sel==='jots'?'true':'false');
+    $('pagesBtn').setAttribute('aria-current',sel==='pages'||older?'true':'false');
     document.querySelectorAll('#setnav .item').forEach(b=>b.setAttribute('aria-current',sel==='set:'+b.dataset.set?'true':'false'));
   }
-  $('q').addEventListener('input',e=>{listQuery=e.target.value;drawList();});
   $('homeBtn').onclick=()=>select(null);
   $('newBtn').onclick=()=>select('new');
   $('jotsBtn').onclick=()=>select('jots');
+  $('pagesBtn').onclick=()=>select('pages');
 
   const dirty=()=>draft&&JSON.stringify(stripLocal(draft))!==base;
   function stripLocal(d){
@@ -142,10 +131,11 @@
       const f=main.querySelector('.form');(f||main).prepend(u);
       return;
     }
+    fromPages=sel==='pages'&&!!entries.find(e=>e.id===id);
     sel=id;
     if(across){drawList();drawForm();changed();if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);return;}
     if(isSet(id)){draft=Object.assign({},settings);}
-    else if(id==='jots'){draft=null;}
+    else if(id==='jots'||id==='pages'){draft=null;}
     else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
@@ -212,7 +202,10 @@
     return a;
   }
   /* on a phone the list and a page take turns: this goes back to the list */
-  function backBtn(){const b=el('button','b small back','← 菜单');b.type='button';b.onclick=()=>select(null);return b;}
+  function backBtn(){
+    if(fromPages){const b=el('button','b small back show','← 文章管理');b.type='button';b.onclick=()=>select('pages');return b;}
+    const b=el('button','b small back','← 菜单');b.type='button';b.onclick=()=>select(null);return b;
+  }
   function head(title,extra){
     const h=el('div','fhead');h.append(backBtn(),el('h2',null,title));
     if(extra)h.appendChild(extra);
@@ -222,6 +215,7 @@
     main.textContent='';pvbox=null;pvcap=null;pvAt=0;statusEl=el('div','status');
     document.body.classList.toggle('detail',!!sel);
     if(sel==='jots'){drawJots();return;}
+    if(sel==='pages'){drawPages();return;}
     if(!sel||!draft){drawHome();return;}
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
@@ -355,6 +349,138 @@
     fit();
   }
   addEventListener('resize',()=>{const pv=main.querySelector('.pv');if(pv)fitPreview(pv);});
+
+  /* ---------- 文章管理: every page, to find one, and to publish, unpublish or delete several at once ----------
+     Searched (title, words, place, date), filtered (status, lock, month), sorted (by the day written about,
+     or by when last changed), a month at a heading; the first PAGE_STEP, then more on asking. */
+  const pv={q:'',st:'all',mo:'',sort:'new',n:0},chosen=new Set();
+  const PAGE_STEP=60;
+  const STATES=[['all','全部'],['published','已发布'],['draft','草稿'],['locked','上锁']];
+  const SORTS=[['new','日期：新→旧'],['old','日期：旧→新'],['edited','最近改过']];
+  const isLocked=en=>!!(en.locked||dayLocks.has(en.date));
+  function drawPages(){
+    pv.n=pv.n||PAGE_STEP;
+    const f=el('div','form pages');
+    const nd=entries.filter(e=>e.status==='draft').length,nl=entries.filter(isLocked).length;
+    f.append(head('文章管理'),el('div','hintx','共 '+entries.length+' 页 · 已发布 '+(entries.length-nd)+' · 草稿 '+nd+(nl?' · 上锁 '+nl:'')));
+    // what to show
+    const tools=el('div','ptools');
+    const q=el('input');q.type='search';q.placeholder='搜标题、正文、地点、日期';q.value=pv.q;q.setAttribute('aria-label','搜索文章');q.autocomplete='off';
+    const months=[...new Set(entries.map(e=>e.date.slice(0,7)))].sort().reverse();
+    const mo=el('select');mo.setAttribute('aria-label','按月份');
+    [['','全部月份'],...months.map(m=>[m,m.replace('-',' 年 ').replace(/ 0?(\d+)$/,' $1')+' 月'])].forEach(([v,t])=>{const o=el('option',null,t);o.value=v;mo.appendChild(o);});
+    mo.value=months.includes(pv.mo)?pv.mo:'';
+    const so=el('select');so.setAttribute('aria-label','排序');
+    SORTS.forEach(([v,t])=>{const o=el('option',null,t);o.value=v;so.appendChild(o);});so.value=pv.sort;
+    const sts=el('div','lfilter');sts.setAttribute('role','group');sts.setAttribute('aria-label','按状态');
+    const r1=el('div','prow');r1.append(q,mo,so);
+    // the bar of what's picked stays in reach with the search as the list scrolls
+    const bulk=el('div','pbulk'),rows=el('div','plist'),more=el('div','bar');
+    tools.append(r1,sts,bulk);
+    f.append(tools,rows,more,statusEl);
+    main.appendChild(f);
+    const shown=()=>{
+      const k=pv.q.trim().toLowerCase();
+      const a=entries.filter(en=>(pv.st==='all'||(pv.st==='locked'?isLocked(en):pv.st==='draft'?en.status==='draft':en.status!=='draft'))
+        &&(!pv.mo||en.date.slice(0,7)===pv.mo)&&(!k||plain(en).includes(k)));
+      return pv.sort==='edited'?a.sort((x,y)=>(y.updatedAt||0)-(x.updatedAt||0)):pv.sort==='old'?T.sortEntries(a):T.sortEntries(a).reverse();
+    };
+    function paint(){
+      [...chosen].forEach(id=>{if(!entries.some(e=>e.id===id))chosen.delete(id);});
+      const all=shown(),list=all.slice(0,pv.n);
+      sts.textContent='';
+      STATES.forEach(([k,label])=>{
+        const n=k==='all'?entries.length:k==='locked'?nl:k==='draft'?nd:entries.length-nd;
+        if(k==='locked'&&!n&&pv.st!=='locked')return;
+        const b=el('button',null,label+' '+n);b.type='button';b.setAttribute('aria-pressed',String(pv.st===k));
+        b.onclick=()=>{pv.st=k;pv.n=PAGE_STEP;paint();};sts.appendChild(b);
+      });
+      // what's picked, and what to do with it
+      bulk.textContent='';
+      const allBox=el('input');allBox.type='checkbox';allBox.setAttribute('aria-label','全选筛出来的');
+      const picked=list.filter(e=>chosen.has(e.id)).length;
+      allBox.checked=!!list.length&&picked===list.length;allBox.indeterminate=picked>0&&picked<list.length;
+      allBox.onchange=()=>{list.forEach(e=>allBox.checked?chosen.add(e.id):chosen.delete(e.id));paint();};
+      const lab=el('label','pall');lab.append(allBox,el('span',null,chosen.size?'已选 '+chosen.size+' 页':(all.length===entries.length?'全部 ':'筛出 ')+all.length+' 页'));
+      bulk.appendChild(lab);
+      if(chosen.size){
+        const ids=[...chosen];
+        const act=(t,cls,fn)=>{const b=el('button','b small'+(cls?' '+cls:''),t);b.type='button';b.onclick=fn;bulk.appendChild(b);return b;};
+        act('发布',null,()=>setStatus(ids,'published'));
+        act('改回草稿',null,()=>setStatus(ids,'draft'));
+        const del=act('删除','warn',()=>{
+          const c=el('span','confirm','删除 '+ids.length+' 页，连同照片，不能恢复。确定？');
+          const yes=el('button','b warn small','删除');yes.type='button';yes.onclick=()=>removeAll(ids);
+          const no=el('button','b small','取消');no.type='button';no.onclick=()=>c.replaceWith(del);
+          c.append(yes,no);del.replaceWith(c);
+        });
+        act('不选了','quiet',()=>{chosen.clear();paint();});
+      }
+      // the pages, a month at a heading
+      rows.textContent='';
+      if(!list.length)rows.appendChild(el('div','lempty',entries.length?'没有找到。换个词，或者看看「全部」。':'还没有写过。点左边「新写一页」开始。'));
+      let month='';
+      list.forEach(en=>{
+        const d=T.parseDate(en.date),m=pv.sort==='edited'?'':(d?d.y+' 年 '+d.mo+' 月':'');
+        if(m&&m!==month){month=m;rows.appendChild(el('div','lmonth',m+' · '+all.filter(e=>e.date.slice(0,7)===en.date.slice(0,7)).length+' 页'));}
+        const r=el('div','prowi'+(en.status==='draft'?' draft':'')+(chosen.has(en.id)?' on':''));
+        const cb=el('input');cb.type='checkbox';cb.checked=chosen.has(en.id);cb.setAttribute('aria-label','选中「'+(en.title||'（无题）')+'」');
+        cb.onchange=()=>{cb.checked?chosen.add(en.id):chosen.delete(en.id);paint();};
+        const day=el('span','pday');
+        day.append(el('b',null,d?String(d.d):''),el('small',null,d?d.mo+' 月 · 周'+WDN[d.wd]:en.date));
+        if(pv.sort==='edited'||!m)day.lastChild.textContent=d?d.y+'.'+d.mo+'.'+d.d:en.date;
+        const open=el('button','popen');open.type='button';
+        const t=el('b',null,en.title||'（无题）');
+        const gist=T.plainText(en.body);
+        const meta=[(en.photos&&en.photos.length)||en.photoKey?'📷 '+((en.photos&&en.photos.length)||1):'',en.place?'📍 '+en.place:'',lockNote(en),
+          pv.sort==='edited'&&en.updatedAt?'改于 '+new Date(en.updatedAt).toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''].filter(Boolean).join(' · ');
+        open.append(t,el('i','gist',gist.length>60?gist.slice(0,60)+'…':gist||'（还没写正文）'));
+        if(meta)open.appendChild(el('span','pmeta',meta));
+        open.onclick=()=>select(en.id);
+        const st=el('span','pst '+(en.status==='draft'?'draft':'pub'),en.status==='draft'?'草稿':'已发布');
+        r.append(cb,day,open,st);rows.appendChild(r);
+      });
+      more.textContent='';
+      if(all.length>list.length){
+        const b=el('button','b small','再显示 '+Math.min(PAGE_STEP,all.length-list.length)+' 页（还有 '+(all.length-list.length)+'）');b.type='button';
+        b.onclick=()=>{pv.n+=PAGE_STEP;paint();};more.appendChild(b);
+      }
+    }
+    let qt=0;
+    q.addEventListener('input',()=>{clearTimeout(qt);qt=setTimeout(()=>{pv.q=q.value;pv.n=PAGE_STEP;paint();},120);});
+    mo.onchange=()=>{pv.mo=mo.value;pv.n=PAGE_STEP;paint();};
+    so.onchange=()=>{pv.sort=so.value;paint();};
+    paint();
+  }
+  // several at once, one after another; what didn't go is said
+  async function setStatus(ids,to){
+    if(busy)return;busy=true;
+    let done=0;const failed=[];
+    for(const id of ids){
+      const en=entries.find(e=>e.id===id);if(!en)continue;
+      if(en.status===to){done++;continue;}
+      status('正在'+(to==='draft'?'改回草稿':'发布')+'……（'+(done+failed.length+1)+' / '+ids.length+'）');
+      try{
+        const r=await sendJson('PUT','/api/admin/entries/'+encodeURIComponent(id),stripLocal(Object.assign({},en,{status:to})));
+        r.entry.locked=en.locked;entries[entries.findIndex(e=>e.id===id)]=r.entry;done++;
+        if(to==='published')refreshCard(r.entry);
+      }catch(e){failed.push((en.title||'（无题）')+'：'+(e.message||'没成功'));}
+    }
+    busy=false;chosen.clear();drawList();drawForm();
+    status(failed.length?done+' 页'+(to==='draft'?'改回了草稿':'已发布')+'，'+failed.length+' 页没成功：'+failed.join('；'):done+' 页'+(to==='draft'?'改回了草稿，主页上看不到了。':'已发布，主页刷新就能看到。'),failed.length?'err':'ok');
+  }
+  async function removeAll(ids){
+    if(busy)return;busy=true;
+    let done=0;const failed=[];
+    for(const id of ids){
+      const en=entries.find(e=>e.id===id);if(!en)continue;
+      status('正在删除……（'+(done+failed.length+1)+' / '+ids.length+'）');
+      try{await api('/api/admin/entries/'+encodeURIComponent(id),{method:'DELETE'});entries=entries.filter(e=>e.id!==id);done++;}
+      catch(e){failed.push((en.title||'（无题）')+'：'+(e.message||'没成功'));}
+    }
+    busy=false;chosen.clear();drawList();drawForm();
+    status(failed.length?'删了 '+done+' 页，'+failed.length+' 页没删掉：'+failed.join('；'):'删了 '+done+' 页。',failed.length?'err':'ok');
+  }
 
   /* ---------- 今天: what's there to do ----------
      Today's page (or a way to start it), a line for 随手记, the drafts waiting to be published (one tap each),
@@ -1363,7 +1489,7 @@
     if(busy)return;busy=true;status('正在删除……');
     try{
       await api('/api/admin/entries/'+encodeURIComponent(sel),{method:'DELETE'});
-      entries=entries.filter(e=>e.id!==sel);sel=null;draft=null;base='';
+      entries=entries.filter(e=>e.id!==sel);sel=fromPages?'pages':null;fromPages=false;draft=null;base='';
       drawList();drawForm();
     }catch(e){status(e.message||'删除失败','err');}
     finally{busy=false;}
