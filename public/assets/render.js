@@ -551,12 +551,16 @@
       run.n++;
     }
     into.querySelectorAll('.jcomic').forEach(c=>c.classList.add('n'+Math.min(c.children.length,4)));
-    into.querySelectorAll('.jstack').forEach(st=>{
-      const cards=[...st.children],n=cards.length;
-      cards.forEach((c,i)=>{c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','叠着的第 '+(n-i)+' 张（共 '+n+' 张），点一下翻到最上面');});
-      st.appendChild(el('i','jst-n','1/'+n));
-    });
+    into.querySelectorAll('.jstack').forEach(pileUp);
     return into;
+  }
+  // a pile's cards in order (each lower by --i), each a button, and the count in the corner; as first laid, or
+  // again after a pile is split over two pages (splitPile)
+  function pileUp(st){
+    const cards=[...st.querySelectorAll(':scope>.jticket')],n=cards.length;
+    cards.forEach((c,i)=>{c.style.setProperty('--i',i);c.classList.remove('up');c.style.zIndex='';
+      c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','叠着的第 '+(n-i)+' 张（共 '+n+' 张），点一下翻到最上面');});
+    const t=st.querySelector(':scope>.jst-n')||st.appendChild(el('i','jst-n'));t.textContent='1/'+n;
   }
   /* A pile: the card on top whole, the others' tops showing. A tap (or Enter) on one: the cards lying over it
      lift and fall back under it, and it is on top; the one that was stays where it lies. The count in the
@@ -767,6 +771,7 @@
   // page, up to a character), a list or a comic strip up to an item. [what's left for the next page (null:
   // nothing), whether any of it went on this page]
   function splitBlock(b,tx){
+    if(b.matches('.jstack'))return splitPile(b,tx);
     const items=b.matches('ul,ol,.jcomic');
     if(!items&&b.tagName!=='P')return [b,false];
     const parts=[];
@@ -790,6 +795,28 @@
     if(b.tagName==='OL'&&some)rest.start=head.start+head.children.length;
     if(b.matches('.jcomic'))[head,rest].forEach(c=>{c.className=c.className.replace(/\bn\d\b/,'n'+Math.min(c.children.length,4));});
     return [rest,some];
+  }
+  /* A pile too tall for what's left: its cards closer together, down to GAP_MIN apart (each still showing what
+     it is). Still too tall on a page with other things on it: the whole pile to the next page. Too tall for a
+     page of its own: as many as fit there (two at least), the rest a pile of their own (a card, if one) after. */
+  const GAP_MIN=44;
+  function splitPile(b,tx){
+    tx.appendChild(b);
+    for(let g=68;over(tx)&&g>=GAP_MIN;g-=4)b.style.setProperty('--gap',g+'px');
+    if(!over(tx))return [null,true];
+    const alone=![...tx.children].some(c=>c!==b&&!c.classList.contains('jph'));
+    const cards=[...b.querySelectorAll(':scope>.jticket')],rest=[];
+    if(alone)while(over(tx)&&cards.length>2)rest.unshift(b.removeChild(cards.pop()));
+    if(rest.length&&!over(tx)){b.style.removeProperty('--gap');for(let g=68;over(tx)&&g>=GAP_MIN;g-=4)b.style.setProperty('--gap',g+'px');}   // fewer: as far apart as they now can be
+    if(over(tx)||!rest.length){
+      tx.removeChild(b);b.style.removeProperty('--gap');
+      rest.forEach(c=>b.insertBefore(c,b.querySelector(':scope>.jst-n')));
+      return [b,false];
+    }
+    pileUp(b);
+    if(rest.length===1){['role','tabindex','aria-label'].forEach(k=>rest[0].removeAttribute(k));rest[0].style.removeProperty('--i');return [rest[0],true];}
+    const more=el('div','jstack');more.append(...rest);pileUp(more);
+    return [more,true];
   }
   function blankPage(side,text){
     const p=el('div','page '+side+' jp empty');
