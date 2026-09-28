@@ -1,0 +1,43 @@
+/* What the shelf (/shelf/) and the ticket folder (/tickets/) share: the diary's pages (from /api/entries, with
+   the keys this tab holds: a locked page stays out unless the reader has opened it), the owner's settings
+   (night paper, the site's name), and a card taken out to look at — drawn as on the page, with the days it
+   was written on, each opening the book there (/#e-<id>). */
+(function(){
+  "use strict";
+  const T=window.Techo,{el,parseDate}=T;
+  const WD='日一二三四五六';
+  async function load(label){
+    const held=T.keys();
+    const [e,s]=await Promise.all([
+      fetch('/api/entries',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
+      fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null),
+    ]);
+    const settings=(s&&s.settings)||{};
+    T.useSite(settings);                      // (the 网易云 player's Meting API)
+    if(settings.siteTitle)document.title=label+' · '+settings.siteTitle;
+    T.nightTheme(settings);
+    {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}
+    const entries=T.sortEntries((e.entries||[]).filter(en=>!en.locked&&en.body&&parseDate(en.date))).reverse();   // newest first
+    return {entries,settings};
+  }
+  const dayOf=en=>{const d=parseDate(en.date);return d.y+'.'+String(d.mo).padStart(2,'0')+'.'+String(d.d).padStart(2,'0')+' 周'+WD[d.wd];};
+  // the card, big, over the desk: Esc, the ✕ or a click beside it puts it back
+  function show(kind,lines,days){
+    const pop=el('div','kp-pop'),sheet=el('div','kp-sheet');
+    sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label','卡片');
+    const x=el('button','kp-x','×');x.type='button';x.setAttribute('aria-label','关上');
+    const jp=el('div','jp'),tx=el('div','jtext');tx.appendChild(T.cardNode(kind,lines));jp.appendChild(tx);
+    const where=el('div','kp-where');
+    where.appendChild(el('div',null,days.length>1?'写在这 '+days.length+' 天：':'写在这一天：'));
+    days.forEach(en=>{const a=el('a');a.href='/#e-'+en.id;a.append(el('b',null,en.title||'（无题）'),el('span',null,dayOf(en)),el('i',null,'翻到那一页 →'));where.appendChild(a);});
+    sheet.append(x,jp,where);pop.appendChild(sheet);
+    const back=document.activeElement;
+    const close=()=>{pop.remove();document.removeEventListener('keydown',key);if(back&&back.focus)back.focus();};
+    const key=e=>{if(e.key==='Escape')close();};
+    x.onclick=close;pop.addEventListener('click',e=>{if(e.target===pop)close();});
+    document.addEventListener('keydown',key);
+    document.body.appendChild(pop);x.focus();
+  }
+  function say(box,text){box.textContent='';const p=el('p','kp-msg');p.innerHTML=text;box.appendChild(p);}   // (fixed words only)
+  window.Keep={load,show,say,dayOf};
+})();
