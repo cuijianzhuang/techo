@@ -888,6 +888,9 @@
   const TICKET_TPL={
     receipt:()=>{const d=T.parseDate(T.todayStr());return '```账单\n# 今日账单\n> 慢慢花，好好记\n日期: '+d.y+'年'+d.mo+'月'+d.d+'日\n---\n= 合计: ¥128.00\n---\n* 早餐: ¥18.00\n- 豆浆油条: ¥8.00\n- 茶叶蛋: ¥10.00\n* 午饭: ¥45.00\n* 电影: ¥65.00\n---\n> 谢谢惠顾\n```';},
     flight:()=>{const d=T.parseDate(T.todayStr());return '```机票\n航空: 中国国际航空\n航班: CA933\n从: PEK 北京首都\n到: CDG 巴黎戴高乐\n日期: '+d.mo+'月'+d.d+'日\n起飞: 13:30\n到达: 18:40\n登机口: E12\n座位: 32K\n舱位: 经济舱\n乘客: XIAO/KA\n```';},
+    book:()=>'```书籍\n书名: 百年孤独\n作者: 加西亚·马尔克斯\n出版社: 南海出版公司\n进度: 132/360\n评分: 4.5\n书摘: 划线的那一句，抄在这里\n```',
+    movie:()=>{const d=T.parseDate(T.todayStr());return '```影视\n片名: 千与千寻\n类型: 电影\n导演: 宫崎骏\n日期: '+d.mo+'月'+d.d+'日\n场次: 19:30\n影院: 万达影城\n影厅: 6号厅\n座位: 7排8座\n评分: 5\n短评: 看完想说的一句话\n```';},
+    music:()=>'```音乐\n歌名: 晴天\n歌手: 周杰伦\n专辑: 叶惠美\n时长: 4:29\n听到: 1:48\n评分: 5\n歌词: 循环了一晚上的那一句\n```',
     train:()=>{const d=T.parseDate(T.todayStr());return '```车票\n车次: G1\n从: 北京南 Beijingnan\n到: 上海虹桥 Shanghaihongqiao\n日期: '+d.y+'年'+String(d.mo).padStart(2,'0')+'月'+String(d.d).padStart(2,'0')+'日\n发车: 09:00\n车厢: 05\n座位: 12A\n席别: 二等座\n票价: ¥553.0\n乘客: 小咖\n检票: A12\n```';},
   };
 
@@ -946,10 +949,6 @@
       ['—','分隔线',()=>block('---')],
       ['▦','漫画格',()=>block('@09:00 做什么：说的话 #laptop',7,14)],
       ['⤓','换页：后面的字从下一页写起',()=>block('+++\n')],   // the caret on the line after, ready to write on
-      // 账单 / 机票 / 车票: a filled-in example to write over (render.js TICKETS)
-      ['🧾','账单',()=>block(TICKET_TPL.receipt())],
-      ['✈','机票',()=>block(TICKET_TPL.flight())],
-      ['🚄','车票',()=>block(TICKET_TPL.train())],
     ];
     const bar=el('div','mdbar');bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','正文格式');
     TOOLS.forEach(([t,title,fn,cls])=>{
@@ -957,6 +956,24 @@
       b.addEventListener('mousedown',e=>e.preventDefault());   // keep the selection in the text
       b.onclick=fn;bar.appendChild(b);
     });
+    // 📎 贴一张: 账单 / 机票 / 车票 / 书籍 / 影视 / 音乐, each a filled-in example to write over (render.js TICKETS)
+    {
+      const wrap=el('span','mdstick'),b=el('button','mdb','📎 贴一张');b.type='button';b.setAttribute('aria-haspopup','menu');b.setAttribute('aria-expanded','false');
+      b.title='贴一张：账单、机票、车票、书籍、影视、音乐';
+      const menu=el('div','mdpop');menu.setAttribute('role','menu');menu.hidden=true;
+      const close=()=>{menu.hidden=true;b.setAttribute('aria-expanded','false');};
+      [['🧾','账单','receipt'],['✈️','机票','flight'],['🚄','车票','train'],['📖','书籍','book'],['🎬','影视','movie'],['🎵','音乐','music']].forEach(([i,n,k])=>{
+        const o=el('button',null,i+' '+n);o.type='button';o.setAttribute('role','menuitem');
+        o.addEventListener('mousedown',e=>e.preventDefault());
+        o.onclick=()=>{close();block(TICKET_TPL[k]());};
+        menu.appendChild(o);
+      });
+      b.addEventListener('mousedown',e=>e.preventDefault());
+      b.onclick=()=>{menu.hidden=!menu.hidden;b.setAttribute('aria-expanded',String(!menu.hidden));};
+      document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
+      wrap.addEventListener('keydown',e=>{if(e.key==='Escape'){close();b.focus();}});
+      wrap.append(b,menu);bar.appendChild(wrap);
+    }
     ta.addEventListener('keydown',e=>{
       const mod=e.metaKey||e.ctrlKey;
       if(mod&&!e.shiftKey&&!e.altKey){
@@ -985,7 +1002,10 @@
       ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）'],
       ['```账单 … ```','一张小票：# 标题、> 小字、--- 虚线、= 合计: ¥、* 分组: ¥、- 明细: ¥'],
       ['```机票 … ```','登机牌：航空、航班、从、到、日期、起飞、到达、登机口、座位、舱位、乘客'],
-      ['```车票 … ```','火车票：车次、从、到、日期、发车、车厢、座位、席别、票价、乘客、检票']];
+      ['```车票 … ```','火车票：车次、从、到、日期、发车、车厢、座位、席别、票价、乘客、检票'],
+      ['```书籍 … ```','一本书：书名、作者、出版社、进度（132/360 或 65% 或 读完）、评分（4.5）、书摘'],
+      ['```影视 … ```','电影票（剧集也行）：片名、类型、导演、主演、日期、场次、影院 / 平台、影厅、座位、集数、评分、短评'],
+      ['```音乐 … ```','一张唱片：歌名、歌手、专辑、时长、听到（1:48）、评分、歌词']];
     const tb=el('table');rows.forEach(([a,b])=>{const tr=el('tr');tr.append(el('td',null,a),el('td',null,b));tb.appendChild(tr);});
     help.appendChild(tb);
     help.appendChild(el('div','hintx','漫画格里 # 后面写小插画的名字：'+T.stickerList.map(x=>x.key+' '+x.label).join(' · ')));

@@ -201,12 +201,20 @@
      total, "* 分组: ¥" a bold line, "- 明细: ¥" an indented one, "名称: 内容" a line; anything else, centred.
      机票 (```flight) and 车票 (```train) take the items they know (航班、从、到、日期、座位 … see TICKET_KEYS),
      whatever else is written is left off. All made of text nodes: nothing written is taken as HTML. */
-  const TICKET_NAMES={receipt:'receipt',bill:'receipt','账单':'receipt','小票':'receipt',flight:'flight','机票':'flight','登机牌':'flight',train:'train','车票':'train','火车票':'train'};
+  const TICKET_NAMES={receipt:'receipt',bill:'receipt','账单':'receipt','小票':'receipt',flight:'flight','机票':'flight','登机牌':'flight',train:'train','车票':'train','火车票':'train',
+    book:'book','书':'book','书籍':'book','读书':'book',movie:'movie',film:'movie',tv:'movie','电影':'movie','影视':'movie','剧':'movie','追剧':'movie',
+    music:'music',song:'music','音乐':'music','歌':'music','听歌':'music'};
   const TICKET_KEYS={
     airline:['航空','航空公司','airline'],flight:['航班','航班号','flight'],from:['从','出发','起点','from'],to:['到','目的地','终点','to'],
     date:['日期','date'],dep:['起飞','发车','出发时间','开车','dep','time'],arr:['到达','到达时间','arr'],gate:['登机口','检票','检票口','gate'],
     seat:['座位','座','seat'],cls:['舱位','席别','等级','class'],name:['乘客','旅客','姓名','name'],boarding:['登机','登机时间','boarding'],
     train:['车次','train'],car:['车厢','car'],price:['票价','价格','price'],no:['票号','no'],
+    // 书籍 / 影视 / 音乐
+    title:['书名','片名','剧名','歌名','标题','title'],author:['作者','author'],publisher:['出版社','出版','publisher'],
+    progress:['进度','读到','progress'],rating:['评分','打分','rating'],quote:['书摘','摘录','短评','一句话','歌词','quote','lyric'],
+    director:['导演','director'],cast:['主演','演员','cast'],where:['影院','平台','在哪看','cinema','where'],hall:['影厅','厅','hall'],
+    episode:['集数','季','episode'],type:['类型','type'],artist:['歌手','艺人','乐队','artist'],album:['专辑','album'],
+    length:['时长','length'],at:['听到','at'],show:['场次','放映'],
   };
   const KEY_OF={};Object.entries(TICKET_KEYS).forEach(([k,names])=>names.forEach(n=>{KEY_OF[n.toLowerCase()]=k;}));
   const kvOf=line=>{const m=/^\s*(.+?)\s*(?:：|:\s)\s*(.*?)\s*$/.exec(line);return m?[m[1],m[2]]:null;};
@@ -217,8 +225,75 @@
   }
   // "PEK 北京首都" → code PEK, name 北京首都; "北京南 Beijingnan" → 北京南, Beijingnan
   const place=v=>{const s=String(v||'').trim(),m=/^([A-Z]{3})\s+(.+)$/.exec(s);if(m)return{code:m[1],name:m[2]};const n=/^(\S+)\s+(.+)$/.exec(s);return n?{code:n[1],name:n[2]}:{code:s,name:''};};
+  // a colour of its own for a title (the book's cover, the record's sleeve): the same title, the same colour
+  const hueOf=s=>{let h=5;for(const ch of String(s||''))h=(h*33+ch.charCodeAt(0))>>>0;return h%360;};
+  // 评分: "4.5", "9/10", "★★★★" → five stars filled that far
+  function stars(v){
+    const s=String(v||'').trim();if(!s)return null;
+    let r=(s.match(/★/g)||[]).length;
+    if(!r){const m=/^(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+))?/.exec(s);if(!m)return null;r=+m[1]*(m[2]?5/+m[2]:(+m[1]>5?.5:1));}
+    r=Math.max(0,Math.min(5,r));
+    const w=el('span','jstars');w.setAttribute('role','img');w.setAttribute('aria-label','评分 '+(Math.round(r*10)/10)+' / 5');
+    const on=el('span','on','★★★★★');on.style.width=(r/5*100)+'%';w.append(el('span','off','★★★★★'),on);
+    return w;
+  }
+  // a bar filled to a fraction (0–1)
+  const bar=(k,cls)=>{const b=el('div','jbar'+(cls?' '+cls:''));const f=el('i');f.style.width=Math.round(Math.max(0,Math.min(1,k))*100)+'%';b.appendChild(f);return b;};
+  const secs=t=>{const m=/^(\d+):(\d{1,2})$/.exec(String(t||'').trim());return m?+m[1]*60+ +m[2]:null;};
   const PLANE='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15.5v-1.8l-8-5V3.5a1.5 1.5 0 0 0-3 0v5.2l-8 5v1.8l8-2.5v5.3l-2 1.5V21l3.5-1 3.5 1v-1.2l-2-1.5V13z" fill="currentColor"/></svg>';
   const TICKETS={
+    book(lines){
+      const f=ticketFields(lines),title=f.title||'书名',h=hueOf(title);
+      const card=el('div','jticket jbook');
+      const cover=el('div','jb-cover');cover.style.setProperty('--h',h);
+      // a Chinese title runs down the cover a character to a line; any other goes across
+      cover.append(el('b',/[\u3400-\u9fff]/.test(title)?'v':null,title),el('small',null,f.author||''));
+      const info=el('div','jb-info');
+      // 进度: "132/360" pages, "65%", or 读完
+      let k=null,said='';
+      const p=String(f.progress||'').trim(),pm=/^(\d+)\s*\/\s*(\d+)/.exec(p),pc=/^(\d+(?:\.\d+)?)\s*%$/.exec(p);
+      if(pm){k=+pm[1]/Math.max(1,+pm[2]);said=pm[1]+' / '+pm[2]+' 页';}else if(pc){k=+pc[1]/100;said=pc[1]+'%';}else if(/读完|完/.test(p)){k=1;said='读完了';}else if(p)said=p;
+      info.append(el('div','jb-state',k===1?'读完 FINISHED':'在读 READING'),el('div','jb-title',title));
+      const by=[f.author,f.publisher].filter(Boolean).join(' · ');if(by)info.appendChild(el('div','jb-by',by));
+      const st=stars(f.rating);if(st)info.appendChild(st);
+      if(k!=null||said){const pr=el('div','jb-progress');if(k!=null)pr.appendChild(bar(k));pr.appendChild(el('span',null,said));info.appendChild(pr);}
+      if(f.quote)info.appendChild(el('blockquote','jb-quote',f.quote));
+      card.append(cover,info);
+      return card;
+    },
+    movie(lines){
+      const f=ticketFields(lines),tv=/剧|tv|series|综艺|动画/i.test(f.type||'')||!!f.episode;
+      const card=el('div','jticket jmovie'),stub=el('div','jm-stub'),main=el('div','jm-main');
+      stub.append(el('b',null,tv?'追剧':'入场券'),el('small',null,tv?'NOW WATCHING':'ADMIT ONE'));
+      const top=el('div','jm-top');top.append(el('span',null,tv?'剧集 · TV':'电影票 · CINEMA'),el('span',null,[f.date,f.show||f.dep].filter(Boolean).join('  ')));
+      const t=el('div','jm-title',f.title||'片名');if(f.type)t.appendChild(el('span','jm-type',f.type));
+      const rows=el('div','jm-fields');
+      [['影院 / 平台',f.where],['影厅',f.hall],['座位',f.seat],['集数',f.episode]].filter(x=>x[1]).slice(0,3)
+        .forEach(([k,v])=>{const d=el('div');d.append(el('small',null,k),el('b',null,v));rows.appendChild(d);});
+      main.append(top,t);
+      if(rows.children.length)main.appendChild(rows);
+      const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join('　');if(who)main.appendChild(el('div','jm-who',who));
+      const foot=el('div','jm-foot');const st=stars(f.rating);if(st)foot.appendChild(st);if(f.quote)foot.appendChild(el('span','jm-quote','“'+f.quote+'”'));
+      if(foot.children.length)main.appendChild(foot);
+      card.append(stub,main);
+      return card;
+    },
+    music(lines){
+      const f=ticketFields(lines),title=f.title||'歌名',h=hueOf((f.album||'')+title);
+      const card=el('div','jticket jmusic');
+      const art=el('div','jmu-art');art.style.setProperty('--h',h);
+      const disc=el('div','jmu-disc'),sleeve=el('div','jmu-sleeve');sleeve.appendChild(el('span',null,f.album||title));
+      art.append(disc,sleeve);
+      const info=el('div','jmu-info');
+      info.append(el('div','jmu-now','♪ 正在听 NOW PLAYING'),el('div','jmu-title',title));
+      const by=[f.artist,f.album&&'《'+f.album+'》'].filter(Boolean).join(' · ');if(by)info.appendChild(el('div','jmu-by',by));
+      const a=secs(f.at),L=secs(f.length);
+      if(L){const pr=el('div','jmu-progress');pr.append(el('span',null,f.at||'0:00'),bar(a!=null?a/L:0,'knob'),el('span',null,f.length));info.appendChild(pr);}
+      const st=stars(f.rating);if(st)info.appendChild(st);
+      if(f.quote)info.appendChild(el('div','jmu-lyric','♫ '+f.quote));
+      card.append(art,info);
+      return card;
+    },
     receipt(lines){
       const r=el('div','jticket jreceipt');
       lines.forEach(raw=>{
