@@ -4,7 +4,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false;
+  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false,metingSecret=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | 'pages' (文章管理) | null (今天)
   let backTo=null;         // 'pages' | 'jots': the page open was picked there, its back button goes back
@@ -851,16 +851,23 @@
       if(!id){out.textContent='✗ 没认出歌曲 ID：贴 music.163.com 的歌曲链接，或者直接写数字 ID';out.className='mtest err';return;}
       t.disabled=true;out.className='mtest';out.textContent='正在取……';
       try{
-        const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT);
+        const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT,ti.value.trim());
         out.textContent='';out.className='mtest ok';
         if(x.pic){const i=el('img');i.src=x.pic;i.alt='';i.referrerPolicy='no-referrer';out.appendChild(i);}
         const au=el('audio');au.controls=true;au.preload='none';au.src=x.url;
         const tx=el('span');tx.append(el('b',null,'✓ '+(x.title||'（没有歌名）')),el('small',null,(x.artist||'')+(x.lrc?' · 有歌词':' · 没有歌词')));
         out.append(tx,au);
-      }catch(e){out.textContent='✗ 没取到：这个接口现在用不了，或者这首歌放不了（VIP / 下架）。换个接口或换首歌再试。';out.className='mtest err';}
+      }catch(e){out.textContent='✗ 没取到：'+(e&&/[\u4e00-\u9fff]/.test(e.message)?e.message:'这个接口现在用不了，或者这首歌放不了（VIP / 下架）。换个接口或换首歌再试。');out.className='mtest err';}
       finally{t.disabled=false;}
     };
-    w.append(f,chips,row,out);
+    // a Meting API that wants a token ("需要 API Token"): the Worker sends it (Authorization: Bearer); like the AI's
+    // settings it stays in the admin, never in the pages
+    const tk=field('Meting token（接口要的话才填）','metingToken','password',{max:300,ph:metingSecret?'（空着：用 Worker 密钥 METING_TOKEN）':'接口提示「需要 API Token」时填这里',
+      hint:'只存在后台和 Worker 里，读者的网页上看不到；手帐请求 Meting 时由 Worker 带上 Authorization: Bearer。'});
+    const ti=tk.querySelector('input');ti.autocomplete='off';ti.spellcheck=false;
+    const eye=el('button','b small','显示');eye.type='button';eye.onclick=()=>{const on=ti.type==='password';ti.type=on?'text':'password';eye.textContent=on?'隐藏':'显示';};
+    const trow=el('div','drow');trow.style.alignItems='start';eye.style.marginTop='22px';trow.append(tk,eye);
+    w.append(f,chips,trow,row,out);
     return w;
   }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
@@ -1560,7 +1567,7 @@
     try{
       if(isSet(sel)){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
-        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
+        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);metingSecret=!!(r.meting&&r.meting.secretSet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
         drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
@@ -1609,7 +1616,7 @@
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
       // all the settings, the AI's too (the public /api/settings leaves those out)
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/admin/settings')]);
-      entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);bookLocked=!!e.bookLocked;
+      entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);metingSecret=!!(s.meting&&s.meting.secretSet);bookLocked=!!e.bookLocked;
       T.useSite(settings);   // the preview draws pages as the book does (the little map needs the Mapbox token)
       entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();
