@@ -15,6 +15,8 @@ type Env = {
   ADMIN_GITHUB_LOGIN: string;
   /** "1" only in .dev.vars for local `wrangler dev` */
   DEV_BYPASS_AUTH?: string;
+  /** 从豆瓣填: another NeoDB instance than neodb.social (NeoDB is federated) */
+  NEODB_URL?: string;
   /** secret: the key for the AI set in 手帐设置 → AI (`wrangler secret put AI_API_KEY`); ANTHROPIC_API_KEY is read
       when it isn't set. Without either the AI features are off. */
   AI_API_KEY?: string;
@@ -161,7 +163,9 @@ const SETTING_DEFAULTS: Record<string, string> = {
   coverStyle: "slate",
   // Mapbox: a public token (pk.…, restricted to this site's URL in the Mapbox account) for the map page
   // (/map/), the little maps on the pages, the admin's map and its place names. Empty: no maps.
-  mapboxToken: "", mapOnPage: "show",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
+  mapboxToken: "", mapOnPage: "show",
+  // 网易云 on the pages: a Meting API (any public one, or one's own; "" = the default in render.js)
+  metingApi: "",  // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
   // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
@@ -184,7 +188,7 @@ async function aiConfig(env: Env): Promise<AiConfig> {
 const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
   readmeName: 30, readmeRole: 40, readmeLife: 60, readmeSince: 20, readmeSign: 30, backTitle: 12, backImprint: 80,
-  aiBaseUrl: 200, aiModel: 80, mapboxToken: 300,
+  aiBaseUrl: 200, aiModel: 80, mapboxToken: 300, metingApi: 200,
 };
 const COVER_STICKERS = new Set(["mug", "nas", "cloud", "ticket", "film"]);
 const MAX_COVER_PHOTOS = 4;
@@ -224,6 +228,7 @@ function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<st
   if (v.nightPaper !== undefined && v.nightPaper !== "auto" && v.nightPaper !== "off") return { ok: false, error: "nightPaper 只能是 auto / off" };
   if (v.paperTone !== undefined && !PAPER_TONES.includes(v.paperTone)) return { ok: false, error: "paperTone 只能是 " + PAPER_TONES.join(" / ") };
   if (v.mapboxToken && !/^pk\.[\w.-]+$/.test(v.mapboxToken)) return { ok: false, error: "Mapbox token 要用公开的那种（pk. 开头）" };
+  if (v.metingApi && !/^https:\/\/[^\s]+$/i.test(v.metingApi)) return { ok: false, error: "Meting API 要以 https:// 开头" };
   if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
@@ -837,6 +842,82 @@ app.post("/api/admin/photos", async (c) => {
   const key = `p/${crypto.randomUUID()}.${ext}`;
   await c.env.PHOTOS.put(key, buf, { httpMetadata: { contentType: type } });
   return c.json({ key, url: `/img/${key}` }, 201);
+});
+
+/* ---------------- 从豆瓣填: a book, a film or an album, looked up ----------------
+   Douban has had no open API since 2018 and turns away requests from servers like this one, so the looking up
+   goes to NeoDB (neodb.social), an open catalogue that takes in Douban's entries: a Douban (or NeoDB, IMDb,
+   Goodreads …) link is fetched from it, anything else searched in it. An ISBN NeoDB doesn't know is tried at
+   Open Library. What comes back is the few fields the page's cards use. */
+const NEODB = "https://neodb.social";
+const UA = { "User-Agent": "techo-journal (+https://github.com/cuijianzhuang/techo)", Accept: "application/json" };
+type Found = { kind: "book" | "film" | "music"; title: string; year?: string; author?: string; publisher?: string; isbn?: string;
+  director?: string; cast?: string; genre?: string; artist?: string; rating?: number; brief?: string; cover?: string; url?: string; series?: boolean };
+const names = (v: unknown, n = 3) => (Array.isArray(v) ? v : v ? [v] : []).map((x) => String(typeof x === "object" && x ? (x as { name?: string }).name ?? "" : x)).filter(Boolean).slice(0, n).join(" / ");
+function fromNeodb(x: Record<string, unknown>, base = NEODB): Found | null {
+  const cat = String(x.category || x.type || "").toLowerCase();
+  const kind = /book|edition/.test(cat) ? "book" : /movie|tv|season|episode/.test(cat) ? "film" : /music|album/.test(cat) ? "music" : null;
+  if (!kind) return null;
+  const s = (k: string) => (x[k] == null ? "" : String(x[k]).trim());
+  const brief = s("description") || s("brief");
+  const url = s("url"), abs = /^https?:/.test(url) ? url : url ? base + url : s("id");
+  return {
+    kind, title: s("display_title") || s("title"), year: s("year") || s("pub_year") || s("release_date").slice(0, 4) || undefined,
+    author: names(x.author) || undefined, publisher: s("pub_house") || undefined, isbn: s("isbn") || undefined,
+    director: names(x.director) || undefined, cast: names(x.actor) || undefined, genre: names(x.genre) || undefined,
+    artist: names(x.artist) || undefined, rating: typeof x.rating === "number" ? Math.round(x.rating * 10) / 10 : undefined,
+    brief: brief ? [...brief.replace(/\s+/g, " ")].slice(0, 120).join("") : undefined, cover: s("cover_image_url") || undefined, url: abs || undefined,
+    series: /tv|season|episode/.test(cat) || undefined,
+  };
+}
+app.post("/api/admin/lookup", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as { q?: unknown; kind?: unknown } | null;
+  const q = typeof o?.q === "string" ? o.q.trim().slice(0, 300) : "";
+  const kind = o?.kind === "film" || o?.kind === "music" ? o.kind : "book";
+  if (!q) return bad(c, 400, "写一个豆瓣链接，或者书名 / 片名 / 专辑名");
+  const neodb = (c.env.NEODB_URL || NEODB).replace(/\/+$/, "");
+  try {
+    if (/^https?:\/\//i.test(q)) {
+      const r = await fetch(`${neodb}/api/catalog/fetch?url=${encodeURIComponent(q)}`, { headers: UA });
+      if (r.status === 202) return c.json({ items: [], pending: true, message: "NeoDB 正在从豆瓣抓这一条，过十几秒再点一次查找" });
+      if (!r.ok) return bad(c, 404, `NeoDB 没认出这个链接（${r.status}）`);
+      const it = fromNeodb((await r.json()) as Record<string, unknown>, neodb);
+      return c.json({ items: it ? [it] : [] });
+    }
+    // (films: searched in everything, then the films and series kept — movie and tv are two categories there)
+    const r = await fetch(`${neodb}/api/catalog/search?query=${encodeURIComponent(q)}${kind === "film" ? "" : "&category=" + kind}&page=1`, { headers: UA });
+    const items = (r.ok ? (((await r.json()) as { data?: Record<string, unknown>[] }).data || []).map((x) => fromNeodb(x, neodb)) : [])
+      .filter((x): x is Found => !!x && x.kind === kind).slice(0, 8);
+    // an ISBN NeoDB doesn't have: Open Library
+    const isbn = q.replace(/[-\s]/g, "");
+    if (!items.length && kind === "book" && /^(\d{9}[\dX]|\d{13})$/i.test(isbn)) {
+      const ol = await fetch(`https://openlibrary.org/isbn/${isbn}.json`, { headers: UA });
+      if (ol.ok) {
+        const b = (await ol.json()) as { title?: string; publishers?: string[]; publish_date?: string };
+        items.push({ kind: "book", title: b.title || isbn, isbn, publisher: (b.publishers || [])[0], year: (b.publish_date || "").match(/\d{4}/)?.[0],
+          cover: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`, url: `https://openlibrary.org/isbn/${isbn}` });
+      }
+    }
+    return c.json({ items });
+  } catch (e) {
+    console.error("lookup", e);
+    return bad(c, 500, "查的时候出错了（NeoDB 连不上？），稍后再试");
+  }
+});
+/* a cover found by 从豆瓣填, kept as the journal's own picture (p/<uuid>) so the page doesn't lean on another site */
+app.post("/api/admin/cover", async (c) => {
+  const o = (await c.req.json().catch(() => null)) as { url?: unknown } | null;
+  const url = typeof o?.url === "string" ? o.url.trim() : "";
+  if (!/^https:\/\/[^\s]+$/i.test(url)) return bad(c, 400, "封面地址要以 https:// 开头");
+  const r = await fetch(url, { headers: { "User-Agent": UA["User-Agent"] } }).catch(() => null);
+  if (!r || !r.ok) return bad(c, 404, "封面没取到");
+  const type = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase(), ext = IMAGE_TYPES[type];
+  if (!ext) return bad(c, 415, "封面不是图片");
+  const buf = await r.arrayBuffer();
+  if (!buf.byteLength || buf.byteLength > MAX_PHOTO) return bad(c, 413, "封面太大了");
+  const key = `p/${crypto.randomUUID()}.${ext}`;
+  await c.env.PHOTOS.put(key, buf, { httpMetadata: { contentType: type } });
+  return c.json({ key }, 201);
 });
 
 app.all("/api/*", (c) => bad(c, 404, "没有这个接口"));
