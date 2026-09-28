@@ -71,7 +71,7 @@
 /* a pile: cards one right after another lie on each other, each a little lower and askew; the pointer lifts one to the top */
 .jp .jtext .jstack{clear:both;display:grid;margin:16px 0 14px}
 .jp .jtext .jstack{position:relative;perspective:900px}
-.jp .jtext .jstack>.jticket{grid-area:1/1;align-self:start;max-width:calc(100% - 22px);margin:calc(var(--i) * 72px) auto 0;cursor:pointer;
+.jp .jtext .jstack>.jticket{grid-area:1/1;align-self:start;max-width:calc(100% - 22px);margin:calc(var(--i) * var(--gap,72px)) auto 0;cursor:pointer;
   transform-origin:50% 0;transition:transform .2s ease,box-shadow .2s ease,rotate .17s ease-in-out}
 .jp .jtext .jstack>.jticket:nth-child(odd){transform:translateX(-5px) rotate(calc(-1.4deg + var(--i) * .4deg))}
 .jp .jtext .jstack>.jticket:nth-child(even){transform:translateX(6px) rotate(1.3deg)}
