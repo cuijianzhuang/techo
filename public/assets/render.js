@@ -1282,13 +1282,13 @@
     paint();return b;
   }
   /* The switch, animated: the other hour spreads out from the button in a widening circle, like a lamp
-     switched on or off (a view transition); where there are none, the colours ease across; with reduced
-     motion, it's simply done. The icon turns as it changes. */
+     switched on or off (a view transition, the new page itself in the circle); where there are none, or the
+     page is WebGL, the colours ease across; with reduced motion, it's simply done. The icon turns as it
+     changes. */
   const THEME_CSS='::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}'+
     '::view-transition-new(root){z-index:2}::view-transition-old(root){z-index:1}'+
     '.th-in{animation:th-in .55s cubic-bezier(.3,1.4,.5,1) both}@keyframes th-in{from{transform:rotate(-100deg) scale(.3);opacity:0}}'+
     'html.th-fade,html.th-fade *{transition:background-color .45s ease,color .45s ease,border-color .45s ease,fill .45s ease,stroke .45s ease!important}'+
-    '.th-veil{position:fixed;inset:0;z-index:9999;pointer-events:none;transition:clip-path .5s cubic-bezier(.45,0,.2,1),opacity .35s ease}'+
     '@media (prefers-reduced-motion:reduce){.th-in{animation:none}}';
   function themeSwitch(from,change){
     if(!document.getElementById('th-css')){const st=document.createElement('style');st.id='th-css';st.textContent=THEME_CSS;document.head.appendChild(st);}
@@ -1297,20 +1297,10 @@
     const r=from.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
     const R=Math.hypot(Math.max(x,innerWidth-x),Math.max(y,innerHeight-y));
     // The 3D book can't be pictured by a view transition (its live pages are 3D-transformed over a WebGL
-    // canvas, which the snapshot misses), nor can a Mapbox map (/map/, WebGL too): there a veil of the other hour's desk spreads out from the button,
-    // the switch happens under it, and it lifts.
-    if(document.body.classList.contains('is-3d')||document.querySelector('.mapboxgl-canvas')){
-      const v=el('div','th-veil'),at=' at '+x+'px '+y+'px)';
-      v.style.background=night()?'#e8e6e1':'#1e1f22';v.style.clipPath='circle(0px'+at;
-      document.body.appendChild(v);v.getBoundingClientRect();
-      v.style.clipPath='circle('+R+'px'+at;
-      setTimeout(()=>{
-        change();
-        requestAnimationFrame(()=>requestAnimationFrame(()=>{v.style.opacity='0';setTimeout(()=>v.remove(),400);}));
-      },520);
-      return;
-    }
-    if(!document.startViewTransition){
+    // canvas, which the snapshot misses), nor can a Mapbox map (/map/, WebGL too): there the colours ease
+    // across where they are, nothing laid over the book or the map meanwhile.
+    const live=document.body.classList.contains('is-3d')||document.querySelector('.mapboxgl-canvas');
+    if(live||!document.startViewTransition){
       root.classList.add('th-fade');change();
       clearTimeout(themeSwitch.t);themeSwitch.t=setTimeout(()=>root.classList.remove('th-fade'),500);
       return;
