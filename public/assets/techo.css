@@ -474,6 +474,14 @@ html{scrollbar-gutter:stable}
 .jst-n{position:absolute;right:6px;top:-15px;z-index:6;padding:1px 7px;border-radius:9px;background:var(--paper);border:1px solid var(--grid-strong);
   color:var(--ink-soft);font:600 10px/1.4 var(--print);font-style:normal;letter-spacing:.5px;font-variant-numeric:tabular-nums;pointer-events:none}
 @media (prefers-reduced-motion:reduce){.jp .jtext .jstack>.jticket{transition:none}}
+/* 贴页 (render.js layCollage): the cards on a page of their own, each as it is, a little askew, one over the
+   corner of the one before, down the page left and right; all smaller together (--z) when there are many */
+.jp .jtext .jcollage{display:flex;flex-direction:column;align-items:flex-start;padding:10px 8px 6px}
+.jp .jtext .jcollage>.jticket{flex:none;zoom:var(--z,1);margin:0 0 -4px;transform:rotate(-2.2deg)}
+.jp .jtext .jcollage>.jticket:nth-child(even){align-self:flex-end;transform:rotate(1.8deg)}
+.jp .jtext .jcollage>.jticket:nth-child(4n+3){transform:rotate(-.9deg);margin-left:14px}
+.jp .jtext .jcollage>.jticket:last-child{margin-bottom:8px}
+.jp .jtext .jcollage>.jticket:hover{position:relative;z-index:3}
 /* shared by 书籍 / 影视 / 音乐: five stars filled so far, and a bar */
 .jstars{position:relative;display:inline-block;align-self:flex-start;font:400 14px/1 var(--print);letter-spacing:0;white-space:nowrap}
 .jstars .off{color:#d6d0c2}

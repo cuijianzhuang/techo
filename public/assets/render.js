@@ -169,7 +169,7 @@
   }
   /* the words without their marks, for a line of them somewhere else (the timeline page) */
   function plainText(md){
-    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*$/gm,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
+    return String(md||'').replace(/```[\s\S]*?```/g,' ').replace(/^\s*\+{3,}\s*(?:贴页|拼贴|collage)?\s*$/gim,' ').replace(NETEASE_LINE,' ').replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm,'')
       .replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/(\*\*|__|~~|==|`|\*)/g,'').replace(/[#＃][a-z]+/g,'').replace(/\s+/g,' ').trim();
   }
   function panel(time,rest){
@@ -187,7 +187,7 @@
   const BLOCKS=[
     ['fence',/^\s*```/],
     ['h',/^\s*(#{1,3})\s+(.+)$/],
-    ['brk',/^\s*\+{3,}\s*$/],
+    ['brk',/^\s*\+{3,}\s*(贴页|拼贴|collage)?\s*$/i],
     ['hr',/^\s*([-*_])(\s*\1){2,}\s*$/],
     ['check',/^\s*(?:[-*+]\s+)?\[( |x|X|✓|√)\]\s+(.*)$/],
     ['ul',/^\s*[-*+•]\s+(.*)$/],
@@ -494,9 +494,10 @@
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
     // a card taped on; one right after another: a pile, each on the one before and a little lower, the top of
     // each showing (what it is); a tap on one turns the ones over it back and brings it up (pickCard)
+    let loose=false;                          // after +++ 贴页: the cards lie each on its own (layCollage)
     const stick=(c,text)=>{
       fasten(c,text);
-      const prev=into.lastElementChild,pile=n=>n&&n.classList.contains('jticket');
+      const prev=into.lastElementChild,pile=n=>!loose&&n&&n.classList.contains('jticket');
       if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
       else if(pile(c)&&prev&&prev.classList.contains('jstack'))prev.appendChild(c);
       else open('ticket',c);
@@ -518,7 +519,8 @@
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
       if(kind==='hr'){open('hr',el('div','jhr'));run=null;continue;}
-      if(kind==='brk'){open('brk',el('div','jbrk'));run=null;continue;}   // +++: the words go on over the page (entryPages)
+      // +++: the words go on over the page (entryPages); +++ 贴页: the cards after it on a page of their own
+      if(kind==='brk'){loose=!!m[1];open('brk',el('div','jbrk'+(loose?' collage':'')));run=null;continue;}
       if(!run||run.kind!==kind){
         const node=kind==='check'?el('ul','check'):kind==='ul'?el('ul','jul'):kind==='ol'?el('ol','jol'):
           kind==='quote'?el('div','label jnote'):kind==='panel'?el('div','jcomic'):el('p');
@@ -654,8 +656,9 @@
      a code block …): a paragraph that doesn't fit what's left of a page is split after a sentence, a list or
      a comic strip after an item, and a heading never ends a page. A +++ line starts a new page. A block too
      big even for a page of its own is cut off at its foot, as a page always was. A card that doesn't fit what's
-     left goes to the top of the next page, and the words after it fill the room first. */
-  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17,FILL_MIN=90;
+     left goes to the top of the next page, and the words after it fill the room first. +++ 贴页 lays the cards
+     after it out on a page of their own (layCollage). */
+  const FIT_MAX=19,FIT_MIN=16,RUN_FS=17,FILL_MIN=90,Z_MIN=.6;
   const over=t=>t.scrollHeight>t.clientHeight+1;
   const SENTENCE=/[^。！？!?；;…]*[。！？!?；;…]+[”’」』）)\]]*\s*|[^。！？!?；;…]+/g;
   function entryPages(en,side){
@@ -680,11 +683,40 @@
     let later=[];
     const room=()=>{const w=words(),l=w[w.length-1];return l?s.tx.getBoundingClientRect().bottom-l.getBoundingClientRect().bottom:s.tx.clientHeight;};
     const turn=(...first)=>{keepHeading();queue.unshift(...later,...first);later=[];next();};
+    /* 贴页 (+++ 贴页 up to the next +++): the cards on a page of their own, each as it is, a little askew, one
+       over the corner of the one before, down the page left and right; smaller together (--z) if that's what
+       it takes to have them all there, and what still doesn't fit on another such page. Words in the section
+       follow the cards. */
+    const layCollage=()=>{
+      const sec=[];while(queue.length&&!queue[0].classList.contains('jbrk'))sec.push(queue.shift());
+      const cards=sec.filter(x=>x.matches('.jticket')),rest=sec.filter(x=>!x.matches('.jticket'));
+      if(!cards.length){queue.unshift(...rest);return;}
+      if(words().length){keepHeading();next();}
+      s.p.classList.add('collage');
+      const box=el('div','jcollage');s.tx.appendChild(box);box.append(...cards);
+      if(!queue.length&&!rest.length)entryEnd(s,en,true);     // the last page: its foot takes room too
+      const shrink=()=>{let z=1;box.style.setProperty('--z',z);
+        while(over(s.tx)&&z>Z_MIN){z=Math.max(Z_MIN,Math.round((z-.05)*100)/100);box.style.setProperty('--z',z);}};
+      shrink();
+      const more=[];while(over(s.tx)&&box.children.length>1)more.unshift(box.removeChild(box.lastElementChild));
+      if(more.length){
+        // as many pages as it takes, the cards shared out evenly among them (not a crowded page and a lone card)
+        const fit=box.children.length,all=fit+more.length,per=Math.ceil(all/Math.ceil(all/fit));
+        while(box.children.length>per)more.unshift(box.removeChild(box.lastElementChild));
+        entryEnd(s,en,false);shrink();
+      }
+      queue.unshift(...(more.length?[el('div','jbrk collage'),...more]:[]),...rest);
+    };
     const run=()=>{
       while(queue.length||later.length){
         if(!queue.length){turn();continue;}
         const b=queue.shift();
-        if(b.classList.contains('jbrk')){if(later.length)turn(b);else if(words().length)next();continue;}
+        if(b.classList.contains('jbrk')){
+          if(later.length)turn(b);
+          else if(b.classList.contains('collage'))layCollage();
+          else if(words().length)next();
+          continue;
+        }
         s.tx.appendChild(b);
         if(!over(s.tx))continue;
         s.tx.removeChild(b);

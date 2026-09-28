@@ -1285,6 +1285,9 @@
         o.onclick=()=>{close();block(TICKET_TPL[k]());};
         menu.appendChild(o);
       });
+      // 贴页: the cards written after it on a page of their own
+      {const o=el('button',null,'📌 贴页');o.type='button';o.setAttribute('role','menuitem');o.title='下面的卡片单独贴一页';
+        o.addEventListener('mousedown',e=>e.preventDefault());o.onclick=()=>{close();block('+++ 贴页\n');};menu.appendChild(o);}
       b.addEventListener('mousedown',e=>e.preventDefault());
       b.onclick=()=>{menu.hidden=!menu.hidden;b.setAttribute('aria-expanded',String(!menu.hidden));};
       document.addEventListener('click',e=>{if(!wrap.contains(e.target))close();});
@@ -1402,6 +1405,7 @@
       ['@09:10 站会：今天修什么？ #laptop','漫画格：时间 · 在做什么、对话气泡、小插画（相邻几行排成一条）'],
       ['空一行','分段；段落里换行就是换行'],
       ['+++','换页：后面的从下一页写起（一页写不下时也会自动接到下一页）'],
+      ['+++ 贴页','后面的卡片（到下一个 +++ 为止）单独贴一页：原样大小，歪一点、压一个角；多了一起缩小，还放不下就平分到几页。「📎 贴一张」菜单里的「📌 贴页」会插入它'],
       ['```账单 … ```','一张小票：# 标题、> 小字、--- 虚线、= 合计: ¥、* 分组: ¥、- 明细: ¥'],
       ['```机票 … ```','登机牌：航空、航班、从、到、日期、起飞、到达、登机口、座位、舱位、乘客'],
       ['```车票 … ```','火车票：车次、从、到、日期、发车、车厢、座位、席别、票价、乘客、检票'],
