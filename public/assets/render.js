@@ -332,8 +332,9 @@
     });
   }
   const PLANE='<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15.5v-1.8l-8-5V3.5a1.5 1.5 0 0 0-3 0v5.2l-8 5v1.8l8-2.5v5.3l-2 1.5V21l3.5-1 3.5 1v-1.2l-2-1.5V13z" fill="currentColor"/></svg>';
+  const RECEIPT_ITEMS=6;
   const TICKETS={
-    book(lines){
+    book(lines,wide){
       const f=ticketFields(lines),title=f.title||'书名',h=hueOf(title);
       const card=el('div','jticket jbook');
       const cover=el('div','jb-cover');cover.style.setProperty('--h',h);
@@ -348,7 +349,7 @@
       const p=String(f.progress||'').trim(),pm=/^(\d+)\s*\/\s*(\d+)/.exec(p),pc=/^(\d+(?:\.\d+)?)\s*%$/.exec(p);
       if(pm){k=+pm[1]/Math.max(1,+pm[2]);said=pm[1]+' / '+pm[2]+' 页';}else if(pc){k=+pc[1]/100;said=pc[1]+'%';}else if(/读完|完/.test(p)){k=1;said='读完了';}else if(p)said=p;
       info.append(el('div','jb-state',f.state||(k===1?'读完 FINISHED':'在读 READING')),el('div','jb-title',title));
-      const by=[f.author,f.publisher].filter(Boolean).join(' · ');if(by)info.appendChild(el('div','jb-by',by));
+      const by=(wide?[f.author,f.publisher]:[f.author]).filter(Boolean).join(' · ');if(by)info.appendChild(el('div','jb-by',by));
       const st=stars(f.rating);if(st)info.appendChild(st);
       if(k!=null||said){const pr=el('div','jb-progress');if(k!=null)pr.appendChild(bar(k));pr.appendChild(el('span',null,said));info.appendChild(pr);}
       if(f.quote)info.appendChild(el('blockquote','jb-quote',f.quote));
@@ -356,7 +357,7 @@
       return card;
     },
     // 影视: the film or series itself — its poster in a white border, what it is, its rating, a line about it
-    film(lines){
+    film(lines,wide){
       const f=ticketFields(lines),title=f.title||'片名',tv=SERIES.test(f.type||'')||!!f.episode;
       const card=el('div','jticket jfilm'),poster=el('div','jfi-poster');poster.style.setProperty('--h',hueOf(title));
       const src=imgSrc(f.cover);
@@ -364,35 +365,39 @@
       const info=el('div','jfi-info');
       info.appendChild(el('div','jfi-state',f.state||(tv?'在追 WATCHING':'看过 WATCHED')));
       const t=el('div','jfi-title',title);if(f.year)t.appendChild(el('small',null,f.year));info.appendChild(t);
-      const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join(' / ');if(who)info.appendChild(el('div','jfi-who',who));
-      const tags=[...String(f.type||'').split(/[\/、,，\s]+/).filter(Boolean).slice(0,3),f.episode&&f.episode].filter(Boolean);
-      if(tags.length){const r=el('div','jfi-tags');tags.forEach(x=>r.appendChild(el('span',null,x)));info.appendChild(r);}
+      // who made it, what kind, what it's about: on the whole-width card (整行); the small one keeps to what was
+      // thought of it
+      if(wide){
+        const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join(' / ');if(who)info.appendChild(el('div','jfi-who',who));
+        const tags=[...String(f.type||'').split(/[\/、,，\s]+/).filter(Boolean).slice(0,3),f.episode&&f.episode].filter(Boolean);
+        if(tags.length){const r=el('div','jfi-tags');tags.forEach(x=>r.appendChild(el('span',null,x)));info.appendChild(r);}
+      }
       const st=stars(f.rating);
       if(st){const r=el('div','jfi-rating');const n=/^\d+(?:\.\d+)?/.exec(String(f.rating).trim());if(n)r.appendChild(el('b',null,n[0]));r.appendChild(st);info.appendChild(r);}
-      if(f.brief)info.appendChild(el('div','jfi-brief',f.brief));
+      if(f.brief&&wide)info.appendChild(el('div','jfi-brief',f.brief));
       if(f.quote)info.appendChild(el('div','jfi-quote','“'+f.quote+'”'));
       card.append(poster,info);
       return card;
     },
     // 电影票: a cinema ticket, its red stub torn along the perforation
-    cinema(lines){
+    cinema(lines,wide){
       const f=ticketFields(lines),tv=SERIES.test(f.type||'')||!!f.episode;
       const card=el('div','jticket jmovie'),stub=el('div','jm-stub'),main=el('div','jm-main');
       stub.append(el('b',null,tv?'追剧':'入场券'),el('small',null,tv?'NOW WATCHING':'ADMIT ONE'));
-      const top=el('div','jm-top');top.append(el('span',null,tv?'剧集 · TV':'电影票 · CINEMA'),el('span',null,[f.date,f.show||f.dep].filter(Boolean).join('  ')));
+      const top=el('div','jm-top');top.append(el('span',null,wide?(tv?'剧集 · TV':'电影票 · CINEMA'):''),el('span',null,[f.date,f.show||f.dep].filter(Boolean).join('  ')));
       const t=el('div','jm-title',f.title||'片名');if(f.type)t.appendChild(el('span','jm-type',f.type));
       const rows=el('div','jm-fields');
-      [['影院 / 平台',f.where],['影厅',f.hall],['座位',f.seat],['集数',f.episode]].filter(x=>x[1]).slice(0,3)
+      [['影院 / 平台',f.where],['影厅',f.hall],['座位',f.seat],['集数',f.episode]].filter(x=>x[1]).slice(0,wide?3:2)
         .forEach(([k,v])=>{const d=el('div');d.append(el('small',null,k),el('b',null,v));rows.appendChild(d);});
       main.append(top,t);
       if(rows.children.length)main.appendChild(rows);
-      const who=[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join('　');if(who)main.appendChild(el('div','jm-who',who));
+      const who=wide&&[f.director&&'导演 '+f.director,f.cast&&'主演 '+f.cast].filter(Boolean).join('　');if(who)main.appendChild(el('div','jm-who',who));
       const foot=el('div','jm-foot');const st=stars(f.rating);if(st)foot.appendChild(st);if(f.quote)foot.appendChild(el('span','jm-quote','“'+f.quote+'”'));
       if(foot.children.length)main.appendChild(foot);
       card.append(stub,main);
       return card;
     },
-    music(lines){
+    music(lines,wide){
       const f=ticketFields(lines),ne=neteaseId(f.netease||f.link),title=f.title||(ne?'…':'歌名'),h=hueOf((f.album||'')+(f.title||ne||''));
       const card=el('div','jticket jmusic'+(ne?' netease':''));
       const art=el('div','jmu-art');art.style.setProperty('--h',h);
@@ -402,7 +407,7 @@
       art.append(disc,sleeve);
       const info=el('div','jmu-info');
       const tt=el('div','jmu-title',title),by=el('div','jmu-by',[f.artist,f.album&&'《'+f.album+'》'].filter(Boolean).join(' · '));
-      info.append(el('div','jmu-now',ne?'♪ 网易云音乐 · NOW PLAYING':'♪ 正在听 NOW PLAYING'),tt,by);
+      info.append(el('div','jmu-now',(ne?'♪ 网易云音乐':'♪ 正在听')+(wide?(ne?' · ':' ')+'NOW PLAYING':'')),tt,by);
       const a=secs(f.at),L=secs(f.length);
       let pr=null;
       if(L||ne){
@@ -428,7 +433,7 @@
       }
       return card;
     },
-    receipt(lines){
+    receipt(lines,wide){
       const r=el('div','jticket jreceipt');
       lines.forEach(raw=>{
         let l=raw.trim();if(!l)return;
@@ -448,6 +453,12 @@
         if(!kv){r.appendChild(el('div','jr-text',l));return;}
         const row=el('div',cls);row.append(el('span',null,kv[0]),el('span',null,kv[1]));r.appendChild(row);
       });
+      // a long bill on the small card: the first items, then how many more (the whole of it: 整行)
+      const items=[...r.querySelectorAll('.jr-group,.jr-sub')];
+      if(!wide&&items.length>RECEIPT_ITEMS+1){
+        items.slice(RECEIPT_ITEMS).forEach(x=>x.remove());
+        items[RECEIPT_ITEMS-1].after(el('div','jr-more','…… 还有 '+(items.length-RECEIPT_ITEMS)+' 项'));
+      }
       return r;
     },
     flight(lines){
@@ -494,7 +505,10 @@
     const open=(kind,node)=>{run={kind,node,n:0};into.appendChild(node);return node;};
     // a card taped on; one right after another: a pile, each on the one before (a stack of tickets that won't
     // all lie flat) (the tickets: 账单 / 机票 / 车票 / 电影票; a book, a film or a record lies on its own)
-    const stick=(c,text)=>{
+    const stick=(c,text,wide)=>{
+      // small, as a ticket or a bookmark is, unless written ```… 整行 (a boarding pass and a train ticket are wide
+      // things anyway)
+      if(wide)c.classList.add('wide');else if(!c.matches('.jflight,.jtrain'))c.classList.add('nar');
       fasten(c,text);
       const prev=into.lastElementChild,pile=n=>n&&n.matches('.jreceipt,.jflight,.jtrain,.jmovie');
       if(pile(c)&&pile(prev)){const st=el('div','jstack');prev.replaceWith(st);st.append(prev,c);}
@@ -507,13 +521,13 @@
       if(!line.trim()){run=null;continue;}     // an empty line ends whatever block this was
       let kind='p',m=null;
       for(const [k,re] of BLOCKS){m=re.exec(line);if(m){kind=k;break;}}
-      if(kind==='p'&&neteaseLine(line)){stick(TICKETS.music(['网易云: '+line.trim()]),line);run=null;continue;}
+      if(kind==='p'&&neteaseLine(line)){stick(TICKETS.music(['网易云: '+line.trim()],false),line,false);run=null;continue;}
       if(kind==='fence'){
-        const code=[],info=((/^\s*```\s*(\S*)/.exec(line)||[])[1]||'').toLowerCase();
+        const code=[],info=((/^\s*```\s*(\S*)/.exec(line)||[])[1]||'').toLowerCase(),wide=/整行|宽版|\bwide\b/i.test(line.replace(/^\s*```\s*\S*/,''));
         while(++i<lines.length&&!/^\s*```/.test(lines[i]))code.push(lines[i]);
         // ```receipt / ```flight / ```train (or 账单 / 机票 / 车票): a bill, a boarding pass, a train ticket
         const card=TICKETS[TICKET_NAMES[info]];
-        if(card){stick(card(code),code.join('|'));run=null;continue;}
+        if(card){stick(card(code,wide),code.join('|'),wide);run=null;continue;}
         const pre=open('code',el('pre','jcode'));pre.appendChild(el('code',null,code.join('\n')));run=null;continue;
       }
       if(kind==='h'){open('h',inline(m[2].trim(),el('div','jh jh'+m[1].length)));run=null;continue;}
@@ -536,7 +550,22 @@
       run.n++;
     }
     into.querySelectorAll('.jcomic').forEach(c=>c.classList.add('n'+Math.min(c.children.length,4)));
+    layCards(into);
     return into;
+  }
+  /* Where the small cards lie: several one after another, a board of them in two columns, each where it falls
+     (a column fills down, then the next); one alone with words after it, to one side with the words running
+     round it (right, then left, then right …); the wide ones (整行, a boarding pass, a train ticket) across. */
+  function layCards(into){
+    const card=n=>n.matches('.jticket,.jstack'),wide=n=>!!(n.matches('.wide,.jflight,.jtrain')||n.querySelector('.wide,.jflight,.jtrain'));
+    const kids=[...into.children];let side=0;
+    for(let i=0;i<kids.length;){
+      if(!card(kids[i])||wide(kids[i])){i++;continue;}
+      let j=i;while(j<kids.length&&card(kids[j])&&!wide(kids[j]))j++;
+      if(j-i>1){const b=el('div','jboard');kids[i].before(b);b.append(...kids.slice(i,j));}
+      else if(kids[j]&&kids[j].matches('p,ul,ol,.jnote'))kids[i].classList.add('side',side++%2?'left':'right');
+      i=j;
+    }
   }
 
   /* A diary page. entryShell: the paper, its date and (the first page) the title, the stamp and the photos,
@@ -670,7 +699,7 @@
   // page, up to a character), a list or a comic strip up to an item. [what's left for the next page (null:
   // nothing), whether any of it went on this page]
   function splitBlock(b,tx){
-    const items=b.matches('ul,ol,.jcomic');
+    const items=b.matches('ul,ol,.jcomic,.jboard');
     if(!items&&b.tagName!=='P')return [b,false];
     const parts=[];
     if(items)parts.push(...b.children);
