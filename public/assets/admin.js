@@ -145,7 +145,7 @@
   }
 
   /* ---------- form ---------- */
-  let pvbox=null,pvcap=null,pvAt=0,pvT=0,statusEl=null;
+  let pvbox=null,pvcap=null,pvAt=0,pvN=1,pvT=0,statusEl=null;
   function status(msg,kind){if(statusEl){statusEl.textContent=msg||'';statusEl.className='status'+(kind?' '+kind:'');}}
   function field(label,key,type,opts){
     opts=opts||{};
@@ -175,7 +175,8 @@
     pvbox.textContent='';
     // as it will be in the book: as many pages as it takes, one at a time with ‹ › when there are more
     const ps=T.entryPages(draft,'r');
-    pvAt=Math.min(pvAt,ps.length-1);
+    pvAt=Math.min(pvAt,ps.length-1);pvN=ps.length;
+    pvbox.classList.toggle('turns',pvN>1);pvbox.title=pvN>1?'点左半边上一页，右半边下一页':'';
     ps.forEach((p,i)=>{if(i===pvAt)pvbox.appendChild(p);else p.remove();});
     if(!pvcap)return;
     pvcap.textContent='';
@@ -185,7 +186,7 @@
       b.innerHTML=d<0?chev(d)+'上一页':'下一页'+chev(d);b.onclick=()=>{pvAt+=d;drawPreview();};return b;};
     const at=el('div');at.style.cssText='display:flex;align-items:center;justify-content:center;gap:2px';
     at.append(go(-1),el('span',null,'第 '+(pvAt+1)+' / '+ps.length+' 页'),go(1));
-    pvcap.append(at,el('div',null,'一页写不下，接着往后排'));
+    pvcap.append(at,el('div',null,'一页写不下，接着往后排 · 点页面左右两边也能翻'));
   }
   /* a group of fields: a card with a title. fold: folded away until opened, its title saying what's in it */
   function card(title,nodes,opt){
@@ -330,6 +331,14 @@
     }
     f.append(danger,actBar([s,s2,see]));
     const pv=el('div','pv');pvbox=el('div','pvbox');
+    // a page that runs on: a press on its left half goes back, on its right half on (not on what's pressed for
+    // itself: a button, a link, a card)
+    pvbox.addEventListener('click',e=>{
+      if(pvN<2||e.target.closest('a,button,input,textarea,select,label,summary,.jticket,.jstack,[role=button]'))return;
+      const r=pvbox.getBoundingClientRect(),d=e.clientX<r.left+r.width/2?-1:1;
+      if(pvAt+d<0||pvAt+d>=pvN)return;
+      pvAt+=d;drawPreview();
+    });
     pvcap=el('div','pvcap');
     pv.append(pvbox,pvcap);
     main.append(f,pv);drawPreview();fitPreview(pv);

@@ -302,61 +302,70 @@
   const PAUSE_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 2h3v10H3zM8 2h3v10H8z" fill="currentColor"/></svg>';
   let playing=null;   // the one card playing: another's play stops it
   const clock=t=>{t=Math.max(0,Math.floor(t||0));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
+  /* a song's one player (its sound, its words, what went wrong), whichever card shows it: a page drawn again
+     (the admin's preview turning or being typed into, the book redrawing) finds it as it is, playing or not,
+     and every card of that song on the screen follows it */
+  const players=new Map();
+  const playerOf=id=>{if(!players.has(id))players.set(id,{id,audio:null,lines:null,said:'',failed:false});return players.get(id);};
+  function showPlayer(card,st){
+    const q=s=>card.querySelector(s),a=st.audio,on=!!a&&!a.paused,btn=q('.jmu-play');
+    card.classList.toggle('playing',on);btn.innerHTML=on?PAUSE_ICON:PLAY_ICON;btn.setAttribute('aria-label',on?'暂停':'播放');
+    if(st.failed)card.classList.add('failed');
+    if(a){const d=a.duration||0,t=a.currentTime||0;q('.jmu-progress i').style.width=(d?t/d*100:0)+'%';q('.jmu-at').textContent=clock(t);if(d)q('.jmu-len').textContent=clock(d);}
+    if(st.said)q('.jmu-lyric').textContent=st.said;
+    else if(a&&st.lines&&st.lines.length){let w='';const t=a.currentTime||0;for(const [s,x] of st.lines){if(s<=t+.2)w=x;else break;}if(w)q('.jmu-lyric').textContent='♫ '+w;}
+  }
+  const refresh=st=>document.querySelectorAll('.jmusic.netease').forEach(c=>{if(c.dataset.ne===st.id)showPlayer(c,st);});
   function wirePlayer(card,f){
-    let audio=null,lines=null;
+    const id=neteaseId(f.netease||f.link),st=playerOf(id);
+    card.dataset.ne=id;
     const q=s=>card.querySelector(s);
     const stop=e=>e.stopPropagation();
-    const paint=()=>{
-      const on=!!audio&&!audio.paused,btn=q('.jmu-play');
-      card.classList.toggle('playing',on);btn.innerHTML=on?PAUSE_ICON:PLAY_ICON;btn.setAttribute('aria-label',on?'暂停':'播放');
-    };
-    const tick=()=>{
-      if(!audio)return;
-      const d=audio.duration||0,t=audio.currentTime||0;
-      q('.jmu-progress i').style.width=(d?t/d*100:0)+'%';q('.jmu-at').textContent=clock(t);if(d)q('.jmu-len').textContent=clock(d);
-      if(lines&&lines.length){let w='';for(const [s,x] of lines){if(s<=t+.2)w=x;else break;}if(w)q('.jmu-lyric').textContent='♫ '+w;}
-    };
     // the page-flip book listens to the mouse and to touch to turn the page: these belong to the player
     ['pointerdown','mousedown','mouseup','touchstart','touchend'].forEach(k=>{q('.jmu-play').addEventListener(k,stop);q('.jmu-progress .jbar').addEventListener(k,stop);});
     q('.jmu-play').addEventListener('click',async e=>{
       e.stopPropagation();
-      if(audio&&!audio.paused){audio.pause();return;}
-      if(!audio){
-        const song=card.__song||await meting(neteaseId(f.netease||f.link)).catch(()=>null);
-        if(!song||!song.url){card.classList.add('failed');q('.jmu-lyric').textContent=song&&song.why||'这首歌放不了（换个 Meting 接口试试）';return;}
-        audio=new Audio(song.url);audio.preload='auto';audio.volume=volume.muted?0:volume.level;
-        audio.addEventListener('timeupdate',tick);audio.addEventListener('loadedmetadata',tick);
-        ['play','pause','ended'].forEach(k=>audio.addEventListener(k,paint));
-        audio.addEventListener('error',()=>{q('.jmu-lyric').textContent='这首歌放不了（可能要会员，或接口失效）';paint();});
-        if(song.lrc)(/^https?:/.test(song.lrc)?fetch(song.lrc).then(r=>r.text()):Promise.resolve(song.lrc)).then(t=>{lines=lrcLines(t);}).catch(()=>{});
+      if(st.audio&&!st.audio.paused){st.audio.pause();return;}
+      if(!st.audio){
+        st.said='';st.failed=false;
+        const song=card.__song||await meting(id).catch(()=>null);
+        if(!song||!song.url){st.failed=true;st.said=song&&song.why||'这首歌放不了（换个 Meting 接口试试）';refresh(st);showPlayer(card,st);return;}
+        if(!st.audio){   // (not made meanwhile by another press)
+          const a=new Audio(song.url);a.preload='auto';a.volume=volume.muted?0:volume.level;st.audio=a;
+          ['timeupdate','loadedmetadata','play','pause','ended'].forEach(k=>a.addEventListener(k,()=>refresh(st)));
+          a.addEventListener('error',()=>{st.failed=true;st.said='这首歌放不了（可能要会员，或接口失效）';st.audio=null;if(playing===a)playing=null;refresh(st);});
+          if(song.lrc)(/^https?:/.test(song.lrc)?fetch(song.lrc).then(r=>r.text()):Promise.resolve(song.lrc)).then(t=>{st.lines=lrcLines(t);}).catch(()=>{});
+        }
       }
-      if(playing&&playing!==audio)playing.pause();
-      playing=audio;
-      audio.play().catch(()=>{q('.jmu-lyric').textContent='浏览器没让它出声，再点一下试试';});
+      if(playing&&playing!==st.audio)playing.pause();
+      playing=st.audio;
+      st.audio.play().catch(()=>{q('.jmu-lyric').textContent='浏览器没让它出声，再点一下试试';});
     });
     q('.jmu-progress .jbar').addEventListener('click',e=>{
       e.stopPropagation();
-      if(!audio||!audio.duration)return;
-      const r=e.currentTarget.getBoundingClientRect();audio.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*audio.duration;tick();
+      const a=st.audio;if(!a||!a.duration)return;
+      const r=e.currentTarget.getBoundingClientRect();a.currentTime=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*a.duration;refresh(st);
     });
     // how loud: a speaker (a press mutes it and back) and a slider, the same for every song and kept for next time
     const vol=q('.jmu-vol'),mute=q('.jmu-mute'),range=q('.jmu-vol input');
-    const paintVol=()=>{const v=volume.muted?0:volume.level;range.value=String(Math.round(v*100));range.style.setProperty('--v',Math.round(v*100)+'%');
+    vol.__paint=()=>{const v=volume.muted?0:volume.level;range.value=String(Math.round(v*100));range.style.setProperty('--v',Math.round(v*100)+'%');
       mute.innerHTML=v===0?MUTE_ICON:v<.5?VOL_LOW_ICON:VOL_ICON;mute.setAttribute('aria-label',volume.muted?'取消静音':'静音');mute.setAttribute('aria-pressed',String(volume.muted));};
-    volume.cards.add(paintVol);paintVol();
+    vol.__paint();
     ['pointerdown','mousedown','mouseup','touchstart','touchend','touchmove','pointermove','wheel'].forEach(k=>vol.addEventListener(k,stop,{passive:true}));
     range.addEventListener('input',()=>{const v=+range.value/100;setVolume(v,v===0);});
     mute.addEventListener('click',e=>{e.stopPropagation();setVolume(volume.muted&&volume.level===0?.6:volume.level,!volume.muted);});
     vol.addEventListener('click',stop);
     vol.addEventListener('keydown',e=>{if(/^Arrow|^Page|^Home$|^End$/.test(e.key))e.stopPropagation();});
+    // as the song is now (it may be playing already)
+    showPlayer(card,st);
   }
   // one loudness for all the players (the one playing follows at once), remembered in this browser
-  const volume={level:.8,muted:false,cards:new Set()};
+  const volume={level:.8,muted:false};
   try{const v=JSON.parse(localStorage.getItem('techo.volume')||'null');if(v&&typeof v.level==='number')volume.level=Math.max(0,Math.min(1,v.level)),volume.muted=!!v.muted;}catch(e){}
   function setVolume(level,muted){
     volume.level=Math.max(0,Math.min(1,level));volume.muted=muted;
     if(playing)playing.volume=muted?0:volume.level;
-    volume.cards.forEach(p=>p());
+    document.querySelectorAll('.jmu-vol').forEach(v=>v.__paint&&v.__paint());
     try{localStorage.setItem('techo.volume',JSON.stringify({level:volume.level,muted}));}catch(e){}
   }
   const VOL_ICON='<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 5h2.2L7 2.2v9.6L3.7 9H1.5z" fill="currentColor"/><path d="M9.2 4.6a3.2 3.2 0 0 1 0 4.8M10.8 3a5.4 5.4 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';

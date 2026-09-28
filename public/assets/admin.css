@@ -40,6 +40,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .admin .pv{position:sticky;top:20px;align-self:start;min-width:0;--pvk:.7}
 .admin .pvbox{width:calc(530px * var(--pvk));height:calc(740px * var(--pvk));position:relative;overflow:hidden;border-radius:4px;box-shadow:0 8px 20px rgba(40,34,20,.18)}
+.admin .pvbox.turns{cursor:pointer}
 .admin .pvbox>.page{position:absolute;left:0;top:0;transform:scale(var(--pvk));transform-origin:0 0}
 .admin .pvgo{appearance:none;display:inline-flex;align-items:center;gap:4px;vertical-align:middle;border:1px solid var(--ink);background:#fffdf8;color:var(--ink);border-radius:999px;height:28px;padding:0 11px;margin:0 6px;cursor:pointer;font:500 12.5px/1 var(--print)}
 .admin .pvgo svg{display:block;flex:none}
