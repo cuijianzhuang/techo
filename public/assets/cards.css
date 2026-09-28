@@ -187,10 +187,11 @@ button.jbar::before{content:"";position:absolute;left:0;right:0;top:-8px;bottom:
 .jmu-mute{appearance:none;flex:none;width:22px;height:22px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:none;color:inherit;cursor:pointer}
 .jmu-mute:hover{background:rgba(212,60,51,.1)}
 .jmu-mute svg{display:block}
-.jmu-vol input{appearance:none;-webkit-appearance:none;color:inherit;width:50px;height:5px;margin:0;border-radius:3px;cursor:pointer;
+/* (a page in the admin's preview: its own inputs' look mustn't reach this one) */
+.jp .jtext .jmu-vol input[type=range]{appearance:none;-webkit-appearance:none;color:inherit;flex:none;width:50px;min-width:0;height:5px;margin:0;padding:0;border:0;box-sizing:border-box;border-radius:3px;cursor:pointer;font:inherit;
   background:linear-gradient(90deg,currentColor var(--v,80%),rgba(40,40,40,.12) var(--v,80%))}
-.jmu-vol input::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
-.jmu-vol input::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
+.jp .jtext .jmu-vol input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
+.jp .jtext .jmu-vol input[type=range]::-moz-range-thumb{width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px #fff;border:0}
 .jmu-mute:focus-visible,.jmu-vol input:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 .jmusic.failed .jmu-vol{opacity:.4}
 

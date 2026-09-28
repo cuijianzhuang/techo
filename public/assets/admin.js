@@ -180,9 +180,12 @@
     if(!pvcap)return;
     pvcap.textContent='';
     if(ps.length<2){pvcap.append('预览 · 保存后会按日期排进手帐');return;}
-    const go=(d,t)=>{const b=el('button','pvgo',t);b.type='button';b.disabled=pvAt+d<0||pvAt+d>=ps.length;
-      b.setAttribute('aria-label',d<0?'上一页':'下一页');b.onclick=()=>{pvAt+=d;drawPreview();};return b;};
-    pvcap.append(go(-1,'‹'),' 第 '+(pvAt+1)+' / '+ps.length+' 页（一页写不下，接着往后排）',go(1,'›'));
+    const chev=d=>'<svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true"><path d="'+(d<0?'M6 1L1.5 6 6 11':'M2 1l4.5 5L2 11')+'" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const go=d=>{const b=el('button','pvgo');b.type='button';b.disabled=pvAt+d<0||pvAt+d>=ps.length;
+      b.innerHTML=d<0?chev(d)+'上一页':'下一页'+chev(d);b.onclick=()=>{pvAt+=d;drawPreview();};return b;};
+    const at=el('div');at.style.cssText='display:flex;align-items:center;justify-content:center;gap:2px';
+    at.append(go(-1),el('span',null,'第 '+(pvAt+1)+' / '+ps.length+' 页'),go(1));
+    pvcap.append(at,el('div',null,'一页写不下，接着往后排'));
   }
   /* a group of fields: a card with a title. fold: folded away until opened, its title saying what's in it */
   function card(title,nodes,opt){
