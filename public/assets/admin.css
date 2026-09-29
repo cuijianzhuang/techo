@@ -17,7 +17,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .item.new b{color:var(--red-deep)}
 .admin .sect{font:500 11px/1 var(--print);letter-spacing:1.2px;color:var(--olive);padding:16px 10px 6px}
 .admin .main{padding:22px 24px 0;display:grid;grid-template-columns:minmax(0,620px) minmax(300px,1fr);gap:28px;align-content:start}
-.admin .form{display:grid;gap:13px;min-width:0}
+.admin .form{display:grid;grid-template-columns:minmax(0,1fr);gap:13px;min-width:0}
 .admin .form h2{margin:0 0 4px;font:400 34px/1 var(--title)}
 .admin .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .admin label{display:grid;gap:5px;font:500 12px/1.2 var(--print);color:var(--ink-soft)}
@@ -26,16 +26,16 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin input:focus-visible,.admin textarea:focus-visible,.admin select:focus-visible,.admin button:focus-visible,.admin a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .admin .hintx{font:400 11.5px/1.4 var(--print);color:var(--ink-soft)}
 .admin .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:6px}
-/* Three levels. A main action (.pri) is solid ink, one to a screen. The rest are plain: no outline and no fill,
-   in the site's teal so they still read as things to press, a warm tint under the pointer. A risky one (.warn) is red. */
-.admin .b{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;color:var(--teal-deep);font:500 13px/1 var(--print);padding:10px 14px;border-radius:999px;cursor:pointer;text-decoration:none}
+/* Three levels. A main action (.pri) is solid ink, one to a screen. The rest are pills with a faint warm fill and no
+   outline, in the site's teal; a risky one (.warn) is red. */
+.admin .b{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:rgba(120,100,60,.1);color:var(--teal-deep);font:500 13px/1 var(--print);padding:10px 14px;border-radius:999px;cursor:pointer;text-decoration:none;white-space:nowrap}
 .admin .b .ico{width:16px;height:16px;flex:none}
-.admin .b:hover:not(:disabled){background:rgba(120,100,60,.12);color:var(--ink)}
-.admin .b:active:not(:disabled){background:rgba(120,100,60,.2)}
+.admin .b:hover:not(:disabled){background:rgba(120,100,60,.18);color:var(--ink)}
+.admin .b:active:not(:disabled){background:rgba(120,100,60,.26)}
 .admin .b.pri{background:var(--ink);color:var(--paper);padding:10px 18px}
 .admin .b.pri:hover:not(:disabled){background:#000;color:var(--paper)}
-.admin .b.warn{color:var(--red-deep)}
-.admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.12);color:var(--red-deep)}
+.admin .b.warn{background:rgba(200,70,50,.09);color:var(--red-deep)}
+.admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.17);color:var(--red-deep)}
 .admin .b.small{padding:7px 12px;font-size:12px}
 .admin .b:disabled{opacity:.5;cursor:default}
 .admin .status{font:400 13px/1.45 var(--print);color:var(--ink-soft);min-height:19px}
@@ -253,8 +253,8 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .pvbtn{display:none}
 /* settings: chips that go to a section */
 .admin .secnav{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:8px 0;background:var(--desk)}
-.admin .secnav .chip{text-decoration:none;color:var(--teal-deep);background:transparent;padding:6px 11px}
-.admin .secnav .chip:hover{background:rgba(120,100,60,.12);color:var(--ink)}
+.admin .secnav .chip{text-decoration:none;color:var(--teal-deep);background:rgba(120,100,60,.1);padding:7px 13px}
+.admin .secnav .chip:hover{background:rgba(120,100,60,.18);color:var(--ink)}
 .admin .card[id]{scroll-margin-top:56px}
 /* 今天 */
 .admin .today .card .item{background:#fffdf8;border-color:rgba(120,110,90,.2)}
@@ -277,6 +277,10 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
   .admin .list{max-height:none}
   .admin .card{padding:12px 12px 14px}
   .admin .actbar .b{padding:10px 13px}
+  .admin .actbar .status{flex-basis:100%}   /* (empty, it takes no room) so the buttons share one line */
+  /* the share link: the button, then the address under it (an address is long) */
+  .admin .sharelink{flex-wrap:wrap;gap:4px 10px;margin-right:0;width:100%}
+  .admin .sharelink .hintx{flex:1 1 100%}
 }
 .admin .main>.form:not(:has(.actbar)){padding-bottom:40px}
 .admin .danger:empty{display:none}
@@ -344,7 +348,8 @@ body.admin{height:auto}
 .admin .pbulk:has(.b){background:#f7ecc9;border:1px solid #e0cf98;padding:6px 12px}
 .admin .pall{display:flex;align-items:center;gap:10px;margin-right:auto;font:500 12.5px/1.2 var(--print);color:var(--ink-soft)}
 .admin .pall input,.admin .prowi input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--olive);flex:none}
-.admin .b.quiet{color:var(--ink-soft)}
+.admin .b.quiet{background:transparent;color:var(--ink-soft)}
+.admin .b.quiet:hover:not(:disabled){background:rgba(120,100,60,.12)}
 .admin .plist{display:grid;gap:4px}
 .admin .plist .lmonth{padding:14px 12px 4px}
 .admin .prowi{display:grid;grid-template-columns:16px 62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 12px;border-radius:10px;
