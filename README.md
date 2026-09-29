@@ -69,7 +69,7 @@ public/                 静态文件（部署的就是这个目录）
   vendor/               StPageFlip
 src/index.ts            Worker 入口：把下面各部分的路由接起来（先是读者能访问的，再是 /api/admin/* 的登录关卡，再是后台的），每晚的定时任务
 src/env.ts              环境类型、bad()、localDay()、aiKey()
-src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键
+src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键（`selectEntries`：各种视图和分段直接在 SQL 里挑，只读要的列、要的行，分段走日期索引）
 src/settings.ts         设置（哪些只有后台看得到）、/api/settings、后台读写设置
 src/ai.ts               AI：用哪个模型、测试连接、一键补全
 src/locks.ts            口令：整本或某一天上锁、/api/entries（几种视图、分段、304）、/api/unlock

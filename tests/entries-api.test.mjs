@@ -2,7 +2,7 @@
    all of them, and that an unchanged answer is a 304 (and the home page's too: its data is inlined) */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadApp, loadTs } from './helpers.mjs';
+import { loadApp, loadTs, sqliteD1 } from './helpers.mjs';
 
 // (the Workers runtime has HTMLRewriter, Node doesn't: this one only puts what the boot.js handler adds in front of that script)
 globalThis.HTMLRewriter = class {
@@ -32,9 +32,9 @@ const ROWS = [
   row({ id: 'words', date: '2026-09-05', body: '只有几句话，没有卡片。' }),
   row({ id: 'secret', date: '2026-09-04', title: '不给看的', body: '这是私密的正文', place: '私密的地方' }),
 ];
-const db = (locks = []) => ({ prepare: (sql) => ({ bind() { return this; }, all: async () => ({ results: /FROM locks/.test(sql) ? locks : /FROM entries/.test(sql) ? [...ROWS].sort((a, b) => a.date.localeCompare(b.date) || a.created_at - b.created_at) : [] }) }) });
-const env = (locks) => ({ DB: db(locks), TIMEZONE: 'Asia/Shanghai', GITHUB_CLIENT_ID: 'i', ADMIN_GITHUB_LOGIN: 'me', GITHUB_CLIENT_SECRET: 's' });
-const get = (path, headers = {}, locks) => app.fetch(new Request('https://journal.example' + path, { headers }), env(locks));
+// the real thing: SQLite with the schema, holding ROWS (as they are now) and the locks given
+const env = async (locks = []) => ({ DB: await sqliteD1({ entries: ROWS, locks }), TIMEZONE: 'Asia/Shanghai', GITHUB_CLIENT_ID: 'i', ADMIN_GITHUB_LOGIN: 'me', GITHUB_CLIENT_SECRET: 's' });
+const get = async (path, headers = {}, locks) => app.fetch(new Request('https://journal.example' + path, { headers }), await env(locks));
 const entries = async (view, locks) => (await (await get('/api/entries' + (view ? '?view=' + view : ''), {}, locks)).json()).entries;
 const by = (list, id) => list.find((e) => e.id === id);
 
@@ -138,7 +138,7 @@ test("the home page has its own ETag, and does not answer 304 to the static page
     if (req.headers.get('if-none-match') === '"static-page"') return new Response(null, { status: 304 });
     return new Response('<!doctype html><html><head><title>t</title><meta name="description" content="d"></head><body><script src="/assets/boot.js?v=0123456789"></script></body></html>', { headers: { 'content-type': 'text/html', etag: '"static-page"' } });
   } };
-  const call = (headers = {}) => app.fetch(new Request('https://journal.example/', { headers }), { ...env(), ASSETS: assets });
+  const call = async (headers = {}) => app.fetch(new Request('https://journal.example/', { headers }), { ...(await env()), ASSETS: assets });
   const first = await call();
   assert.equal(first.status, 200);
   const etag = first.headers.get('etag');
@@ -162,4 +162,64 @@ test('the excerpt is the timeline\'s plainText, word for word', async () => {
   assert.equal(hasCards('x'), false);
   assert.equal(hasCards('a ```b``` c'), true);
   assert.equal(hasCards('163cn.tv/abc'), true);
+});
+
+// ---- what the database is asked for
+
+// the same database, told what it was asked and how many rows it handed over
+const watched = async (locks = []) => {
+  const db = await sqliteD1({ entries: ROWS, locks }), log = [];
+  return { log, DB: { prepare(sql) { const st = db.prepare(sql); const o = { bind(...a) { st.bind(...a); return o; }, all: async () => { const r = await st.all(); log.push({ sql, rows: r.results.length }); return r; }, first: async () => { const r = await st.first(); log.push({ sql, rows: r ? 1 : 0 }); return r; } }; return o; } } };
+};
+const many = (n, o = {}) => Array.from({ length: n }, (_, i) => row({ id: 'm' + String(i).padStart(4, '0'), date: '2025-' + String(1 + Math.floor(i / 28) % 12).padStart(2, '0') + '-' + String(1 + i % 28).padStart(2, '0'), created_at: 1000 + i, body: '第 ' + i + ' 篇', ...o }));
+
+test('a stretch reads a stretch: the date index and a LIMIT, not the table', async () => {
+  const saved = ROWS.splice(0, ROWS.length, ...many(600));
+  try {
+    const w = await watched();
+    const r = await app.fetch(new Request('https://journal.example/api/entries?view=index&limit=20'), { DB: w.DB, TIMEZONE: 'Asia/Shanghai' });
+    const body = await r.json();
+    assert.equal(body.entries.length, 20);
+    assert.equal(body.page.total, 600);
+    const list = w.log.find((q) => /FROM entries/.test(q.sql) && /LIMIT/.test(q.sql));
+    assert.ok(list, 'a LIMIT query');
+    assert.ok(list.rows <= 21, `${list.rows} rows read for 20`);
+    assert.ok(!w.log.some((q) => /FROM entries/.test(q.sql) && !/LIMIT|COUNT/.test(q.sql)), 'no query for the whole table');
+  } finally { ROWS.splice(0, ROWS.length, ...saved); }
+});
+
+test('the map and the cards views leave the words in the database unless they are wanted', async () => {
+  const saved = ROWS.splice(0, ROWS.length, ...many(50, { body: '很长的正文。'.repeat(500) }));
+  try {
+    const w = await watched();
+    const call = (q) => app.fetch(new Request('https://journal.example/api/entries?view=' + q), { DB: w.DB, TIMEZONE: 'Asia/Shanghai' }).then((r) => r.text());
+    const map = await call('map'), cards = await call('cards');
+    assert.ok(map.length < 20_000, 'map ' + map.length);
+    assert.ok(cards.length < 20_000, 'cards ' + cards.length);   // 50 pages of 3000 characters each would be far over
+    assert.ok(w.log.filter((q) => /FROM entries/.test(q.sql)).every((q) => !/SELECT \*/.test(q.sql)));
+  } finally { ROWS.splice(0, ROWS.length, ...saved); }
+});
+
+test('pages that share a date and a moment are neither lost nor doubled between stretches', async () => {
+  const saved = ROWS.splice(0, ROWS.length, ...['a', 'b', 'c', 'd', 'e'].map((id) => row({ id, date: '2026-01-01', created_at: 5 })), row({ id: 'z', date: '2026-01-02', created_at: 1 }));
+  try {
+    for (const limit of [1, 2, 4]) {
+      const seen = []; let before = '';
+      for (let i = 0; i < 20; i++) {
+        const r = await (await get(`/api/entries?view=index&limit=${limit}` + (before ? '&before=' + before : ''))).json();
+        seen.push(...r.entries.map((e) => e.id)); before = r.entries.at(-1)?.id;
+        if (!r.page.more) break;
+      }
+      assert.deepEqual([...seen].sort(), ['a', 'b', 'c', 'd', 'e', 'z'], `limit ${limit}: ${seen}`);
+    }
+  } finally { ROWS.splice(0, ROWS.length, ...saved); }
+});
+
+test('the cards view keeps the words of exactly the pages hasCards says have a card', async () => {
+  const bodies = ['没有卡片', '```账单\n= 合计: ¥5\n```', '听 https://music.163.com/song?id=1', '短链 https://163cn.tv/abc', '```', 'music 163', ''];
+  const saved = ROWS.splice(0, ROWS.length, ...bodies.map((body, i) => row({ id: 'b' + i, date: '2026-02-0' + (i + 1), body })));
+  try {
+    const list = await entries('cards');
+    bodies.forEach((body, i) => assert.equal(by(list, 'b' + i).body, hasCards(body) ? body : '', JSON.stringify(body)));
+  } finally { ROWS.splice(0, ROWS.length, ...saved); }
 });

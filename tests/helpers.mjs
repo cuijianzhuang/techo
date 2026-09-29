@@ -43,3 +43,22 @@ export async function loadApp() {
   const mod = await import('data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64'));
   return mod.__app;
 }
+
+/** a D1 look-alike over real SQLite (node:sqlite) with the schema in schema.sql, holding `entries` and `locks`: the
+    Worker's SQL is run, not imitated */
+export async function sqliteD1({ entries = [], locks = [] } = {}) {
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(':memory:');
+  db.exec(readFileSync(root('schema.sql'), 'utf8'));
+  const cols = ['id', 'date', 'title', 'latin', 'stamp', 'aside', 'body', 'note', 'mood', 'quote', 'quote_src', 'photo_key', 'photo_cap', 'stickers', 'status', 'place', 'geo', 'weather', 'created_at', 'updated_at'];
+  const put = db.prepare(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
+  for (const e of entries) put.run(...cols.map((c) => e[c] ?? ''));
+  for (const l of locks) db.prepare('INSERT INTO locks (scope, hash, updated_at) VALUES (?, ?, 0)').run(l.scope, l.hash);
+  return {
+    prepare(sql) {
+      const st = db.prepare(sql); let args = [];
+      const o = { bind(...a) { args = a; return o; }, all: async () => ({ results: st.all(...args).map((r) => ({ ...r })) }), first: async () => { const r = st.get(...args); return r ? { ...r } : null; }, run: async () => { st.run(...args); return {}; } };
+      return o;
+    },
+  };
+}

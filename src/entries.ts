@@ -115,11 +115,42 @@ export function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { 
   };
 }
 
-export async function loadPublished(env: Env): Promise<Entry[]> {
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM entries WHERE status='published' ORDER BY date ASC, created_at ASC",
-  ).all();
-  return results.map(rowToEntry);
+/* What a view needs of the published pages, taken out of the database as such, so the Worker never holds (or
+   parses) more of them than it sends:
+   full / index  every column (index only ever for a stretch of a hundred or so, or the rare ask for them all),
+   map           the pages with a place, and only what the map draws,
+   cards         id, date, title, and the words only of pages that hold a card or a NetEase link (the same test
+                 as hasCards in text.ts, done here where the words are);
+   with `page`, a stretch: `limit` of them newest first, older than the page `before`, read through the date index
+   (LIMIT, not the whole table), and what the whole list is (how many, how many days, first, last, more before). */
+export type EntriesView = "full" | "index" | "map" | "cards";
+const COLS: Record<EntriesView, string> = {
+  full: "*", index: "*",
+  map: "id, date, title, place, geo, weather, created_at",
+  cards: "id, date, title, created_at, CASE WHEN instr(body, '```') > 0 OR instr(body, 'music.163.com') > 0 OR instr(body, '163cn.tv') > 0 THEN body ELSE '' END AS body",
+};
+export type PageMeta = { total: number; days: number; first: string; last: string; more: boolean };
+export async function selectEntries(env: Env, view: EntriesView, page?: { limit: number; before?: string }): Promise<{ rows: Record<string, unknown>[]; meta?: PageMeta }> {
+  const where = "status='published'" + (view === "map" ? " AND geo != ''" : "");
+  if (!page) {
+    const { results } = await env.DB.prepare(`SELECT ${COLS[view]} FROM entries WHERE ${where} ORDER BY date ASC, created_at ASC, rowid ASC`).all();
+    return { rows: results };
+  }
+  const total = await env.DB.prepare(`SELECT COUNT(*) AS n, COUNT(DISTINCT date) AS d, MIN(date) AS f, MAX(date) AS l FROM entries WHERE ${where}`)
+    .first<{ n: number; d: number; f: string | null; l: string | null }>();
+  const meta = { total: total?.n ?? 0, days: total?.d ?? 0, first: total?.f || "", last: total?.l || "", more: false };
+  let after = "";
+  const args: unknown[] = [];
+  if (page.before) {
+    // (date, created_at, rowid) is the order of the date index: the stretch is read from where the last one was
+    const at = await env.DB.prepare(`SELECT date, created_at, rowid AS rid FROM entries WHERE id = ? AND ${where}`).bind(page.before).first<{ date: string; created_at: number; rid: number }>();
+    if (!at) return { rows: [], meta };            // a page taken down since: nothing before it to show
+    after = " AND (date, created_at, rowid) < (?, ?, ?)";
+    args.push(at.date, at.created_at, at.rid);
+  }
+  const { results } = await env.DB.prepare(`SELECT ${COLS[view]} FROM entries WHERE ${where}${after} ORDER BY date DESC, created_at DESC, rowid DESC LIMIT ?`)
+    .bind(...args, page.limit + 1).all();
+  return { rows: results.slice(0, page.limit), meta: { ...meta, more: results.length > page.limit } };
 }
 
 /* place / geo / weather live in columns added by migrations/0003_place_weather.sql. Until that has run a page
