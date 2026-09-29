@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { ComposeError, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
-import { LIMITS, MAX_STICKERS, PHOTO_KEY, STICKERS, STICKER_LABELS } from "./entries";
-import { type Env, type HonoEnv, bad } from "./env";
+import { DEFAULT_MODEL } from "./compose";
+import { PHOTO_KEY } from "./entries";
+import { type Env, type HonoEnv, aiKey, bad } from "./env";
 
 export const pub = new Hono<HonoEnv>();
 export const admin = new Hono<HonoEnv>();
@@ -47,13 +47,6 @@ const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine"];
 /** settings only the admin sees: kept out of /api/settings and the page */
 const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel", "metingToken", "qweatherKey", "qweatherHost"]);
 export const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));
-/** the AI as configured (the admin's settings, the Worker's key) */
-const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";
-export async function aiConfig(env: Env): Promise<AiConfig> {
-  if (!aiKey(env)) throw new ComposeError("Worker 还没有 AI 的 key（运行 npx wrangler secret put AI_API_KEY）");
-  const s = await loadSettings(env);
-  return { apiKey: aiKey(env), baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL, format: s.aiFormat === "openai" ? "openai" : "anthropic" };
-}
 /** max length (characters) per text setting */
 const SETTING_MAX: Record<string, number> = {
   email: 120, github: 200, githubText: 60, siteTitle: 40, siteDesc: 120, coverTitle: 16, coverSub: 40,
@@ -73,7 +66,7 @@ export async function loadSettings(env: Env): Promise<Record<string, string>> {
   return settings;
 }
 
-function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<string, string> } | { ok: false; error: string } {
+export function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<string, string> } | { ok: false; error: string } {
   const v: Record<string, string> = {};
   for (const k of Object.keys(SETTING_DEFAULTS)) {
     if (!(k in o)) continue;
@@ -128,51 +121,6 @@ pub.get("/api/settings", async (c) => {
 /* the admin's view of the settings: all of them, and whether the AI has its key */
 const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!aiKey(env) }, meting: { secretSet: !!env.METING_TOKEN } });
 admin.get("/api/admin/settings", async (c) => c.json(await adminSettings(c.env)));
-
-/* 测试连接: one short question with the AI as configured (or as about to be saved: format / base / model in the body) */
-admin.post("/api/admin/ai/test", async (c) => {
-  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const s = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
-  const parsed = cleanSettings({ aiFormat: s("aiFormat") || "anthropic", aiBaseUrl: s("aiBaseUrl"), aiModel: s("aiModel") });
-  if (!parsed.ok) return bad(c, 400, parsed.error);
-  try {
-    const ai = await aiConfig(c.env);
-    return c.json(await pingAi({
-      ...ai, format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
-      baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL,
-    }));
-  } catch (err) {
-    return bad(c, 500, err instanceof ComposeError ? err.message : "没连上，稍后再试");
-  }
-});
-
-/* 一键补全: title, latin, aside, stamp, quote and doodles for a page, from what's written on it. The admin
-   fills in only the parts still empty; nothing is saved here. */
-admin.post("/api/admin/ai/suggest", async (c) => {
-  const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!o || typeof o !== "object") return bad(c, 400, "请求体必须是 JSON 对象");
-  const s = (k: string, max = 4000) => [...(typeof o[k] === "string" ? (o[k] as string).trim() : "")].slice(0, max).join("");
-  const body = s("body", 8000);
-  if (!body) return bad(c, 400, "先写几句正文，再让 AI 补全");
-  try {
-    const ai = await aiConfig(c.env);
-    const got = await suggestFields(ai, {
-      date: s("date", 10), title: s("title", 60), latin: s("latin", 120), aside: s("aside", 60), body, note: s("note", 120),
-      stamp: s("stamp", 2), quote: s("quote", 200), quoteSrc: s("quoteSrc", 120), place: s("place", 60), weather: s("weather", 40),
-      stickers: (Array.isArray(o.stickers) ? o.stickers : []).filter((k): k is string => typeof k === "string" && STICKERS.has(k)),
-    }, STICKER_LABELS);
-    // the model's lengths are a request, not a guarantee: cut to what the page holds
-    const cut = (v: string, k: string) => [...v.trim()].slice(0, LIMITS[k]).join("");
-    return c.json({ suggestion: {
-      title: cut(got.title, "title"), latin: cut(got.latin, "latin"), aside: cut(got.aside, "aside"),
-      stamp: [...got.stamp.trim()].slice(0, 1).join(""), quote: cut(got.quote, "quote"), quoteSrc: cut(got.quoteSrc, "quoteSrc"),
-      stickers: [...new Set(got.stickers.filter((k) => STICKERS.has(k)))].slice(0, MAX_STICKERS),
-    } });
-  } catch (err) {
-    console.error(err);
-    return bad(c, 500, err instanceof ComposeError ? err.message : "没补全成，稍后再试");
-  }
-});
 
 admin.put("/api/admin/settings", async (c) => {
   const o = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;

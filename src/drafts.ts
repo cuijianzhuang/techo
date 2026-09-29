@@ -3,7 +3,7 @@ import { ComposeError, composePage } from "./compose";
 import { type Entry, LIMITS, MAX_STICKERS, STICKERS, STICKER_LABELS, cleanEntry, rowToEntry } from "./entries";
 import { type Env, type HonoEnv, bad, localDay } from "./env";
 import { dayScope, loadLocks } from "./locks";
-import { aiConfig } from "./settings";
+import { aiConfig } from "./ai";
 
 export const admin = new Hono<HonoEnv>();
 

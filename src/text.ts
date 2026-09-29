@@ -10,3 +10,6 @@ export const excerpt = (md: string, n = 100) => [...plainText(md)].slice(0, n).j
 
 /** does the body hold a card (a ``` block) or a NetEase link: what the shelf, the ticket folder and the bills read */
 export const hasCards = (md: string) => md.includes("```") || /music\.163\.com|163cn\.tv/.test(md);
+
+/** text for inside HTML */
+export const escHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);

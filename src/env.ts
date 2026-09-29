@@ -42,3 +42,6 @@ export function localDay(timeZone: string, now = Date.now()) {
   const start = Date.UTC(+p.year, +p.month - 1, +p.day) - offset;
   return { date: `${p.year}-${p.month}-${p.day}`, start, end: start + 86_400_000 };
 }
+
+/** the key the AI is asked with (a Worker secret); without one the AI features are off */
+export const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";

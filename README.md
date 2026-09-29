@@ -68,13 +68,15 @@ public/                 静态文件（部署的就是这个目录）
     techo.css           样式（生成）
   vendor/               StPageFlip
 src/index.ts            Worker 入口：把下面各部分的路由接起来（先是读者能访问的，再是 /api/admin/* 的登录关卡，再是后台的），每晚的定时任务
-src/env.ts              环境类型、bad()、localDay()
+src/env.ts              环境类型、bad()、localDay()、aiKey()
 src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键
-src/settings.ts         设置（哪些只有后台看得到）、AI 的设置和测试连接、/api/settings
+src/settings.ts         设置（哪些只有后台看得到）、/api/settings、后台读写设置
+src/ai.ts               AI：用哪个模型、测试连接、一键补全
 src/locks.ts            口令：整本或某一天上锁、/api/entries（几种视图、分段、304）、/api/unlock
 src/etag.ts             ETag 和 304
 src/text.ts             正文去掉标记后的一行字（时间线的摘要，和 render.js 的 plainText 一致）、有没有卡片
-src/pages.ts            书的首页、/p/<id> 分享页、/card/、/img/
+src/home.ts             书的首页（把日记内联进去，有自己的 ETag）
+src/share.ts            /p/<id> 分享页、/card/、/img/
 src/auth.ts             GitHub 登录和后台登录关卡（requireLogin）
 src/crypto.ts           登录和口令用的 HMAC、比较
 src/admin-entries.ts    后台：页的增删改、分享卡片、传照片
