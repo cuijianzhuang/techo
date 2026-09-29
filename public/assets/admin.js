@@ -24,7 +24,10 @@
     look:'<path d="M6 3.5h11.5a1 1 0 011 1v15a1 1 0 01-1 1H6a1.5 1.5 0 01-1.5-1.5v-14A1.5 1.5 0 016 3.5z"/><path d="M8 3.5v17M11 8h5"/>',
     read:'<path d="M3 5.5c3-1.2 6-1 9 1v13c-3-2-6-2.2-9-1z"/><path d="M21 5.5c-3-1.2-6-1-9 1v13c3-2 6-2.2 9-1z"/>',
     site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/>',
-    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>'};
+    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>',
+    eye:'<path d="M2.8 12S6 5.8 12 5.8 21.2 12 21.2 12 18 18.2 12 18.2 2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.7"/>',
+    draft:'<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12.5h6M9 16h4"/>',
+    link:'<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/>'};
   function icon(k){
     const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
     s.setAttribute('viewBox','0 0 24 24');s.setAttribute('width','18');s.setAttribute('height','18');s.setAttribute('aria-hidden','true');
@@ -302,10 +305,10 @@
       card('上锁',locks,{fold:true,open:locked,sum:locked?'🔒 已上锁':'不上锁'}));
     const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
     s.onclick=()=>{draft.status='published';save();};
-    const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';
+    const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';s2.prepend(icon('draft'));
     s2.onclick=()=>{draft.status='draft';save();};
     // on a narrow screen the page isn't beside the form: open it big (Techo.reader)
-    const see=el('button','b pvbtn','预览');see.type='button';
+    const see=el('button','b pvbtn','预览');see.type='button';see.prepend(icon('eye'));
     see.onclick=()=>{const ps=T.entryPages(draft,'r');T.reader(ps);ps.forEach(p=>p.remove());};
     // deleting is rare: at the foot of the page, not in the bar
     const danger=el('div','bar danger');
@@ -313,8 +316,8 @@
     const saved=sel!=='new'&&entries.find(e=>e.id===sel);
     if(saved&&saved.status==='published'){
       const url=location.origin+'/p/'+saved.id,sh=el('span','sharelink');
-      const cp=el('button','b small','复制分享链接');cp.type='button';
-      cp.onclick=()=>{const t=cp.textContent;navigator.clipboard.writeText(url).then(()=>{cp.textContent='已复制';setTimeout(()=>{cp.textContent=t;},1500);},()=>status(url));};
+      const cpl=el('span',null,'复制分享链接'),cp=el('button','b small');cp.type='button';cp.append(icon('link'),cpl);
+      cp.onclick=()=>{navigator.clipboard.writeText(url).then(()=>{cpl.textContent='已复制';setTimeout(()=>{cpl.textContent='复制分享链接';},1500);},()=>status(url));};
       sh.append(cp,el('span','hintx',saved.locked||dayLocks.has(saved.date)||bookLocked?'上了锁：分享出去只看得到「上了锁的一页」':url));
       danger.appendChild(sh);
     }

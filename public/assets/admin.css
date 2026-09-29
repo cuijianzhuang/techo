@@ -3,8 +3,9 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-block:18px 12px;padding-inline:20px;border-bottom:1px solid rgba(120,110,90,.2)}
 .admin .top h1{margin:0;font:400 30px/1 var(--title)}
 .admin .who{font:400 12.5px/1 var(--print);color:var(--desk-ink)}
-.admin .home{margin-left:auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:0;color:var(--teal-deep);background:rgba(80,70,50,.09);text-decoration:none}
-.admin .home:hover,.admin .home:focus-visible{background:rgba(80,70,50,.16)}
+.admin .home,.admin .logout{display:inline-flex;align-items:center;justify-content:center;align-self:center;width:36px;height:36px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--ink-soft);cursor:pointer;text-decoration:none}
+.admin .home{margin-left:auto}
+.admin .home:hover,.admin .logout:hover{background:rgba(120,100,60,.12);color:var(--ink)}
 .admin .wrap{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:calc(100vh - 64px)}
 .admin .side{border-right:1px solid rgba(120,110,90,.2);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.25)}
 .admin .list{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow:auto}
@@ -25,13 +26,16 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin input:focus-visible,.admin textarea:focus-visible,.admin select:focus-visible,.admin button:focus-visible,.admin a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .admin .hintx{font:400 11.5px/1.4 var(--print);color:var(--ink-soft)}
 .admin .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:6px}
-/* buttons have no outline: a soft fill instead (the border stays, transparent, so nothing changes size) */
-.admin .b{appearance:none;border:1.5px solid transparent;background:rgba(80,70,50,.09);color:var(--ink);font:500 13px/1 var(--print);padding:10px 16px;border-radius:999px;cursor:pointer}
-.admin .b:hover:not(:disabled){background:rgba(80,70,50,.16)}
-.admin .b.pri{background:var(--ink);color:var(--paper)}
-.admin .b.pri:hover:not(:disabled){background:#000}
-.admin .b.warn{background:rgba(200,70,50,.09);color:var(--red-deep)}
-.admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.17)}
+/* Three levels. A main action (.pri) is solid ink, one to a screen. The rest are plain: no outline and no fill,
+   in the site's teal so they still read as things to press, a warm tint under the pointer. A risky one (.warn) is red. */
+.admin .b{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;color:var(--teal-deep);font:500 13px/1 var(--print);padding:10px 14px;border-radius:999px;cursor:pointer;text-decoration:none}
+.admin .b .ico{width:16px;height:16px;flex:none}
+.admin .b:hover:not(:disabled){background:rgba(120,100,60,.12);color:var(--ink)}
+.admin .b:active:not(:disabled){background:rgba(120,100,60,.2)}
+.admin .b.pri{background:var(--ink);color:var(--paper);padding:10px 18px}
+.admin .b.pri:hover:not(:disabled){background:#000;color:var(--paper)}
+.admin .b.warn{color:var(--red-deep)}
+.admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.12);color:var(--red-deep)}
 .admin .b.small{padding:7px 12px;font-size:12px}
 .admin .b:disabled{opacity:.5;cursor:default}
 .admin .status{font:400 13px/1.45 var(--print);color:var(--ink-soft);min-height:19px}
@@ -107,7 +111,6 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .jot.used p{color:var(--ink-soft)}
 /* login */
 .admin .ghbtn{display:inline-flex;align-items:center;gap:8px;text-decoration:none}
-.admin .logout{margin-left:4px}
 /* date: paper calendar */
 .admin .datef{position:relative;min-width:0}
 .admin .dbtn{appearance:none;display:flex;align-items:baseline;gap:10px;width:100%;box-sizing:border-box;text-align:left;cursor:pointer;
@@ -164,8 +167,8 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 /* 手帐设置 */
 .admin .fsect{margin:14px 0 -4px;font:400 22px/1 var(--title);color:var(--ink);padding-top:12px;border-top:1px dashed rgba(120,110,90,.3)}
 .admin .chips{display:flex;gap:6px;flex-wrap:wrap}
-.admin .chip{appearance:none;border:1.5px solid #cfc8b3;background:#fffdf8;border-radius:999px;padding:6px 12px;cursor:pointer;font:500 12.5px/1 var(--print);color:var(--ink-soft);text-decoration:line-through}
-.admin .chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);text-decoration:none}
+.admin .chip{appearance:none;border:0;background:rgba(120,100,60,.08);border-radius:999px;padding:6px 12px;cursor:pointer;font:500 12.5px/1 var(--print);color:var(--ink-soft);text-decoration:line-through}
+.admin .chip[aria-pressed="true"]{background:rgba(120,100,60,.2);color:var(--ink);text-decoration:none}
 .admin .cphotos{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .admin .cphoto{position:relative;width:78px;height:78px;border-radius:8px;background:#e8e3d2 center/contain no-repeat;border:1px solid #cfc8b3}
 .admin .cphoto .cx{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--ink);background:var(--paper);color:var(--ink);font:400 14px/1 var(--print);cursor:pointer;padding:0}
@@ -250,8 +253,8 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .pvbtn{display:none}
 /* settings: chips that go to a section */
 .admin .secnav{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:8px 0;background:var(--desk)}
-.admin .secnav .chip{text-decoration:none;color:var(--ink);padding:6px 11px}
-.admin .secnav .chip:hover{border-color:var(--ink)}
+.admin .secnav .chip{text-decoration:none;color:var(--teal-deep);background:transparent;padding:6px 11px}
+.admin .secnav .chip:hover{background:rgba(120,100,60,.12);color:var(--ink)}
 .admin .card[id]{scroll-margin-top:56px}
 /* 今天 */
 .admin .today .card .item{background:#fffdf8;border-color:rgba(120,110,90,.2)}
@@ -260,12 +263,12 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .today>.status{min-height:0}
 /* compact doodle picker */
 .admin .stkpick button{padding:5px 2px 4px;font-size:10.5px}
-@media (max-width:1060px){.admin .pvbtn{display:inline-block}}
+@media (max-width:1060px){.admin .pvbtn{display:inline-flex}}
 @media (max-width:700px){
   .admin .top{flex-wrap:nowrap;gap:10px;padding:12px 14px}
   .admin .top h1{font-size:24px}
   .admin .who{display:none}
-  .admin .home{flex:none}
+  .admin .home,.admin .logout{flex:none}
   /* the list, or the thing picked from it */
   .admin.detail .side{display:none}
   .admin.detail .back{display:inline-block}
@@ -341,8 +344,7 @@ body.admin{height:auto}
 .admin .pbulk:has(.b){background:#f7ecc9;border:1px solid #e0cf98;padding:6px 12px}
 .admin .pall{display:flex;align-items:center;gap:10px;margin-right:auto;font:500 12.5px/1.2 var(--print);color:var(--ink-soft)}
 .admin .pall input,.admin .prowi input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--olive);flex:none}
-.admin .b.quiet{background:transparent;color:var(--ink-soft)}
-.admin .b.quiet:hover:not(:disabled){background:rgba(80,70,50,.09)}
+.admin .b.quiet{color:var(--ink-soft)}
 .admin .plist{display:grid;gap:4px}
 .admin .plist .lmonth{padding:14px 12px 4px}
 .admin .prowi{display:grid;grid-template-columns:16px 62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 12px;border-radius:10px;
