@@ -1,4 +1,4 @@
-import { type Env } from "./env";
+import { type Env, localDay } from "./env";
 
 /* ---------------- entries: validation & mapping ---------------- */
 
@@ -27,7 +27,23 @@ export const LIMITS: Record<string, number> = {
   title: 30, latin: 60, stamp: 2, aside: 30, body: 8000, note: 60, quote: 120, quoteSrc: 60, photoCap: 30, place: 30, weather: 20,
 };
 
-export const PHOTO_KEY = /^p\/[0-9a-f-]{36}\.(jpg|png|webp|gif)$/;
+/* A photo's key in R2: p/YYYY/MM/DD/<uuid>.<ext>, in the folder of the day of the page it belongs to (photoKeyFor).
+   Before the folders it was p/<uuid>.<ext>: those keys stay valid, on the pages and everywhere else, until they
+   are moved (photos.ts). */
+const PHOTO_DAY = "20\\d\\d/(?:0[1-9]|1[0-2])/(?:0[1-9]|[12]\\d|3[01])";
+export const PHOTO_KEY = new RegExp(`^p/(?:${PHOTO_DAY}/)?[0-9a-f-]{36}\\.(jpg|png|webp|gif)$`);
+/** the part of a key that is the photo itself: the same in the old address and the new (36 characters, the file's name) */
+export const photoId = (key: string) => key.slice(key.lastIndexOf("/") + 1, key.lastIndexOf("."));
+/** the day a photo is filed under: the page's when it is a real date of this century, else today (the journal's) */
+export function photoDay(date: string | undefined, timeZone: string): string {
+  if (date && /^20\d\d-\d\d-\d\d$/.test(date)) {
+    const t = Date.parse(date + "T00:00:00Z");
+    if (!Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === date) return date;
+  }
+  return localDay(timeZone || "Asia/Shanghai").date;
+}
+/** a new photo's key, in the folder of `day` (YYYY-MM-DD) */
+export const photoKeyFor = (day: string, ext: string) => `p/${day.replace(/-/g, "/")}/${crypto.randomUUID()}.${ext}`;
 /* what is kept in R2: a photo (up to MAX_PHOTO, of these types) and the card drawn for a page (the picture it is shared as) */
 export const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
 export const MAX_PHOTO = 10 * 1024 * 1024;

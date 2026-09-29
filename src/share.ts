@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { SESSION_COOKIE, authProblem, isLocal, sessionLogin } from "./auth";
-import { CARD_KEY, ENTRY_ID, PHOTO_KEY, rowToEntry } from "./entries";
+import { CARD_KEY, ENTRY_ID, PHOTO_KEY, photoId, rowToEntry } from "./entries";
 import { type Env, type HonoEnv } from "./env";
 import { loadLocks, lockOf, openScopes } from "./locks";
 import { SETTING_DEFAULTS, loadSettings } from "./settings";
@@ -63,23 +63,26 @@ pub.get("/card/:file", async (c) => {
   return new Response(obj.body, { headers: h });
 });
 
-/* Photos from R2. Keys are random UUIDs and never reused, so they cache forever — except a locked page's:
-   those need its key (?k=) or the admin's session, and are never kept by a shared cache. */
-pub.get("/img/:dir/:name", async (c) => {
-  const key = `${c.req.param("dir")}/${c.req.param("name")}`;
+/* Photos from R2 (p/YYYY/MM/DD/<uuid>.<ext>, or the older p/<uuid>.<ext>). Keys are random and never reused, so they
+   cache forever — except a locked page's: those need its key (?k=) or the admin's session, and are never kept by a
+   shared cache. Which page a photo is on is found by the photo's own name, not the whole key: a photo that has been
+   moved into its day's folder is still asked for at its old address for a while, and that is as locked as the new. */
+pub.get("/img/*", async (c) => {
+  const key = c.req.path.slice("/img/".length);
   if (!PHOTO_KEY.test(key)) return c.notFound();
   let locked = false;
   const locks = await loadLocks(c.env);
   if (locks.size) {
-    // photo_key may list several photos: look for this one among them
-    const row = await c.env.DB.prepare("SELECT id, date FROM entries WHERE photo_key=? OR instr(','||photo_key||',', ','||?||',')>0")
-      .bind(key, key).first<{ id: string; date: string }>();
-    const scope = row && lockOf(locks, row);
-    if (scope) {
+    const { results } = await c.env.DB.prepare("SELECT id, date FROM entries WHERE instr(photo_key, ?) > 0").bind(photoId(key)).all<{ id: string; date: string }>();
+    const scopes = [...new Set(results.map((r) => lockOf(locks, r)).filter((x): x is string => !!x))];
+    if (scopes.length) {
       locked = true;
       const admin = !authProblem(c.env) && (await sessionLogin(c.env, getCookie(c, SESSION_COOKIE)));
       const dev = c.env.DEV_BYPASS_AUTH === "1" && isLocal(c);
-      if (!admin && !dev && !(await openScopes(locks, [c.req.query("k") || ""])).has(scope)) return c.notFound();
+      if (!admin && !dev) {
+        const open = await openScopes(locks, [c.req.query("k") || ""]);
+        if (!scopes.every((s) => open.has(s))) return c.notFound();
+      }
     }
   }
   const obj = await c.env.PHOTOS.get(key);

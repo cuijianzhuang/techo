@@ -39,7 +39,7 @@
     {key:'look',title:'外观',sum:'封面 · 纸张 · 扉页 · 封底',parts:['cover','paper','readme','back']},
     {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
     {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
-    {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI',parts:['music','weather','map','ai']}];
+    {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI · 照片文件夹',parts:['music','weather','map','ai','photos']}];
   const isSet=v=>typeof v==='string'&&v.startsWith('set:');
   SET_PAGES.forEach(pg=>{
     const b=el('button','item mi');b.type='button';b.dataset.set=pg.key;
@@ -251,6 +251,7 @@
         mode:()=>['翻页方式','首页的书怎么翻。',[bookModeField()]],
         samples:()=>['示例页',null,[samplesField()]],
         music:()=>['网易云音乐','日记里的网易云歌曲：正文里单独一行贴歌曲链接，或 ```音乐 卡片里写「网易云: 链接」，就是一个能播的播放器。歌名、封面、歌词和声音从 Meting API 取。',[musicField()]],
+        photos:()=>['照片文件夹','新上传的照片放在 R2 的 p/年/月/日/ 里（日期是这一页的日期）。以前传的在 p/ 根下，可以在这里搬进日期文件夹：先预览，再复制，最后清理旧文件。三步都要你点了才会动，复制不会删旧文件，页面在新文件到位之后才改用新地址。',[photoFolderField()]],
         weather:()=>['天气','编辑页「地点和天气」查天气用的。填了和风天气就用和风（和手机天气 App 的说法一样）；没填、或者和风查不到的日子，用 Open-Meteo（中国气象局的模型，免费不用 key）。',[weatherField()]],
         map:()=>['地图','Mapbox：足迹地图页（/map/）、日记页上的小地图、编辑页的选点地图和地名查询。',[mapField()]],
         ai:()=>['AI','写草稿和补全用的模型：「随手记」里的「现在就写一页」、每晚的自动草稿、编辑页的「AI 补全」。只给后台看，不会出现在主页上。',[aiField()]],
@@ -905,6 +906,52 @@
     w.append(krow,hf,acts);
     return w;
   }
+  /* 手帐设置 → 照片文件夹: moving the photos of before the day folders into them (src/photos.ts): 预览 changes nothing,
+     复制 copies a few pages at a time and points them at the new address, 清理 deletes the old ones that nothing uses */
+  function photoFolderField(){
+    const w=el('div');w.style.cssText='display:grid;gap:10px';
+    const acts=el('div','photo-actions'),pv=el('button','b small','预览'),cp=el('button','b small','复制到日期文件夹'),cl=el('button','b small','清理旧文件');
+    for(const b of [pv,cp,cl])b.type='button';
+    acts.append(pv,cp,cl);
+    const out=el('div','hintx');out.style.whiteSpace='pre-wrap';
+    const call=(step,limit)=>sendJson('POST','/api/admin/photos/migrate',limit?{step,limit}:{step});
+    const busy=(on)=>{for(const b of [pv,cp,cl])b.disabled=on;};
+    const say=(t,color)=>{out.textContent=t;out.style.color=color||'';};
+    const run=async fn=>{busy(true);try{await fn();}catch(e){say('✗ '+(e.message||'没成'),'var(--red)');}finally{busy(false);}};
+    pv.onclick=()=>run(async()=>{
+      say('正在看……');
+      const r=await call('preview');
+      const lines=['根下的旧照片被页面（或封面）用着的：'+r.toMove+' 张'+(r.toMove?'，可以搬进日期文件夹':'，没有要搬的'),
+        'R2 的 p/ 根下一共 '+r.loose+' 个文件'+(r.looseTruncated?'（只数了前 1000 个）':'')+'，其中 '+r.unused+' 个没有页面在用（不会动它们）。'];
+      r.plan.slice(0,6).forEach(m=>lines.push('  '+m.from+'  →  '+(m.to||'（还不知道日期）')+'   ['+m.source+']'));
+      if(r.plan.length>6||r.toMove>r.plan.length)lines.push('  ……');
+      say(lines.join('\n'),'var(--olive)');
+    });
+    cp.onclick=()=>run(async()=>{
+      const first=await call('preview');
+      if(!first.toMove){say('没有要复制的。','var(--olive)');return;}
+      if(!confirm('把 '+first.toMove+' 张照片复制到各自的日期文件夹，并让页面改用新地址。旧文件先不删。继续吗？'))return;
+      let copied=0,skipped=[],left=first.toMove;
+      while(left>0){
+        say('正在复制……已复制 '+copied+' 张，还剩 '+left+' 张');
+        const r=await call('copy');
+        copied+=r.copied;left=r.remaining;skipped=r.skipped;
+        if(!r.copied)break;
+      }
+      say((left?'停下了：已复制 '+copied+' 张，还剩 '+left+' 张'+(skipped.length?'，没搬的原因：'+skipped.slice(0,5).map(s=>s.why).join('、'):''):'✓ 复制好了：'+copied+' 张，页面已经改用新地址。旧文件还在，确认页面上的图都正常之后再点「清理旧文件」。'),left?'var(--red)':'var(--olive)');
+    });
+    cl.onclick=()=>run(async()=>{
+      if(!confirm('删除 R2 里已经复制好、页面不再用的旧文件。这一步不能撤销。继续吗？'))return;
+      let deleted=0,r;
+      do{
+        say('正在清理……已删 '+deleted+' 个');
+        r=await call('cleanup',25);deleted+=r.deleted;
+      }while(r.deleted>0);
+      say('✓ 清理了 '+deleted+' 个旧文件。根下还有 '+r.loose+' 个'+(r.keptCount?'（'+r.keptCount+' 个没动：页面还在用，或没有页面用它）':'')+'。','var(--olive)');
+    });
+    w.append(acts,out);
+    return w;
+  }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
   function mapField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
@@ -1545,11 +1592,12 @@
         const files=[...(inp.files||[])].slice(0,MAX_PHOTOS-list.length);if(!files.length)return;
         fb.firstChild.textContent='上传中……';status('正在压缩并上传照片……');
         try{
-          let info=null;
+          let info=null,day=null;
           for(const file of files){
             info=info||await exifOf(file).catch(()=>null);
+            day=day||photoDay(info);
             const blob=await shrink(file);
-            const r=await api('/api/admin/photos',{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
+            const r=await api('/api/admin/photos?date='+day,{method:'POST',headers:{'content-type':blob.type,accept:'application/json'},body:blob});
             list.push({key:r.key,cap:'',url:URL.createObjectURL(blob)});
           }
           const said=await fromPhoto(info);
@@ -1619,6 +1667,9 @@
   }
   /* what a photo knows, onto the page: its day (a new page still on today's date takes it), and where it was
      taken with that day's weather, for a page without a place yet. Only what's still empty; nothing saved. */
+  /* the folder a photo goes to in R2 is the day of its page (p/YYYY/MM/DD/…): the page's date, or, when this photo is
+     about to make a new page the day it was taken (fromPhoto below), that day — worked out before the upload */
+  const photoDay=info=>info&&info.date&&sel==='new'&&draft.date===T.todayStr()&&info.date<draft.date?info.date:draft.date;
   async function fromPhoto(info){
     const said=[];
     if(!info)return said;

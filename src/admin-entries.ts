@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { CARD_KEY, ENTRY_ID, IMAGE_TYPES, MAX_PHOTO, type EntryInput, HttpError, cleanEntry, photoCols, photoKeys, rowToEntry, writeEntry } from "./entries";
+import { CARD_KEY, ENTRY_ID, IMAGE_TYPES, MAX_PHOTO, type EntryInput, HttpError, cleanEntry, photoCols, photoDay, photoKeyFor, photoKeys, rowToEntry, writeEntry } from "./entries";
 import { bumpVersion } from "./cache";
 import { type HonoEnv, bad } from "./env";
 import { dayScope, loadLocks } from "./locks";
@@ -88,7 +88,8 @@ admin.post("/api/admin/photos", async (c) => {
   const buf = await c.req.arrayBuffer();
   if (buf.byteLength === 0) return bad(c, 400, "空文件");
   if (buf.byteLength > MAX_PHOTO) return bad(c, 413, "图片超过 10MB");
-  const key = `p/${crypto.randomUUID()}.${ext}`;
+  // filed under the day of the page it is for (?date=), else today
+  const key = photoKeyFor(photoDay(c.req.query("date"), c.env.TIMEZONE), ext);
   await c.env.PHOTOS.put(key, buf, { httpMetadata: { contentType: type } });
   return c.json({ key, url: `/img/${key}` }, 201);
 });
