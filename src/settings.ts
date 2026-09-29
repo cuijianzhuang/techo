@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { bumpVersion } from "./cache";
 import { DEFAULT_MODEL } from "./compose";
 import { PHOTO_KEY } from "./entries";
 import { type Env, type HonoEnv, aiKey, bad } from "./env";
@@ -131,6 +132,7 @@ admin.put("/api/admin/settings", async (c) => {
   const up = c.env.DB.prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
   const pairs = Object.entries(parsed.value);
   if (pairs.length) await c.env.DB.batch(pairs.map(([k, v]) => up.bind(k, v)));
+  await bumpVersion(c.env);
   // cover pictures taken off the cover aren't used anywhere else
   if (parsed.value.coverPhotos !== undefined) {
     const keep = new Set(csv(parsed.value.coverPhotos));

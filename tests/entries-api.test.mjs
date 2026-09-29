@@ -2,24 +2,9 @@
    all of them, and that an unchanged answer is a 304 (and the home page's too: its data is inlined) */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadApp, loadTs, sqliteD1 } from './helpers.mjs';
+import { installHtmlRewriter, loadApp, loadTs, sqliteD1 } from './helpers.mjs';
 
-// (the Workers runtime has HTMLRewriter, Node doesn't: this one only puts what the boot.js handler adds in front of that script)
-globalThis.HTMLRewriter = class {
-  constructor() { this.handlers = []; }
-  on(selector, h) { this.handlers.push([selector, h]); return this; }
-  transform(res) {
-    const handlers = this.handlers;
-    return new Response(new ReadableStream({ async start(ctrl) {
-      let text = await res.text();
-      for (const [selector, h] of handlers) {
-        const el = { setInnerContent() {}, setAttribute() {}, after() {}, before: (html) => { text = text.replace(/<script src="\/assets\/boot\.js[^>]*>/, (m) => html + m); } };
-        if (!selector.includes('boot.js') || h.element) h.element(el);
-      }
-      ctrl.enqueue(new TextEncoder().encode(text)); ctrl.close();
-    } }), { status: res.status, headers: res.headers });
-  }
-};
+installHtmlRewriter();
 const app = await loadApp();
 const { plainText, excerpt, hasCards } = await loadTs('src/text.ts');
 
@@ -167,10 +152,7 @@ test('the excerpt is the timeline\'s plainText, word for word', async () => {
 // ---- what the database is asked for
 
 // the same database, told what it was asked and how many rows it handed over
-const watched = async (locks = []) => {
-  const db = await sqliteD1({ entries: ROWS, locks }), log = [];
-  return { log, DB: { prepare(sql) { const st = db.prepare(sql); const o = { bind(...a) { st.bind(...a); return o; }, all: async () => { const r = await st.all(); log.push({ sql, rows: r.results.length }); return r; }, first: async () => { const r = await st.first(); log.push({ sql, rows: r ? 1 : 0 }); return r; } }; return o; } } };
-};
+const watched = async (locks = []) => { const log = []; return { log, DB: await sqliteD1({ entries: ROWS, locks, log }) }; };
 const many = (n, o = {}) => Array.from({ length: n }, (_, i) => row({ id: 'm' + String(i).padStart(4, '0'), date: '2025-' + String(1 + Math.floor(i / 28) % 12).padStart(2, '0') + '-' + String(1 + i % 28).padStart(2, '0'), created_at: 1000 + i, body: '第 ' + i + ' 篇', ...o }));
 
 test('a stretch reads a stretch: the date index and a LIMIT, not the table', async () => {

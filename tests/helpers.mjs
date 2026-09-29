@@ -4,7 +4,11 @@ import { buildSync } from 'esbuild';
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+
+// (the Workers runtime has crypto.subtle.timingSafeEqual, Node keeps it in node:crypto)
+if (!crypto.subtle.timingSafeEqual) crypto.subtle.timingSafeEqual = (a, b) => timingSafeEqual(Buffer.from(a.buffer ?? a), Buffer.from(b.buffer ?? b));
 
 const root = (p) => fileURLToPath(new URL('../' + p, import.meta.url));
 
@@ -45,8 +49,8 @@ export async function loadApp() {
 }
 
 /** a D1 look-alike over real SQLite (node:sqlite) with the schema in schema.sql, holding `entries` and `locks`: the
-    Worker's SQL is run, not imitated */
-export async function sqliteD1({ entries = [], locks = [] } = {}) {
+    Worker's SQL is run, not imitated. `log`, when given, gets {sql, rows} for every statement run. */
+export async function sqliteD1({ entries = [], locks = [], log = null } = {}) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(root('schema.sql'), 'utf8'));
@@ -54,11 +58,46 @@ export async function sqliteD1({ entries = [], locks = [] } = {}) {
   const put = db.prepare(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
   for (const e of entries) put.run(...cols.map((c) => e[c] ?? ''));
   for (const l of locks) db.prepare('INSERT INTO locks (scope, hash, updated_at) VALUES (?, ?, 0)').run(l.scope, l.hash);
-  return {
-    prepare(sql) {
-      const st = db.prepare(sql); let args = [];
-      const o = { bind(...a) { args = a; return o; }, all: async () => ({ results: st.all(...args).map((r) => ({ ...r })) }), first: async () => { const r = st.get(...args); return r ? { ...r } : null; }, run: async () => { st.run(...args); return {}; } };
-      return o;
-    },
+  const note = (sql, rows) => { if (log) log.push({ sql, rows }); };
+  const make = (sql, args) => {
+    const st = db.prepare(sql);
+    const s = {
+      bind: (...a) => make(sql, a),   // (a new statement each time, as D1's)
+      all: async () => { const results = st.all(...args).map((r) => ({ ...r })); note(sql, results.length); return { results }; },
+      first: async () => { const r = st.get(...args); note(sql, r ? 1 : 0); return r ? { ...r } : null; },
+      run: async () => { st.run(...args); note(sql, 0); return {}; },
+    };
+    return s;
   };
+  return { prepare: (sql) => make(sql, []), batch: async (stmts) => { const out = []; for (const s of stmts) out.push(await s.run()); return out; } };
+}
+
+/** the Workers runtime has HTMLRewriter, Node doesn't: this one only puts what the boot.js handler adds in front of
+    that script (enough for the home page's data and ETag) */
+export function installHtmlRewriter() {
+  globalThis.HTMLRewriter = class {
+    constructor() { this.handlers = []; }
+    on(selector, h) { this.handlers.push([selector, h]); return this; }
+    transform(res) {
+      const handlers = this.handlers;
+      return new Response(new ReadableStream({ async start(ctrl) {
+        let text = await res.text();
+        for (const [selector, h] of handlers) {
+          const el = { setInnerContent() {}, setAttribute() {}, after() {}, before: (html) => { text = text.replace(/<script src="\/assets\/boot\.js[^>]*>/, (m) => html + m); } };
+          if (!selector.includes('boot.js') || h.element) h.element(el);
+        }
+        ctrl.enqueue(new TextEncoder().encode(text)); ctrl.close();
+      } }), { status: res.status, headers: res.headers });
+    }
+  };
+}
+
+/** an in-memory Cache API (Node has none), installed as `caches`; `keys()` lists what is kept */
+export function installCaches() {
+  const kept = new Map();
+  globalThis.caches = { default: {
+    async match(req) { const r = kept.get(new Request(req).url); return r ? new Response(r.buf, { headers: r.headers }) : undefined; },
+    async put(req, res) { kept.set(new Request(req).url, { buf: await res.arrayBuffer(), headers: [...res.headers] }); },
+  } };
+  return { keys: () => [...kept.keys()], size: () => kept.size };
 }

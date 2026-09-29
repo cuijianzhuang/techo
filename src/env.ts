@@ -22,6 +22,10 @@ export type Env = {
   METING_TOKEN?: string;
   /** IANA zone the journal's days follow, e.g. Asia/Shanghai */
   TIMEZONE: string;
+  /** Workers version metadata (wrangler.jsonc): the id of this deploy, part of the edge cache's keys (cache.ts) */
+  CF_VERSION_METADATA?: { id: string };
+  /** "1": a local `wrangler dev` uses the edge cache too (it builds every page each time otherwise) */
+  CACHE_LOCAL?: string;
   /** rate limit for password guesses (wrangler.jsonc "ratelimits"); missing: no limit */
   UNLOCK_LIMIT?: { limit(o: { key: string }): Promise<{ success: boolean }> };
 };
