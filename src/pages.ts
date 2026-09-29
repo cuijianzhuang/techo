@@ -3,15 +3,21 @@ import { getCookie } from "hono/cookie";
 import { SESSION_COOKIE, authProblem, isLocal, sessionLogin } from "./auth";
 import { CARD_KEY, ENTRY_ID, PHOTO_KEY, rowToEntry } from "./entries";
 import { type Env, type HonoEnv } from "./env";
+import { revalidated } from "./etag";
 import { loadLocks, lockOf, openScopes, readerEntries } from "./locks";
 import { SETTING_DEFAULTS, loadSettings, publicSettings } from "./settings";
+import { plainText } from "./text";
 
 export const pub = new Hono<HonoEnv>();
 
 /* The book's page: title and description from the settings, and the data inlined so book.js needn't fetch it. */
 pub.get("/", async (c) => {
   // (no tokens here: a reader's opened pages come later from /api/entries, their tab holds the keys)
-  const [page, settings, reader] = await Promise.all([c.env.ASSETS.fetch(c.req.raw), loadSettings(c.env), readerEntries(c.env, [])]);
+  // The static page is asked for without the reader's If-None-Match: it would answer 304 to a copy that only has the
+  // page's own ETag, and the pages inlined below (which change whenever one is written) would never get through.
+  const plain = new Headers(c.req.raw.headers);
+  for (const h of ["if-none-match", "if-modified-since", "range"]) plain.delete(h);
+  const [page, settings, reader] = await Promise.all([c.env.ASSETS.fetch(new Request(c.req.url, { headers: plain })), loadSettings(c.env), readerEntries(c.env, [])]);
   if (!page.ok) return page;
   // "<" escaped so nothing in a journal page can close the script tag
   const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings: publicSettings(settings) }).replace(/</g, "\\u003c");
@@ -26,9 +32,10 @@ pub.get("/", async (c) => {
     } })
     .on('script[src^="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
     .transform(page);
+  // no-cache: a browser keeps it and asks first; unchanged (no page written, nothing set), it gets a 304
   const h = new Headers(res.headers);
   h.set("Cache-Control", "no-cache");
-  return new Response(res.body, { status: res.status, headers: h });
+  return revalidated(c.req.raw, await res.arrayBuffer(), h, res.status);
 });
 
 /* ---------------- sharing a page ----------------
@@ -38,10 +45,6 @@ pub.get("/", async (c) => {
    when the page is published), else its first photo, else /og.png. A locked page shares nothing but that
    it is one. */
 const escHtml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
-/** Markdown → a line of plain words (render.js plainText) */
-const plainText = (md: string) => md.replace(/```[\s\S]*?```/g, " ").replace(/^\s*\+{3,}\s*(?:贴页|拼贴|collage)?\s*$/gim, " ")
-  .replace(/^\s*(#{1,3}\s+|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?|[@＠]\d{1,2}[:：]\d{2}\s*)/gm, "")
-  .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|==|`|\*)/g, "").replace(/[#＃][a-z]+/g, "").replace(/\s+/g, " ").trim();
 /** a published page that isn't locked (the only kind with a card or a preview), or null */
 async function sharedEntry(env: Env, id: string) {
   if (!ENTRY_ID.test(id)) return null;

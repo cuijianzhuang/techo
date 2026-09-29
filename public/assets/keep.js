@@ -9,7 +9,7 @@
   async function load(label){
     const held=T.keys();
     const [e,s]=await Promise.all([
-      fetch('/api/entries',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
+      fetch('/api/entries?view=cards',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
       fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     const settings=(s&&s.settings)||{};

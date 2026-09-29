@@ -118,6 +118,9 @@ h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-
 
 /* the end of the line: where it all started */
 .tl-end{position:relative;margin:0 auto;max-width:680px;padding:4px 0 0 34px;color:var(--desk-ink);font:400 18px/1.4 var(--hand)}
+.tl-more{display:block;margin:22px auto 0;padding:9px 24px;border:1px solid var(--desk-ink);border-radius:999px;background:transparent;color:var(--desk-ink);font:400 18px/1.2 var(--hand);cursor:pointer}
+.tl-more:hover:not(:disabled){opacity:.7}.tl-more:disabled{opacity:.5;cursor:default}
+.tl-more:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 .tl-end::before{content:"";position:absolute;left:7px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--desk-ink);opacity:.5}
 .tl-msg{margin:40px 0;color:var(--desk-ink);font:400 20px/1.5 var(--hand);text-align:center}
 .tl-msg a{color:var(--olive)}
@@ -149,6 +152,6 @@ h1{margin:18px 0 0;color:var(--desk-strong);font:400 46px/1 var(--title);letter-
 </header>
 <main class="tl" id="tl" aria-live="polite"><p class="tl-msg">正在翻手帐……</p></main>
 <script src="/assets/render.js?v=b2fcc2a097"></script>
-<script src="/assets/timeline.js?v=83c748d8e8"></script>
+<script src="/assets/timeline.js?v=8d28ca7590"></script>
 </body>
 </html>

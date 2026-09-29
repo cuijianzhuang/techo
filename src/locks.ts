@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { b64url, enc, hmac, sameText } from "./crypto";
 import { type Entry, loadPublished } from "./entries";
 import { type C, type Env, type HonoEnv, bad } from "./env";
+import { revalidated } from "./etag";
+import { excerpt, hasCards } from "./text";
 
 export const pub = new Hono<HonoEnv>();
 export const admin = new Hono<HonoEnv>();
@@ -65,22 +67,60 @@ export const lockOf = (locks: Map<string, string>, e: { id: string; date: string
   locks.has(e.id) ? e.id : locks.has(dayScope(e.date)) ? dayScope(e.date) : locks.has("book") ? "book" : null;
 
 type LockedStub = { id: string; date: string; locked: "book" | "day"; scope: string };
-/** published pages as a reader may see them: a locked page they haven't opened is only its date */
-export async function readerEntries(env: Env, tokens: string[]) {
-  const [entries, locks] = await Promise.all([loadPublished(env), loadLocks(env)]);
-  const open = await openScopes(locks, tokens);
-  const out: (Entry & { lock?: string } | LockedStub)[] = entries.map((e) => {
-    const scope = lockOf(locks, e);
-    if (!scope) return e;
-    if (!open.has(scope)) return { id: e.id, date: e.date, locked: scope === "book" ? "book" : "day", scope };
-    return { ...e, lock: scope };       // open: the page says which key opened it (for its photo)
-  });
-  return { entries: out, lock: { book: locks.has("book"), open: [...open] } };
+type Reader = Entry & { lock?: string };
+
+/* What a page of the site needs of the pages, so it needn't be sent all of them whole:
+   "full" every field (the book: it lays out every word), "index" the pages without their words, but for a line of
+   them (the timeline), "map" only the pages with a place, and only what the map draws, "cards" the words only of
+   pages that hold a card or a NetEase link, and the date and title of the rest (the shelf, the ticket folder and
+   the bills, which read the cards). A locked page is only its date in every view. */
+export type EntriesView = "full" | "index" | "map" | "cards";
+export const isView = (v: string): v is EntriesView => v === "full" || v === "index" || v === "map" || v === "cards";
+function inView(e: Reader, view: EntriesView) {
+  if (view === "full") return e;
+  const lock = e.lock ? { lock: e.lock } : {};
+  if (view === "map") return { id: e.id, date: e.date, title: e.title, place: e.place, geo: e.geo, weather: e.weather, createdAt: e.createdAt, ...lock };
+  if (view === "cards") return { id: e.id, date: e.date, title: e.title, createdAt: e.createdAt, body: hasCards(e.body) ? e.body : "", ...lock };
+  return {
+    id: e.id, date: e.date, title: e.title, latin: e.latin, stamp: e.stamp, place: e.place, geo: e.geo, weather: e.weather,
+    stickers: e.stickers, photoKey: e.photoKey, photoCap: e.photoCap, createdAt: e.createdAt, excerpt: excerpt(e.body), ...lock,
+  };
 }
 
+/** published pages as a reader may see them: a locked page they haven't opened is only its date. With `page`, a
+    stretch of them, newest first: `limit` of them, those before the page `before` (the last one of the stretch
+    before), and what the whole list is (how many, how many days, from when to when, whether more come before) */
+export async function readerEntries(env: Env, tokens: string[], view: EntriesView = "full", page?: { limit: number; before?: string }) {
+  const [all, locks] = await Promise.all([loadPublished(env), loadLocks(env)]);
+  const open = await openScopes(locks, tokens);
+  let entries = view === "map" ? all.filter((e) => e.geo) : all;
+  let meta: Record<string, unknown> | undefined;
+  if (page) {
+    const stop = page.before ? entries.findIndex((e) => e.id === page.before) : entries.length, end = Math.max(stop, 0), start = Math.max(0, end - page.limit);
+    meta = { total: entries.length, days: new Set(entries.map((e) => e.date)).size, first: entries[0]?.date || "", last: entries[entries.length - 1]?.date || "", more: start > 0 };
+    entries = entries.slice(start, end).reverse();
+  }
+  const out = entries.map((e): Reader | LockedStub | Record<string, unknown> => {
+    const scope = lockOf(locks, e);
+    if (!scope) return inView(e, view);
+    if (!open.has(scope)) return { id: e.id, date: e.date, locked: scope === "book" ? "book" : "day", scope };
+    return inView({ ...e, lock: scope }, view);       // open: the page says which key opened it (for its photo)
+  });
+  return { entries: out, lock: { book: locks.has("book"), open: [...open] }, ...(meta ? { page: meta } : {}) };
+}
+
+/* what the reader sees, and that it can be kept: the answer is private (it depends on the keys the tab sends) and
+   the browser asks before using its copy, which is a 304 while nothing has been written or locked */
 pub.get("/api/entries", async (c) => {
-  c.header("Cache-Control", "no-store");
-  return c.json(await readerEntries(c.env, keysOf(c)));
+  const view = c.req.query("view") || "full";
+  if (!isView(view)) return bad(c, 400, "view 只能是 index、map 或 cards");
+  // ?limit=100 (at most 500) makes it a stretch, newest first; &before=<id> the stretch before that page
+  const limit = c.req.query("limit"), before = c.req.query("before") || undefined;
+  if (limit !== undefined && !/^\d{1,3}$/.test(limit)) return bad(c, 400, "limit 是 1 到 500");
+  const n = limit === undefined ? (before ? 100 : 0) : Number(limit);
+  if (limit !== undefined && (n < 1 || n > 500)) return bad(c, 400, "limit 是 1 到 500");
+  const h = new Headers({ "Content-Type": "application/json; charset=UTF-8", "Cache-Control": "private, no-cache", Vary: "x-techo-keys" });
+  return revalidated(c.req.raw, JSON.stringify(await readerEntries(c.env, keysOf(c), view, n ? { limit: n, before } : undefined)), h);
 });
 
 /* the password for the book ('book') or a day (its entry id): right → a token; 10 guesses a minute */
