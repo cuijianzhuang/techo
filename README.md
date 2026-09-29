@@ -106,10 +106,15 @@ wrangler.jsonc          Worker 配置（D1 / R2 已填好 ID）
 
 `wrangler.jsonc` 里已经填好了 D1 数据库 `techo-db`（APAC）和 R2 存储桶 `techo-photos` 的 ID。线上的库已经是最新的表结构（三个升级文件都跑过了）。
 
-在别的账号从头部署时：
+在别的账号从头部署时，只要手动建一次数据库，把输出的 `database_id` 填进 `wrangler.jsonc`（换掉原来的）：
 
 ```bash
-npx wrangler d1 create techo-db            # 把输出的 database_id 填进 wrangler.jsonc
+npx wrangler d1 create techo-db
+```
+
+照片桶和表由部署自己建：第一次部署前，`deploy.yml` 会在桶不存在时建 `techo-photos`，在库里还没有 `entries` 表时用 `schema.sql` 建表（已经在用的库不会被动，升级靠 `migrations/`）。想在本地或部署之外手动建，也可以：
+
+```bash
 npx wrangler r2 bucket create techo-photos
 npm run db:init:remote                     # 用 schema.sql 建表，新库不用再跑 migrations/
 ```
