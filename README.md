@@ -306,6 +306,9 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 - 示例页、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`，样式在 `src-build/design/extra.css` 和 `src-build/book-extra.css`。改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css` 和 `public/assets/paper.css`（纸色，书和 `/timeline/` 共用，源文件是 `src-build/paper.css`）。
 - 立体的书的源码在 `src-build/book3d/`，改完运行 `npm run build:3d` 重新打包 `public/assets/book3d.js`。
 - `public/assets/` 里其余的 js / css 和 `public/timeline/`、`public/404.html` 直接改。
+- **文件版本号**：页面里引用 `/assets/*` 和 `/vendor/*` 的地方都带着 `?v=<十位>`（比如 `/assets/render.js?v=59b61e98ef`），由 `src-build/stamp.py` 按文件内容算出；一个文件引用了别的文件（`boot.js` 加载 `book3d.js`，它又读 `techo.css`），版本里也算进了那个文件的版本，所以改了 CSS，用到它的脚本和页面的地址也跟着变。`public/_headers` 让这两个目录缓存一年（`immutable`），回访的读者不再为每个文件问一遍服务器；新部署地址就变了，读到的一定是新的。页面本身（HTML）仍是每次向服务器确认。
+  - **改了 `public/` 里的 js / css / html 之后运行 `python3 src-build/build.py`**（它最后会跑 `stamp.py`；`npm run build:3d` 也会）。忘了的话 `npm test` 和 CI 会报「版本不是现在算出来的」，不会带着旧版本上线。`npm run dev` 启动前会自动跑一遍，但开着 dev 时再改文件要手动跑，浏览器也要强制刷新（Ctrl/⌘+Shift+R），不然会拿到缓存里的旧文件。
+  - 新写的引用要用引号、`(` 或 `=` 紧挨着写 `/assets/…`（`src="/assets/x.js"`、`import('/assets/x.js')`），`stamp.py` 才认得出来；Worker 里找 `boot.js` 用的是 `script[src^="/assets/boot.js"]`。
 - 生成的文件要和源码一起提交，CI 会检查两边一致。
 - 后台写的页面按日期排在示例页后面。
 

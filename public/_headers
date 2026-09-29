@@ -1,0 +1,6 @@
+# Every reference to these carries ?v=<version> (src-build/stamp.py), so a new deploy is new addresses and the old
+# ones never change: keep them for a year. The pages themselves are checked with the server each time.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable

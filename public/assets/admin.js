@@ -552,7 +552,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=2e1dbfe52e';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});

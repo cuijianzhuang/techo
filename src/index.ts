@@ -380,7 +380,7 @@ app.get("/", async (c) => {
       e.after(m("og:type", "website") + m("og:title", settings.siteTitle || SETTING_DEFAULTS.siteTitle) + m("og:description", settings.siteDesc) +
         m("og:image", o + "/og.png") + m("og:image:width", "1200") + m("og:image:height", "630") + '<meta name="twitter:card" content="summary_large_image">', { html: true });
     } })
-    .on('script[src="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
+    .on('script[src^="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
     .transform(page);
   const h = new Headers(res.headers);
   h.set("Cache-Control", "no-cache");
