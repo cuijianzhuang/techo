@@ -40,10 +40,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # a new account's first deploy: make the photo bucket and the tables (the D1 database itself is made by hand,
-          # `wrangler d1 create`, and its id goes in wrangler.jsonc). Tables only when there are none: a database in
-          # use is left to migrations/, and schema.sql never runs over it.
-          preCommands: |
-            npx wrangler r2 bucket create techo-photos || true
-            npx wrangler d1 execute DB --remote --command "SELECT 1 FROM entries LIMIT 1" >/dev/null 2>&1 || npx wrangler d1 execute DB --remote --file=schema.sql
+          # a new account's first deploy: the photo bucket and the tables (see the script; the D1 database itself is made
+          # by hand, `wrangler d1 create`, and its id goes in wrangler.jsonc). Best effort: it never fails the deploy.
+          preCommands: bash scripts/bootstrap.sh
           command: deploy
