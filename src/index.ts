@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { ComposeError, composePage, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
+import { UA } from "./ua";
+import { metingGet, metingHeaders, metingSong } from "./meting";
+import { qweatherDay } from "./qweather";
 
 type Env = {
   DB: D1Database;
@@ -898,7 +901,6 @@ app.post("/api/admin/photos", async (c) => {
    knows how to take in: Goodreads, IMDb, Spotify …) is fetched from it, anything else searched in it. An ISBN
    NeoDB doesn't know is tried at Open Library. What comes back is the few fields the page's cards use. */
 const NEODB = "https://neodb.social";
-const UA = { "User-Agent": "techo-journal (+https://github.com/cuijianzhuang/techo)", Accept: "application/json" };
 type Found = { kind: "book" | "film" | "music"; title: string; year?: string; author?: string; publisher?: string; isbn?: string;
   director?: string; cast?: string; genre?: string; artist?: string; rating?: number; brief?: string; cover?: string; url?: string; series?: boolean };
 const names = (v: unknown, n = 3) => (Array.isArray(v) ? v : v ? [v] : []).map((x) => String(typeof x === "object" && x ? (x as { name?: string }).name ?? "" : x)).filter(Boolean).slice(0, n).join(" / ");
@@ -992,136 +994,6 @@ app.post("/api/admin/netease", async (c) => {
   return bad(c, 404, "没认出是哪首歌：贴网易云的歌曲链接、分享的那段文字，或者歌曲 ID");
 });
 
-/* 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐), asked by the Worker: a Meting API that wants a token
-   gets it (the admin-only setting metingToken, or the secret METING_TOKEN: it never reaches a page), and nobody's
-   browser minds where the API lives. What the API answers ([…], {data: […]}, {data: {…}}, {result: {songs: […]}}…)
-   is taken down to one song's title, artist, cover, sound and words. A cover or a sound that is the API's own
-   address again (…?type=url&id=…, which would want the token too) is followed here to where it leads (NetEase's
-   servers); one that only comes with the token is handed out through /api/meting/file. What the song doesn't say
-   is asked for (type=url, pic, lrc), and then of NetEase itself: a song NetEase won't play (a VIP one, one taken
-   down) still has its name, its singer and its cover. */
-const METING_DEFAULT = "https://api.injahow.cn/meting/";
-type Song = { title: string; artist: string; url: string; pic: string; lrc: string; why?: string };
-const metingUrl = (api: string, type: string, id: string) => {
-  const base = (api || METING_DEFAULT).trim();
-  return /:id/.test(base)
-    ? base.replace(":server", "netease").replace(":type", type).replace(":id", encodeURIComponent(id)).replace(":r", String(Math.random()).slice(2))
-    : base + (base.includes("?") ? "&" : "?") + "server=netease&type=" + type + "&id=" + encodeURIComponent(id);
-};
-const metingHeaders = (token: string) => {
-  const h: Record<string, string> = { accept: "application/json", "user-agent": UA["User-Agent"] };
-  if (token) h.authorization = "Bearer " + token;
-  return h;
-};
-/* the API asked; an address of the site rather than of its API (https://music.example/ for
-   https://music.example/api, as some Meting servers have it) answers with its page, not a song: then …/api */
-async function metingGet(api: string, type: string, id: string, headers: Record<string, string>) {
-  let r = await fetch(metingUrl(api, type, id), { headers });
-  const base = (api || METING_DEFAULT).trim();
-  let root = false;
-  try { root = !/:id/.test(base) && new URL(base).pathname === "/"; } catch { /* not a URL: said by fetch */ }
-  if (root && (r.status === 404 || (r.ok && /html/.test(r.headers.get("content-type") || "")))) {
-    r.body?.cancel();
-    api = new URL(base).origin + "/api";
-    r = await fetch(metingUrl(api, type, id), { headers });
-  }
-  return { r, api };
-}
-// the song in an answer, however it's wrapped
-const SONG_KEYS = ["url", "title", "name", "pic", "cover", "lrc", "author", "artist"];
-function songIn(j: unknown, depth = 0): Record<string, unknown> | null {
-  if (!j || typeof j !== "object" || depth > 4) return null;
-  if (Array.isArray(j)) return songIn(j[0], depth + 1);
-  const o = j as Record<string, unknown>;
-  if (SONG_KEYS.filter((k) => typeof o[k] === "string" && o[k]).length >= 2) return o;
-  for (const k of ["data", "result", "songs", "song", "list", "items"]) { const x = songIn(o[k], depth + 1); if (x) return x; }
-  return SONG_KEYS.some((k) => typeof o[k] === "string" && o[k]) ? o : null;
-}
-const str = (x: Record<string, unknown> | null, ...ks: string[]) => {
-  for (const k of ks) {
-    const v = x?.[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-    // artist: ["周杰伦"] or [{name: "周杰伦"}]
-    if (Array.isArray(v)) { const n = v.map((a) => (typeof a === "string" ? a : (a as { name?: unknown })?.name)).filter((a) => typeof a === "string" && a); if (n.length) return n.join(" / "); }
-  }
-  return "";
-};
-async function metingSong(token: string, asked: string, id: string): Promise<Song | null> {
-  const headers = metingHeaders(token);
-  const { r, api } = await metingGet(asked, "song", id, headers), u = metingUrl(api, "song", id);
-  if (!r.ok) {
-    // what it says, if it says: {"success":false,"error":"需要 API Token…"}
-    const said = await r.json().then((j) => { const o = (j || {}) as { error?: unknown; message?: unknown }; return String(o.error || o.message || ""); }).catch(() => "");
-    const asks = r.status === 401 || /token/i.test(said);
-    throw new Error(asks ? (token ? "Meting 接口不认这个 token" : "Meting 接口要 token：在「手帐设置 → 接入服务 → 网易云音乐」填上")
-      : "Meting 接口拒绝了请求（" + r.status + (said ? "：" + said.slice(0, 80) : "") + "）" + (r.status === 403 ? "，可能不让 Cloudflare 访问，换一个接口试试" : ""));
-  }
-  const text = await r.text().catch(() => "");
-  let j: unknown = null;
-  try { j = JSON.parse(text); } catch { /* not JSON: said below */ }
-  const x = songIn(j);
-  const own = (v: string) => { try { return new URL(v).origin === new URL(u).origin; } catch { return false; } };
-  /* a sound or a cover: where the API's own address leads; what it answers with, if that's a link; handed out
-     through the Worker if it's the thing itself (it wanted the token) */
-  const media = async (v: string, t: "url" | "pic", hop = 0): Promise<string> => {
-    if (!v || !/^https?:\/\//.test(v)) return "";
-    if (!own(v)) return v;
-    const f = await fetch(v, { headers, redirect: "manual" }).catch(() => null);
-    if (!f) return "";
-    const to = f.headers.get("location");
-    // NetEase's servers answer https too: a page on https won't play or show them over http
-    if (to) return new URL(to, v).toString().replace(/^http:\/\/(?=[^/]*\.(?:126|163)\.net\/)/, "https://");
-    if (!f.ok) return "";
-    const type = f.headers.get("content-type") || "";
-    if (/json/.test(type)) {
-      const y = songIn(await f.json().catch(() => null));
-      const w = str(y, t === "url" ? "url" : "pic", ...(t === "pic" ? ["cover"] : []));
-      return hop < 1 && w !== v ? media(w, t, hop + 1) : "";
-    }
-    f.body?.cancel();
-    return /^(audio|image|video)\/|octet-stream/.test(type) ? "/api/meting/file?t=" + t + "&id=" + id : "";
-  };
-  const words = async (v: string) => {
-    if (!v) return "";
-    if (!/^https?:/.test(v)) return v;
-    if (!own(v)) return v;
-    const f = await fetch(v, { headers }).catch(() => null);
-    if (!f || !f.ok) return "";
-    const t = (await f.text()).slice(0, 20000);
-    if (/^\s*[[{]/.test(t) && !/^\s*\[\d/.test(t)) { try { const y = JSON.parse(t) as Record<string, unknown>, w = str(songIn(y) || y, "lrc", "lyric"); return /^https?:/.test(w) ? "" : w; } catch { return ""; } }
-    return /\[\d+:\d/.test(t) ? t : "";
-  };
-  let [url, pic, lrc] = await Promise.all([media(str(x, "url"), "url"), media(str(x, "pic", "cover"), "pic"), words(str(x, "lrc", "lyric"))]);
-  // what the song didn't say: asked for one by one
-  [url, pic, lrc] = await Promise.all([
-    url || media(metingUrl(api, "url", id), "url"),
-    pic || media(metingUrl(api, "pic", id), "pic"),
-    lrc || words(metingUrl(api, "lrc", id)),
-  ]);
-  let title = str(x, "title", "name"), artist = str(x, "author", "artist", "artists", "ar");
-  // and then of NetEase: its own link to the sound (which leads to its 404 page when it won't play), its details
-  if (!url) {
-    const f = await fetch("https://music.163.com/song/media/outer/url?id=" + id + ".mp3", { headers: { "user-agent": UA["User-Agent"] }, redirect: "manual" }).catch(() => null);
-    const to = f?.headers.get("location") || "";
-    if (/^https?:\/\//.test(to) && !/music\.163\.com\/(?:#\/)?404/.test(to)) url = to.replace(/^http:/, "https:");
-  }
-  if (!title || !pic) {
-    const d = await fetch("https://music.163.com/api/song/detail/?id=" + id + "&ids=%5B" + id + "%5D", { headers: { "user-agent": UA["User-Agent"], referer: "https://music.163.com/" } })
-      .then((f) => (f.ok ? f.json() : null)).catch(() => null) as { songs?: { name?: string; artists?: { name?: string }[]; album?: { picUrl?: string } }[] } | null;
-    const n = d?.songs?.[0];
-    if (n) {
-      title ||= n.name || "";
-      artist ||= (n.artists || []).map((a) => a.name).filter(Boolean).join(" / ");
-      pic ||= (n.album?.picUrl || "").replace(/^http:/, "https:");
-    }
-  }
-  if (!url && !title) {
-    if (x) return null;
-    // an answer not understood: what it was, for 试一下
-    throw new Error("没认出 Meting 接口的回答：" + (text.trim().slice(0, 120) || "（空的）"));
-  }
-  return { title, artist, url, pic, lrc, ...(url ? {} : { why: "在网易云放不了（VIP 或下架）" }) };
-}
 const songReply = async (c: C, api: string, token: string) => {
   const id = (c.req.query("id") || "").trim();
   if (!/^\d{3,12}$/.test(id)) return bad(c, 400, "要网易云的歌曲 ID");
@@ -1163,54 +1035,6 @@ app.get("/api/admin/meting", async (c) => {
   return songReply(c, api || s.metingApi || "", tok || metingToken(c.env, s));
 });
 
-/* 地点和天气 → a day's weather from 和风天气 (QWeather), as Chinese forecasts say it ("多云转小雨 15~25°"): the
-   forecast's day and night for today and the week ahead; for the last ten days the hours the time machine
-   (/v7/historical) kept, the morning (6–13) and the afternoon and evening (14–21) each by what most of it was.
-   Asked here so the key stays in the Worker. { weather } or an error; without a key: 404 { off: true }, and the
-   admin asks Open-Meteo. */
-const QW_SAID: Record<string, string> = {
-  "204": "那一天那里没有天气数据", "400": "请求不对", "401": "和风天气的 KEY 不对", "402": "和风天气的额度用完了",
-  "403": "这个 KEY 没有这项服务（或 API Host 不对）", "404": "那一天那里没有天气数据", "429": "和风天气说请求太频繁",
-};
-async function qweatherDay(key: string, host: string, date: string, lat: number, lon: number, today: string) {
-  const h = host || "devapi.qweather.com", legacy = /^(?:dev)?api\.qweather\.com$/.test(h);
-  const loc = lon.toFixed(2) + "," + lat.toFixed(2);
-  const ask = async (base: string, path: string) => {
-    const r = await fetch("https://" + base + path, { headers: { "X-QW-Api-Key": key, accept: "application/json" } });
-    const j = (await r.json().catch(() => null)) as ({ code?: string } & Record<string, unknown>) | null;
-    const code = j?.code || String(r.status);
-    if (code !== "200") { const e = new Error(QW_SAID[code] || "和风天气没答上来（" + code + "）"); (e as Error & { code?: string }).code = code; throw e; }
-    return j as Record<string, unknown>;
-  };
-  const span = (a: number, b: number) => (a === b ? String(b) : a + "~" + b) + "°";
-  const days = (Date.parse(date + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 864e5;
-  if (days > 6) throw new Error("太远的日子还查不到天气");
-  if (days >= 0) {
-    // the week ahead (7d; a plan with only 3d)
-    const j = await ask(h, "/v7/weather/7d?location=" + loc).catch((e) => (e.code === "403" ? ask(h, "/v7/weather/3d?location=" + loc) : Promise.reject(e)));
-    type D = { fxDate: string; textDay: string; textNight: string; tempMax: string; tempMin: string };
-    const d = ((j.daily || []) as D[]).find((x) => x.fxDate === date);
-    if (!d) throw new Error("那一天的天气还没有");
-    return (d.textDay === d.textNight ? d.textDay : d.textDay + "转" + d.textNight) + " " + span(Math.round(+d.tempMin), Math.round(+d.tempMax));
-  }
-  if (days < -10) throw new Error("和风天气只存最近 10 天");
-  // the time machine wants the place's LocationID
-  const g = await ask(legacy ? "geoapi.qweather.com" : h, (legacy ? "/v2" : "/geo/v2") + "/city/lookup?number=1&location=" + loc);
-  const id = ((g.location || []) as { id?: string }[])[0]?.id;
-  if (!id) throw new Error("和风天气没认出这个地方");
-  const w = await ask(legacy ? "datasetapi.qweather.com" : h, "/v7/historical/weather?location=" + id + "&date=" + date.replace(/-/g, ""));
-  const dd = (w.weatherDaily || {}) as { tempMax?: string; tempMin?: string };
-  const hours = ((w.weatherHourly || []) as { time: string; text: string }[]).map((x) => ({ at: +(/T(\d\d)/.exec(x.time)?.[1] ?? -1), text: x.text }));
-  const most = (hs: { text: string }[]) => {
-    const n = new Map<string, number>();
-    hs.forEach((x) => n.set(x.text, (n.get(x.text) || 0) + 1));
-    return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-  };
-  const am = most(hours.filter((x) => x.at >= 6 && x.at <= 13)), pm = most(hours.filter((x) => x.at >= 14 && x.at <= 21));
-  const text = am && pm && am !== pm ? am + "转" + pm : am || pm;
-  if (!text || dd.tempMax == null) throw new Error("那一天那里没有天气数据");
-  return text + " " + span(Math.round(+(dd.tempMin ?? dd.tempMax)), Math.round(+dd.tempMax));
-}
 app.get("/api/admin/weather", async (c) => {
   const date = c.req.query("date") || "", lat = Number(c.req.query("lat")), lon = Number(c.req.query("lon"));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(Math.abs(lat) <= 90) || !(Math.abs(lon) <= 180)) return bad(c, 400, "要日期和坐标");

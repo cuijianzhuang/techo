@@ -295,9 +295,11 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 
 ```bash
 npm run typecheck
-node --test tests/*.mjs
+npm test                          # tests/*.test.mjs：立体书的动作、Meting、和风天气、天气按小时的写法、账单
 python3 src-build/build.py && npm run build:3d && git status   # public/ 不应该有没提交的改动
 ```
+
+测试放在 `tests/`，文件名 `*.test.mjs`。Worker 里的逻辑（`src/meting.ts`、`src/qweather.ts`）用 `tests/helpers.mjs` 的 `loadTs` 直接跑，网络用 `withFetch` 换成假的；浏览器脚本里的函数（`halfDay`、`bill`）没有模块，用 `slice` 按前后标记从源文件里取出来，标记找不到时测试会直接报错，不会悄悄什么都没测。
 
 ## 改页面
 

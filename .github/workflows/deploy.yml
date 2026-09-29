@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm test
       # generated pages must match their sources in src-build/
       - run: python3 src-build/build.py && npm run build:3d && git diff --exit-code -- public
 
