@@ -21,7 +21,12 @@
       <div id="book"></div>
     </div>
   </div>
-  <div class="loading" id="loading">正在翻开手帐……</div>
+  <div class="loading" id="loading" role="status">
+    <div class="ld">
+      <div class="ld-book" aria-hidden="true"><i class="ld-cover"></i><i class="ld-l"></i><i class="ld-r"></i><i class="ld-pg ld-p1"></i><i class="ld-pg ld-p2"></i><i class="ld-pg ld-p3"></i></div>
+      <p>正在翻开手帐<span class="ld-dots" aria-hidden="true"><b>.</b><b>.</b><b>.</b></span></p>
+    </div>
+  </div>
   <div class="dragnote" id="dragnote" style="left:calc(75% + 8px);bottom:-4px">
     <svg width="46" height="30" viewBox="0 0 46 30" aria-hidden="true"><path d="M44 26C30 26 14 20 4 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 16L3 5 13 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <span>// 拖动右下角翻开</span>

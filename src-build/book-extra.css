@@ -251,6 +251,26 @@ html{scrollbar-gutter:stable}
 .stage{container-type:inline-size}
 .loading{height:min(calc(100vh - 140px),100cqw * 792 / 1102);display:grid;place-items:center;text-align:center;color:var(--desk-ink);font:400 13px/1 var(--print)}
 
+/* the loading note: a little open notebook whose pages turn one after the other, and three dots that come and go */
+.ld{display:grid;justify-items:center;gap:24px}
+.ld p{margin:0;letter-spacing:.06em}
+.ld-book{--ruled:repeating-linear-gradient(0deg,transparent 0 9px,rgba(128,140,112,.3) 9px 10px);position:relative;width:132px;height:88px;perspective:640px;filter:drop-shadow(0 6px 8px rgba(30,25,15,.22))}
+.ld-book i{position:absolute;display:block;top:0;height:100%;width:50%}
+.ld-cover{left:-6px!important;top:-5px!important;width:calc(100% + 12px)!important;height:calc(100% + 10px)!important;border-radius:5px;background:linear-gradient(90deg,#2f4f59,#264048 50%,#2f4f59)}
+.ld-l{left:0;background:#f4efdd var(--ruled);border-radius:2px 0 0 2px;box-shadow:inset -8px 0 8px -8px rgba(60,50,30,.35)}
+.ld-r{left:50%;background:#fbf8ee var(--ruled);border-radius:0 2px 2px 0;box-shadow:inset 8px 0 8px -8px rgba(60,50,30,.35)}
+.ld-pg{left:50%;background:#fbf8ee var(--ruled);border-radius:0 2px 2px 0;transform-origin:0 50%;animation:ld-turn 2.4s cubic-bezier(.55,.05,.3,1) infinite}
+.ld-p2{animation-delay:.3s}
+.ld-p3{animation-delay:.6s}
+@keyframes ld-turn{0%,10%{transform:rotateY(0)}55%,100%{transform:rotateY(-179deg)}}
+.ld-dots b{display:inline-block;font-weight:400;animation:ld-dot 1.2s ease-in-out infinite}
+.ld-dots b:nth-child(2){animation-delay:.2s}
+.ld-dots b:nth-child(3){animation-delay:.4s}
+@keyframes ld-dot{0%,60%,100%{opacity:.15}30%{opacity:1}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ld-book{filter:drop-shadow(0 6px 10px rgba(0,0,0,.55))}}
+:root[data-theme="dark"] .ld-book{filter:drop-shadow(0 6px 10px rgba(0,0,0,.55))}
+@media (prefers-reduced-motion:reduce){.ld-pg{animation:none}.ld-p1{transform:rotateY(-26deg)}.ld-p2{transform:rotateY(-14deg)}.ld-p3{transform:none}.ld-dots b{animation:none;opacity:.6}}
+
 /* entry photos */
 .jph{align-self:flex-end;margin:6px 10px 0 0;position:relative;background:#fff;padding:7px 7px 24px;box-shadow:0 2px 5px rgba(40,30,10,.22);transform:rotate(2.5deg);width:200px;flex:none}
 .jph img{display:block;width:186px;height:140px;object-fit:cover;background:#e8e3d2}
