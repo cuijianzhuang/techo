@@ -708,12 +708,25 @@
   const FIT_MAX=19,FIT_MIN=16,RUN_FS=17,FILL_MIN=90,Z_MIN=.6;
   const over=t=>t.scrollHeight>t.clientHeight+1;
   const SENTENCE=/[^。！？!?；;…]*[。！？!?；;…]+[”’」』）)\]]*\s*|[^。！？!?；;…]+/g;
+  /* the biggest size from lo to hi at which `fits`, or null when not even lo does. The bigger the type the taller the
+     words, so the ends are looked at first and what is between is halved: a page that will run on is known after two
+     looks, not one for every size (each look is a layout). */
+  function biggestFit(fits,lo,hi){
+    if(fits(hi))return hi;
+    if(!fits(lo))return null;
+    while(hi-lo>1){const mid=(lo+hi)>>1;if(fits(mid))lo=mid;else hi=mid;}
+    return lo;
+  }
   function entryPages(en,side){
     if(en.locked)return [lockedPage(en,side)];
     const m=measure();
+    m.textContent='';   // (the pages laid out before this one are done with: a growing box makes every measure dearer)
     const one=entryPage(en,side);m.appendChild(one);
     const t1=one.querySelector('.jtext');
-    if(!t1.querySelector('.jbrk'))for(let fs=FIT_MAX;fs>=FIT_MIN;fs--){one.style.setProperty('--jfs',fs+'px');if(!over(t1))return [one];}
+    if(!t1.querySelector('.jbrk')){
+      const fs=biggestFit(f=>{one.style.setProperty('--jfs',f+'px');return !over(t1);},FIT_MIN,FIT_MAX);
+      if(fs!==null){one.style.setProperty('--jfs',fs+'px');return [one];}
+    }
     one.remove();
     const queue=[...entryWords(en,el('div')).children];
     const out=[];let s=null;
@@ -902,6 +915,11 @@
       else i.el.style.opacity='0';
     });
     page.__draw=final;page.dataset.draw='pending';
+  }
+  /* prepDraw when the page is first come near, not for every page of the book at the start: it costs a computed
+     style for every stroke and shape on the page. A page never prepared has no data-draw yet. */
+  function prepOnce(page){
+    if(page&&page.dataset.draw===undefined&&(page.classList.contains('day')||page.classList.contains('jp')))prepDraw(page);
   }
   function playDraw(page){
     if(!page||page.dataset.draw!=='pending')return;
@@ -1575,5 +1593,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

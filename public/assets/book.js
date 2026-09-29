@@ -11,10 +11,9 @@
   /* data, settings and the page list (shared with the 3D book): see Techo.loadBook in render.js */
   const {pages}=await T.loadBook(src);
 
-  // lay pages out once off-screen to measure line lengths for the draw-in
+  // lay pages out once off-screen (a page is prepared for the draw-in, Techo.prepOnce, when it is first come near)
   const meas=T.measure();
   pages.forEach(p=>meas.appendChild(p.node));
-  if(!reduced)pages.forEach(p=>{if(p.node.classList.contains('day')||p.node.classList.contains('jp'))T.prepDraw(p.node);});
   pages.forEach(p=>{
     const w=el('div','pf'+(p.hard?' hard':''));
     if(p.hard)w.dataset.density='hard';
@@ -79,7 +78,9 @@
     if(i>=last)return[last];
     const l=i%2===1?i:i-1;return[l,l+1];
   }
-  function reveal(i){visible(i).forEach(k=>{const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);});}
+  // write a page in: prepared now if it hasn't been (a page the reader has not come near stays as it is)
+  const write=k=>{const n=pages[k]&&pages[k].node;if(!n)return;if(!reduced)T.prepOnce(n);T.playDraw(n);};
+  function reveal(i){visible(i).forEach(write);}
   let shareBtn=null;
   function chrome(i){
     T.dragNote(dragnote,i===0&&landscape());
@@ -123,7 +124,7 @@
     const i=pf.getCurrentPageIndex();
     if(e.data==='read'){shiftEl.style.transitionDuration='';setShift(i);}
     // write the pages about to be uncovered while the paper is still turning, so they never pop in blank
-    if(e.data==='flipping'||e.data==='user_fold'){for(let k=i-2;k<=i+3;k++){const n=pages[k]&&pages[k].node;if(n)T.playDraw(n);}}
+    if(e.data==='flipping'||e.data==='user_fold'){for(let k=i-2;k<=i+3;k++)write(k);}
     // a cover starting to open: re-centre the spread as it swings. Hovering a corner ('fold_corner') must not
     // move the book, or it jumps under the pointer.
     // A cover turn slides the book as the cover swings: opening re-centres the spread, closing centres the

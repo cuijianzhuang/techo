@@ -24,7 +24,10 @@
     look:'<path d="M6 3.5h11.5a1 1 0 011 1v15a1 1 0 01-1 1H6a1.5 1.5 0 01-1.5-1.5v-14A1.5 1.5 0 016 3.5z"/><path d="M8 3.5v17M11 8h5"/>',
     read:'<path d="M3 5.5c3-1.2 6-1 9 1v13c-3-2-6-2.2-9-1z"/><path d="M21 5.5c-3-1.2-6-1-9 1v13c3-2 6-2.2 9-1z"/>',
     site:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/>',
-    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>'};
+    svc:'<path d="M9 3.5v4.5M15 3.5v4.5M6.5 8h11v3a5.5 5.5 0 01-11 0z"/><path d="M12 16.5v4"/>',
+    eye:'<path d="M2.8 12S6 5.8 12 5.8 21.2 12 21.2 12 18 18.2 12 18.2 2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.7"/>',
+    draft:'<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12.5h6M9 16h4"/>',
+    link:'<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3A4 4 0 0011 18.7l1-1"/>'};
   function icon(k){
     const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
     s.setAttribute('viewBox','0 0 24 24');s.setAttribute('width','18');s.setAttribute('height','18');s.setAttribute('aria-hidden','true');
@@ -302,10 +305,10 @@
       card('上锁',locks,{fold:true,open:locked,sum:locked?'🔒 已上锁':'不上锁'}));
     const s=el('button','b pri',isDraft?'发布这一页':sel==='new'?'保存这一页':'保存修改');s.type='button';
     s.onclick=()=>{draft.status='published';save();};
-    const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';
+    const s2=el('button','b',isDraft||sel==='new'?'存为草稿':'改回草稿');s2.type='button';s2.prepend(icon('draft'));
     s2.onclick=()=>{draft.status='draft';save();};
     // on a narrow screen the page isn't beside the form: open it big (Techo.reader)
-    const see=el('button','b pvbtn','预览');see.type='button';
+    const see=el('button','b pvbtn','预览');see.type='button';see.prepend(icon('eye'));
     see.onclick=()=>{const ps=T.entryPages(draft,'r');T.reader(ps);ps.forEach(p=>p.remove());};
     // deleting is rare: at the foot of the page, not in the bar
     const danger=el('div','bar danger');
@@ -313,8 +316,8 @@
     const saved=sel!=='new'&&entries.find(e=>e.id===sel);
     if(saved&&saved.status==='published'){
       const url=location.origin+'/p/'+saved.id,sh=el('span','sharelink');
-      const cp=el('button','b small','复制分享链接');cp.type='button';
-      cp.onclick=()=>{const t=cp.textContent;navigator.clipboard.writeText(url).then(()=>{cp.textContent='已复制';setTimeout(()=>{cp.textContent=t;},1500);},()=>status(url));};
+      const cpl=el('span',null,'复制分享链接'),cp=el('button','b small');cp.type='button';cp.append(icon('link'),cpl);
+      cp.onclick=()=>{navigator.clipboard.writeText(url).then(()=>{cpl.textContent='已复制';setTimeout(()=>{cpl.textContent='复制分享链接';},1500);},()=>status(url));};
       sh.append(cp,el('span','hintx',saved.locked||dayLocks.has(saved.date)||bookLocked?'上了锁：分享出去只看得到「上了锁的一页」':url));
       danger.appendChild(sh);
     }
@@ -910,14 +913,23 @@
      复制 copies a few pages at a time and points them at the new address, 清理 deletes the old ones that nothing uses */
   function photoFolderField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
-    const acts=el('div','photo-actions'),pv=el('button','b small','预览'),cp=el('button','b small','复制到日期文件夹'),cl=el('button','b small','清理旧文件');
-    for(const b of [pv,cp,cl])b.type='button';
-    acts.append(pv,cp,cl);
+    const acts=el('div','photo-actions'),pv=el('button','b small','预览'),cp=el('button','b small','复制到日期文件夹'),cl=el('button','b small','清理旧文件'),st=el('button','b small','停止');
+    for(const b of [pv,cp,cl,st])b.type='button';
+    st.hidden=true;
+    acts.append(pv,cp,cl,st);
+    // progress: the bar and the count while 复制 / 清理 go round; 停止 ends the round after the batch in hand (nothing is
+    // lost: every batch is whole, and both steps take up where they left off)
+    const bar=el('progress');bar.style.cssText='width:100%;height:10px;accent-color:var(--olive)';bar.hidden=true;
+    let stopped=false;st.onclick=()=>{stopped=true;st.disabled=true;};
     const out=el('div','hintx');out.style.whiteSpace='pre-wrap';
+    const progress=(done,total)=>{bar.hidden=false;if(total>0){bar.max=total;bar.value=Math.min(done,total);}else bar.removeAttribute('value');};
     const call=(step,limit)=>sendJson('POST','/api/admin/photos/migrate',limit?{step,limit}:{step});
     const busy=(on)=>{for(const b of [pv,cp,cl])b.disabled=on;};
     const say=(t,color)=>{out.textContent=t;out.style.color=color||'';};
-    const run=async fn=>{busy(true);try{await fn();}catch(e){say('✗ '+(e.message||'没成'),'var(--red)');}finally{busy(false);}};
+    const run=async(fn,long)=>{
+      busy(true);stopped=false;st.hidden=!long;st.disabled=false;bar.hidden=true;
+      try{await fn();}catch(e){say('✗ '+(e.message||'没成'),'var(--red)');}finally{busy(false);st.hidden=true;bar.hidden=true;}
+    };
     pv.onclick=()=>run(async()=>{
       say('正在看……');
       const r=await call('preview');
@@ -932,24 +944,27 @@
       if(!first.toMove){say('没有要复制的。','var(--olive)');return;}
       if(!confirm('把 '+first.toMove+' 张照片复制到各自的日期文件夹，并让页面改用新地址。旧文件先不删。继续吗？'))return;
       let copied=0,skipped=[],left=first.toMove;
-      while(left>0){
-        say('正在复制……已复制 '+copied+' 张，还剩 '+left+' 张');
+      while(left>0&&!stopped){
+        say('正在复制……已复制 '+copied+' 张，还剩 '+left+' 张');progress(copied,first.toMove);
         const r=await call('copy');
         copied+=r.copied;left=r.remaining;skipped=r.skipped;
         if(!r.copied)break;
       }
-      say((left?'停下了：已复制 '+copied+' 张，还剩 '+left+' 张'+(skipped.length?'，没搬的原因：'+skipped.slice(0,5).map(s=>s.why).join('、'):''):'✓ 复制好了：'+copied+' 张，页面已经改用新地址。旧文件还在，确认页面上的图都正常之后再点「清理旧文件」。'),left?'var(--red)':'var(--olive)');
-    });
+      say((left?(stopped?'已停止':'停下了')+'：已复制 '+copied+' 张，还剩 '+left+' 张（再点一次接着复制）'+(!stopped&&skipped.length?'，没搬的原因：'+skipped.slice(0,5).map(s=>s.why).join('、'):''):'✓ 复制好了：'+copied+' 张，页面已经改用新地址。旧文件还在，确认页面上的图都正常之后再点「清理旧文件」。'),left?'var(--red)':'var(--olive)');
+    },true);
     cl.onclick=()=>run(async()=>{
       if(!confirm('删除 R2 里已经复制好、页面不再用的旧文件。这一步不能撤销。继续吗？'))return;
+      // about how many there are to go: the loose files, less the ones nothing uses and the ones a page still points at
+      // (unknown past the first thousand: the bar then only moves)
+      const first=await call('preview'),total=first.looseTruncated?0:Math.max(0,first.loose-first.unused-first.toMove);
       let deleted=0,r;
       do{
-        say('正在清理……已删 '+deleted+' 个');
+        say('正在清理……已删 '+deleted+' 个');progress(deleted,total);
         r=await call('cleanup',25);deleted+=r.deleted;
-      }while(r.deleted>0);
-      say('✓ 清理了 '+deleted+' 个旧文件。根下还有 '+r.loose+' 个'+(r.keptCount?'（'+r.keptCount+' 个没动：页面还在用，或没有页面用它）':'')+'。','var(--olive)');
-    });
-    w.append(acts,out);
+      }while(r.deleted>0&&!stopped);
+      say((stopped&&r.deleted>0?'已停止：':'✓ ')+'清理了 '+deleted+' 个旧文件。根下还有 '+r.loose+' 个'+(r.keptCount?'（'+r.keptCount+' 个没动：页面还在用，或没有页面用它）':'')+(stopped&&r.deleted>0?'（再点一次接着清理）':'')+'。','var(--olive)');
+    },true);
+    w.append(acts,bar,out);
     return w;
   }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */
