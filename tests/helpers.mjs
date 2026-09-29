@@ -50,7 +50,7 @@ export async function loadApp() {
 
 /** a D1 look-alike over real SQLite (node:sqlite) with the schema in schema.sql, holding `entries` and `locks`: the
     Worker's SQL is run, not imitated. `log`, when given, gets {sql, rows} for every statement run. */
-export async function sqliteD1({ entries = [], locks = [], log = null } = {}) {
+export async function sqliteD1({ entries = [], locks = [], settings = {}, log = null } = {}) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(root('schema.sql'), 'utf8'));
@@ -58,6 +58,7 @@ export async function sqliteD1({ entries = [], locks = [], log = null } = {}) {
   const put = db.prepare(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
   for (const e of entries) put.run(...cols.map((c) => e[c] ?? ''));
   for (const l of locks) db.prepare('INSERT INTO locks (scope, hash, updated_at) VALUES (?, ?, 0)').run(l.scope, l.hash);
+  for (const [k, v] of Object.entries(settings)) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k, v);
   const note = (sql, rows) => { if (log) log.push({ sql, rows }); };
   const make = (sql, args) => {
     const st = db.prepare(sql);
@@ -65,7 +66,7 @@ export async function sqliteD1({ entries = [], locks = [], log = null } = {}) {
       bind: (...a) => make(sql, a),   // (a new statement each time, as D1's)
       all: async () => { const results = st.all(...args).map((r) => ({ ...r })); note(sql, results.length); return { results }; },
       first: async () => { const r = st.get(...args); note(sql, r ? 1 : 0); return r ? { ...r } : null; },
-      run: async () => { st.run(...args); note(sql, 0); return {}; },
+      run: async () => { const r = st.run(...args); note(sql, 0); return { meta: { changes: Number(r.changes) } }; },
     };
     return s;
   };
@@ -100,4 +101,40 @@ export function installCaches() {
     async put(req, res) { kept.set(new Request(req).url, { buf: await res.arrayBuffer(), headers: [...res.headers] }); },
   } };
   return { keys: () => [...kept.keys()], size: () => kept.size };
+}
+
+/** an R2 look-alike (put, get, head, delete, list with a prefix and a delimiter), holding what `objects` gives:
+    { key: { bytes: 'text' | Uint8Array, type: 'image/jpeg', uploaded: Date } }; `onGet(key)` runs when a key is read */
+export function fakeR2(objects = {}, { onGet = null } = {}) {
+  const kept = new Map();
+  const bytesOf = (v) => (typeof v === 'string' ? new TextEncoder().encode(v) : new Uint8Array(v));
+  const meta = (key, o) => ({ key, size: o.buf.byteLength, uploaded: o.uploaded, httpMetadata: { contentType: o.type }, customMetadata: o.custom || {}, httpEtag: '"' + key.length + '"', etag: String(key.length) });
+  for (const [key, o] of Object.entries(objects)) kept.set(key, { buf: bytesOf(o.bytes ?? 'x'), type: o.type || 'image/jpeg', uploaded: o.uploaded || new Date('2026-01-01T12:00:00Z') });
+  const r2 = {
+    kept,
+    async put(key, data, opts = {}) {
+      const buf = data instanceof ArrayBuffer ? new Uint8Array(data.slice(0)) : bytesOf(data);
+      const o = { buf, type: opts.httpMetadata?.contentType || 'application/octet-stream', uploaded: new Date(), custom: opts.customMetadata };
+      kept.set(key, o);
+      return meta(key, o);
+    },
+    async get(key) {
+      if (onGet) await onGet(key);
+      const o = kept.get(key);
+      if (!o) return null;
+      return { ...meta(key, o), body: new Blob([o.buf]).stream(), arrayBuffer: async () => o.buf.buffer.slice(o.buf.byteOffset, o.buf.byteOffset + o.buf.byteLength), writeHttpMetadata: (h) => h.set('content-type', o.type) };
+    },
+    async head(key) { const o = kept.get(key); return o ? meta(key, o) : null; },
+    async delete(keys) { for (const k of [].concat(keys)) kept.delete(k); },
+    async list({ prefix = '', delimiter = '', limit = 1000 } = {}) {
+      const objects = [], prefixes = new Set();
+      for (const key of [...kept.keys()].sort()) {
+        if (!key.startsWith(prefix)) continue;
+        const rest = key.slice(prefix.length), i = delimiter ? rest.indexOf(delimiter) : -1;
+        if (i >= 0) prefixes.add(prefix + rest.slice(0, i + 1)); else objects.push(meta(key, kept.get(key)));
+      }
+      return { objects: objects.slice(0, limit), delimitedPrefixes: [...prefixes], truncated: objects.length > limit };
+    },
+  };
+  return r2;
 }

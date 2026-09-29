@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { UA } from "./ua";
-import { IMAGE_TYPES, MAX_PHOTO } from "./entries";
+import { IMAGE_TYPES, MAX_PHOTO, photoDay, photoKeyFor } from "./entries";
 import { type HonoEnv, bad } from "./env";
 
 export const admin = new Hono<HonoEnv>();
@@ -75,7 +75,7 @@ admin.post("/api/admin/cover", async (c) => {
   if (!ext) return bad(c, 415, "封面不是图片");
   const buf = await r.arrayBuffer();
   if (!buf.byteLength || buf.byteLength > MAX_PHOTO) return bad(c, 413, "封面太大了");
-  const key = `p/${crypto.randomUUID()}.${ext}`;
+  const key = photoKeyFor(photoDay(undefined, c.env.TIMEZONE), ext);   // (a cover has no page: today's folder)
   await c.env.PHOTOS.put(key, buf, { httpMetadata: { contentType: type } });
   return c.json({ key }, 201);
 });

@@ -41,7 +41,7 @@
 | 托管 | Cloudflare Workers 静态资源（`public/`） |
 | API | Worker + [Hono](https://hono.dev)（`src/`，入口 `src/index.ts`） |
 | 数据 | D1：`techo-db`（日记页、随手记、手帐设置、口令） |
-| 照片 | R2：`techo-photos`，经 `/img/...` 读取；分享卡片也在这里（`cards/<id>.jpg`） |
+| 照片 | R2：`techo-photos`，经 `/img/...` 读取；照片按日期放进文件夹 `p/年/月/日/<uuid>.jpg`（见下面「照片在 R2 里的位置」）；分享卡片也在这里（`cards/<id>.jpg`） |
 | 地图 | [Mapbox](https://www.mapbox.com)（可选）：GL JS 从 Mapbox 的 CDN 加载，页上的小地图用 Static Images API，地名用 Geocoding v6 |
 | 后台登录 | GitHub 登录（OAuth App），只放行 `ADMIN_GITHUB_LOGIN` 这一个账号 → 签名的 HttpOnly Cookie，30 天有效 |
 | 部署 | GitHub Actions：push 到 `main` → 类型检查 → 检查生成文件 → `wrangler deploy` |
@@ -78,6 +78,7 @@ src/etag.ts             ETag 和 304
 src/text.ts             正文去掉标记后的一行字（时间线的摘要，和 render.js 的 plainText 一致）、有没有卡片
 src/home.ts             书的首页（把日记内联进去，有自己的 ETag）
 src/share.ts            /p/<id> 分享页、/card/、/img/
+src/photos.ts           把旧的 `p/<uuid>.jpg` 搬进日期文件夹的迁移接口（手动、分步，不会自己运行）
 src/auth.ts             GitHub 登录和后台登录关卡（requireLogin）
 src/crypto.ts           登录和口令用的 HMAC、比较
 src/admin-entries.ts    后台：页的增删改、分享卡片、传照片
@@ -195,7 +196,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **贴页**：单独一行写 `+++ 贴页`，它后面的卡片（到下一个 `+++` 或结尾）单独贴在新的一页上：每张保持原来的样子和大小，微微歪着，左右错开，下一张压住上一张的一角；卡片多了一起缩小（最小到六成），还放不下就平分到几页。这一段里的文字排在卡片后面。正文写在左页时，贴页正好是对面那页。编辑器「📎 贴一张」菜单里的「📌 贴页」会插入这一行。
 - 右边的预览按书里的样子分页，‹ › 翻着看。
 
-- **照片**：最多 3 张，每张有自己的说明。一张时贴在正文旁边，字绕着排；两三张时在标题下面错落排一排。上传前会先压到 1600px；从页上拿掉的照片会从 R2 删掉。
+- **照片**：存进 R2 的 `p/年/月/日/` 文件夹（用这一页的日期，拍摄日比今天早时用 EXIF 的拍摄日）。最多 3 张，每张有自己的说明。一张时贴在正文旁边，字绕着排；两三张时在标题下面错落排一排。上传前会先压到 1600px；从页上拿掉的照片会从 R2 删掉。
 - **小插画**：点选，最多两个：晴天、多云、下雨、月亮、猫、书、电脑、bug、植物、吃面、公交、骑车、音乐、心、星星、来信、拍照。漫画格里 `#` 后面写的是它们的英文名（编辑器里「能写的格式」有对照表）。画在 `public/assets/render.js` 的 `STICKERS` 里（64×64 的线稿 SVG），新增一个要同时加到 `src/index.ts` 的 `STICKERS`。
 - **地点和天气**：点「📍 获取位置和天气」，浏览器定位后自动填地名和这一页那天的天气，也可以手填。天气默认问**和风天气**（在「手帐设置 → 接入服务 → 天气」填 KEY 和 API Host；今天和往后一周用预报的白天 / 夜间，写成「多云转小雨」，最近 10 天用历史天气），没配、或者和风查不到的日子，用 **Open-Meteo**（免费、不用 key；先用中国气象局的 CMA GRAPES 模型，没有再用它默认的模型，很久以前的用 ERA5 存档）。Open-Meteo 的天气按那天逐小时的数据、照国内天气预报的说法来写：上午（6–13 点）和下午到晚上（14–21 点）各看大部分时候怎样，不一样就写「多云转小雨」；下了两个小时以上才算雨雪，雨量分小雨 / 中雨 / 大雨 / 暴雨，没下就按云量分晴 / 多云 / 阴。夜里下一阵毛毛雨，不会再把一个晴天写成「毛毛雨」。地名配了 Mapbox 时用 Mapbox（能到街道和地标），没配时用 BigDataCloud。配了 Mapbox 还可以点「🗺 在地图上选」，在地图上点一下或拖图钉。写在页眉右上角，鼠标停上去显示坐标；坐标只保留两位小数（大约 1 公里），因为手帐是公开的。有坐标的页会贴一张小地图（可在设置里关掉）。
 - **照片自带的信息**：上传照片时读出拍摄时间和 GPS。新写的页如果日期还是今天，就改成拍摄那天；还没填地点的页，按照片的位置填坐标、地名和那天的天气。只填空着的项，改完不会自动保存。上传的照片都会重新压一遍，相机写进去的 EXIF（包括精确位置）不会留在公开的图片里。
@@ -268,6 +269,21 @@ key 是 Worker 密钥 `AI_API_KEY`（没有时读 `ANTHROPIC_API_KEY`），换�
 - OpenAI 格式：先要求 `response_format: json_object`，接口不认（400）就去掉再问。
 
 提示词里都要求只输出 JSON，读回答时也宽松（去掉代码块标记和多余的话），所以不支持结构化输出的模型也能用。
+
+
+## 照片在 R2 里的位置
+
+新上传的照片放在 `p/年/月/日/<uuid>.<ext>`（例如 `p/2026/09/28/….jpg`）：文件夹用这一页的日期；封面图和 NeoDB 封面没有页面日期，用上传那天。分享卡片仍在 `cards/<id>.jpg`。
+
+**以前传的（`p/<uuid>.jpg`，全在 `p/` 下一层）不会被动，也不用动**：两种键读起来一样，页面、分享链接和缓存里的图都照常。上了锁的页的照片，两种地址都要口令（按键里的 UUID 找是哪一页）。
+
+想把旧照片也搬进文件夹，在「手帐设置 → 照片文件夹」里按三步来（**不会自己运行**，只在你点了按钮之后才动）：
+
+1. **预览**：只列出要搬的照片（`旧键 → 新键`）、总数，和 R2 里没有任何页用的旧对象数（只报告，不动），什么都不改。
+2. **复制**：一次几页。每张先复制到新位置并核对大小，之后这一页才指向新的地址；旧对象还在。这一页中途被改过就跳过，下次再来。
+3. **清理**：只删「已经没有页指向、新位置的文件在且大小一样」的旧对象。没有任何页用的对象不会被删。
+
+每一步都能重复、能中断后接着来；后台的按钮会分批循环直到做完。
 
 ## 缓存
 
@@ -361,7 +377,7 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 | GET | `/api/settings` | 手帐设置（没设置过的项返回默认值；不含 AI 三项） |
 | GET | `/api/meting?id=` | 网易云歌曲（经 Meting，带上设置里的 token）：`{title, artist, url, pic, lrc}`；放不了的歌 `url` 为空，另有 `why` |
 | GET | `/api/meting/file?id=&t=url\|pic` | 只有带 token 才给的音频 / 封面，由 Worker 转发（支持 `Range`） |
-| GET | `/img/p/<uuid>.<ext>` | 照片；上了锁的页的照片要带 `?k=令牌` |
+| GET | `/img/p/年/月/日/<uuid>.<ext>`（旧的 `/img/p/<uuid>.<ext>` 也认） | 照片；上了锁的页的照片要带 `?k=令牌` |
 | GET | `/p/:id` | 一页的分享链接：带 Open Graph 标签的小页面，打开后跳到 `/#e-<id>` |
 | GET | `/card/:id.jpg` | 一页的分享卡片（1200×630）；草稿和上了锁的页是 404 |
 | GET | `/api/auth/github` | 跳到 GitHub 登录 |
@@ -383,7 +399,8 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 | DELETE | `/api/admin/jots/:id` | 删一条随手记 |
 | POST | `/api/admin/jots/delete` | 一次删几条（`{"ids": [...]}`，最多 100 条） |
 | POST | `/api/admin/compose` | 用今天的随手记让 AI 写一页草稿（今天已有页或没有随手记时返回 409） |
-| POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB） |
+| POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB）；`?date=YYYY-MM-DD` 是放进哪天的文件夹（编辑器传这一页的日期），没带或不是真日期就用今天；返回 `{"key": "p/2026/09/28/<uuid>.jpg"}` |
+| POST | `/api/admin/photos/migrate` | 把旧照片搬进日期文件夹：`{"step": "preview\|copy\|cleanup", "limit": 4}`，见「照片在 R2 里的位置」 |
 | POST | `/api/admin/lookup` | 查书、影视、音乐（`{"q": "书名或链接", "kind": "book\|film\|music"}`，数据来自 NeoDB，ISBN 退到 Open Library）；贴链接时 NeoDB 还在抓会返回 `{"pending": true}` |
 | POST | `/api/admin/cover` | 把一张远程封面存进 R2（`{"url": "https://…"}`，≤10MB 的图片），返回 `{"key": "p/….jpg"}` |
 | GET | `/api/admin/meting?id=&api=` | 「试一下」：用还没保存的 Meting 地址（和请求头 `x-meting-token` 里的 token）取一首歌 |
