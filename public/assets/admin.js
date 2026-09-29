@@ -910,14 +910,23 @@
      复制 copies a few pages at a time and points them at the new address, 清理 deletes the old ones that nothing uses */
   function photoFolderField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
-    const acts=el('div','photo-actions'),pv=el('button','b small','预览'),cp=el('button','b small','复制到日期文件夹'),cl=el('button','b small','清理旧文件');
-    for(const b of [pv,cp,cl])b.type='button';
-    acts.append(pv,cp,cl);
+    const acts=el('div','photo-actions'),pv=el('button','b small','预览'),cp=el('button','b small','复制到日期文件夹'),cl=el('button','b small','清理旧文件'),st=el('button','b small','停止');
+    for(const b of [pv,cp,cl,st])b.type='button';
+    st.hidden=true;
+    acts.append(pv,cp,cl,st);
+    // progress: the bar and the count while 复制 / 清理 go round; 停止 ends the round after the batch in hand (nothing is
+    // lost: every batch is whole, and both steps take up where they left off)
+    const bar=el('progress');bar.style.cssText='width:100%;height:10px;accent-color:var(--olive)';bar.hidden=true;
+    let stopped=false;st.onclick=()=>{stopped=true;st.disabled=true;};
     const out=el('div','hintx');out.style.whiteSpace='pre-wrap';
+    const progress=(done,total)=>{bar.hidden=false;if(total>0){bar.max=total;bar.value=Math.min(done,total);}else bar.removeAttribute('value');};
     const call=(step,limit)=>sendJson('POST','/api/admin/photos/migrate',limit?{step,limit}:{step});
     const busy=(on)=>{for(const b of [pv,cp,cl])b.disabled=on;};
     const say=(t,color)=>{out.textContent=t;out.style.color=color||'';};
-    const run=async fn=>{busy(true);try{await fn();}catch(e){say('✗ '+(e.message||'没成'),'var(--red)');}finally{busy(false);}};
+    const run=async(fn,long)=>{
+      busy(true);stopped=false;st.hidden=!long;st.disabled=false;bar.hidden=true;
+      try{await fn();}catch(e){say('✗ '+(e.message||'没成'),'var(--red)');}finally{busy(false);st.hidden=true;bar.hidden=true;}
+    };
     pv.onclick=()=>run(async()=>{
       say('正在看……');
       const r=await call('preview');
@@ -932,24 +941,27 @@
       if(!first.toMove){say('没有要复制的。','var(--olive)');return;}
       if(!confirm('把 '+first.toMove+' 张照片复制到各自的日期文件夹，并让页面改用新地址。旧文件先不删。继续吗？'))return;
       let copied=0,skipped=[],left=first.toMove;
-      while(left>0){
-        say('正在复制……已复制 '+copied+' 张，还剩 '+left+' 张');
+      while(left>0&&!stopped){
+        say('正在复制……已复制 '+copied+' 张，还剩 '+left+' 张');progress(copied,first.toMove);
         const r=await call('copy');
         copied+=r.copied;left=r.remaining;skipped=r.skipped;
         if(!r.copied)break;
       }
-      say((left?'停下了：已复制 '+copied+' 张，还剩 '+left+' 张'+(skipped.length?'，没搬的原因：'+skipped.slice(0,5).map(s=>s.why).join('、'):''):'✓ 复制好了：'+copied+' 张，页面已经改用新地址。旧文件还在，确认页面上的图都正常之后再点「清理旧文件」。'),left?'var(--red)':'var(--olive)');
-    });
+      say((left?(stopped?'已停止':'停下了')+'：已复制 '+copied+' 张，还剩 '+left+' 张（再点一次接着复制）'+(!stopped&&skipped.length?'，没搬的原因：'+skipped.slice(0,5).map(s=>s.why).join('、'):''):'✓ 复制好了：'+copied+' 张，页面已经改用新地址。旧文件还在，确认页面上的图都正常之后再点「清理旧文件」。'),left?'var(--red)':'var(--olive)');
+    },true);
     cl.onclick=()=>run(async()=>{
       if(!confirm('删除 R2 里已经复制好、页面不再用的旧文件。这一步不能撤销。继续吗？'))return;
+      // about how many there are to go: the loose files, less the ones nothing uses and the ones a page still points at
+      // (unknown past the first thousand: the bar then only moves)
+      const first=await call('preview'),total=first.looseTruncated?0:Math.max(0,first.loose-first.unused-first.toMove);
       let deleted=0,r;
       do{
-        say('正在清理……已删 '+deleted+' 个');
+        say('正在清理……已删 '+deleted+' 个');progress(deleted,total);
         r=await call('cleanup',25);deleted+=r.deleted;
-      }while(r.deleted>0);
-      say('✓ 清理了 '+deleted+' 个旧文件。根下还有 '+r.loose+' 个'+(r.keptCount?'（'+r.keptCount+' 个没动：页面还在用，或没有页面用它）':'')+'。','var(--olive)');
-    });
-    w.append(acts,out);
+      }while(r.deleted>0&&!stopped);
+      say((stopped&&r.deleted>0?'已停止：':'✓ ')+'清理了 '+deleted+' 个旧文件。根下还有 '+r.loose+' 个'+(r.keptCount?'（'+r.keptCount+' 个没动：页面还在用，或没有页面用它）':'')+(stopped&&r.deleted>0?'（再点一次接着清理）':'')+'。','var(--olive)');
+    },true);
+    w.append(acts,bar,out);
     return w;
   }
   /* 手帐设置 → 地图: the Mapbox token, and whether pages get a little map */

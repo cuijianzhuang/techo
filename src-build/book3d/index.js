@@ -187,19 +187,26 @@ export async function start() {
   const { pages } = await T.loadBook(src);
   const N = pages.length, S = N / 2, P = Math.max(0, S - 2);
   const meas = T.measure();
-  pages.forEach((p) => meas.appendChild(p.node));
+  // a page joins the document (the measuring box, or the slot it is open in) when it is first come near, not all of
+  // them at the start: a few thousand pages in the document make every style read dear. The covers and the flyleaf are
+  // read for their colours below.
+  const attach = (node) => { if (!node.isConnected) meas.appendChild(node); };
+  for (const i of [0, 1, 2, N - 2, N - 1]) attach(pages[i].node);
   src.remove();
   // "Written on the page": a diary page is blank until it's first opened at rest, then its words and doodles
   // are written in (Techo.playDraw), like the page-flip book.
   const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!reduced) pages.forEach((p) => { if (p.node.classList.contains('day') || p.node.classList.contains('jp')) T.prepDraw(p.node); });
+  const prep = (node) => { if (!reduced) T.prepOnce(node); };   // (when a page is first come near, not all at the start)
 
   /* Page textures, one per page and state: an unwritten page is captured blank, a page being or already
      written as it looks complete (raster.js works on a copy, so capturing never disturbs the writing). */
   const tex = new Map();
   const drawState = (node) => (node.dataset.draw === 'pending' ? 'pending' : 'done');
   function texture(i) {
-    const node = pages[i].node, state = drawState(node), cached = tex.get(i);
+    const node = pages[i].node;
+    attach(node);
+    prep(node);
+    const state = drawState(node), cached = tex.get(i);
     if (cached && cached.state === state) return cached.promise;
     const entry = { texture: cached && cached.texture, promise: null, state };   // the old one shows until the new is ready
     // sharp at the size the page is shown: twice its size, more for a big book on a sharp screen (up to 3×)
@@ -429,7 +436,9 @@ export async function start() {
     // write the pages now open, and capture them written straight away, ready for the next turn
     for (const s of [slotL, slotR]) {
       const node = s.page >= 0 && pages[s.page].node, i = s.page;
-      if (!node || node.dataset.draw !== 'pending') continue;
+      if (!node) continue;
+      prep(node);
+      if (node.dataset.draw !== 'pending') continue;
       T.playDraw(node);
       idle(() => texture(i).catch(() => {}));
     }
