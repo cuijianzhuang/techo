@@ -3,8 +3,8 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-block:18px 12px;padding-inline:20px;border-bottom:1px solid rgba(120,110,90,.2)}
 .admin .top h1{margin:0;font:400 30px/1 var(--title)}
 .admin .who{font:400 12.5px/1 var(--print);color:var(--desk-ink)}
-.admin .home{margin-left:auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:1px solid rgba(120,110,90,.3);color:var(--teal-deep);background:rgba(255,255,255,.35);text-decoration:none}
-.admin .home:hover,.admin .home:focus-visible{background:#fff;border-color:var(--teal-deep)}
+.admin .home{margin-left:auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:0;color:var(--teal-deep);background:rgba(80,70,50,.09);text-decoration:none}
+.admin .home:hover,.admin .home:focus-visible{background:rgba(80,70,50,.16)}
 .admin .wrap{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:calc(100vh - 64px)}
 .admin .side{border-right:1px solid rgba(120,110,90,.2);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.25)}
 .admin .list{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow:auto}
@@ -25,9 +25,13 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin input:focus-visible,.admin textarea:focus-visible,.admin select:focus-visible,.admin button:focus-visible,.admin a:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .admin .hintx{font:400 11.5px/1.4 var(--print);color:var(--ink-soft)}
 .admin .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:6px}
-.admin .b{appearance:none;border:1.5px solid var(--ink);background:var(--paper);color:var(--ink);font:500 13px/1 var(--print);padding:10px 16px;border-radius:999px;cursor:pointer}
+/* buttons have no outline: a soft fill instead (the border stays, transparent, so nothing changes size) */
+.admin .b{appearance:none;border:1.5px solid transparent;background:rgba(80,70,50,.09);color:var(--ink);font:500 13px/1 var(--print);padding:10px 16px;border-radius:999px;cursor:pointer}
+.admin .b:hover:not(:disabled){background:rgba(80,70,50,.16)}
 .admin .b.pri{background:var(--ink);color:var(--paper)}
-.admin .b.warn{border-color:var(--red);color:var(--red-deep)}
+.admin .b.pri:hover:not(:disabled){background:#000}
+.admin .b.warn{background:rgba(200,70,50,.09);color:var(--red-deep)}
+.admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.17)}
 .admin .b.small{padding:7px 12px;font-size:12px}
 .admin .b:disabled{opacity:.5;cursor:default}
 .admin .status{font:400 13px/1.45 var(--print);color:var(--ink-soft);min-height:19px}
@@ -337,7 +341,8 @@ body.admin{height:auto}
 .admin .pbulk:has(.b){background:#f7ecc9;border:1px solid #e0cf98;padding:6px 12px}
 .admin .pall{display:flex;align-items:center;gap:10px;margin-right:auto;font:500 12.5px/1.2 var(--print);color:var(--ink-soft)}
 .admin .pall input,.admin .prowi input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--olive);flex:none}
-.admin .b.quiet{border-color:transparent;background:transparent;color:var(--ink-soft)}
+.admin .b.quiet{background:transparent;color:var(--ink-soft)}
+.admin .b.quiet:hover:not(:disabled){background:rgba(80,70,50,.09)}
 .admin .plist{display:grid;gap:4px}
 .admin .plist .lmonth{padding:14px 12px 4px}
 .admin .prowi{display:grid;grid-template-columns:16px 62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 12px;border-radius:10px;
