@@ -3,7 +3,8 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding-block:18px 12px;padding-inline:20px;border-bottom:1px solid rgba(120,110,90,.2)}
 .admin .top h1{margin:0;font:400 30px/1 var(--title)}
 .admin .who{font:400 12.5px/1 var(--print);color:var(--desk-ink)}
-.admin .home{margin-left:auto;font:500 13px/1 var(--print);color:var(--teal-deep)}
+.admin .home{margin-left:auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:1px solid rgba(120,110,90,.3);color:var(--teal-deep);background:rgba(255,255,255,.35);text-decoration:none}
+.admin .home:hover,.admin .home:focus-visible{background:#fff;border-color:var(--teal-deep)}
 .admin .wrap{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:calc(100vh - 64px)}
 .admin .side{border-right:1px solid rgba(120,110,90,.2);padding:12px 10px;display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.25)}
 .admin .list{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow:auto}
@@ -260,7 +261,7 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
   .admin .top{flex-wrap:nowrap;gap:10px;padding:12px 14px}
   .admin .top h1{font-size:24px}
   .admin .who{display:none}
-  .admin .home{white-space:nowrap}
+  .admin .home{flex:none}
   /* the list, or the thing picked from it */
   .admin.detail .side{display:none}
   .admin.detail .back{display:inline-block}
