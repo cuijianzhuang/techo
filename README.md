@@ -73,6 +73,7 @@ src/entries.ts          日记页的字段、校验、读写、照片和卡片�
 src/settings.ts         设置（哪些只有后台看得到）、/api/settings、后台读写设置
 src/ai.ts               AI：用哪个模型、测试连接、一键补全
 src/locks.ts            口令：整本或某一天上锁、/api/entries（几种视图、分段、304）、/api/unlock
+src/cache.ts            边缘缓存（数据版本、`bumpVersion`、`cached`）
 src/etag.ts             ETag 和 304
 src/text.ts             正文去掉标记后的一行字（时间线的摘要，和 render.js 的 plainText 一致）、有没有卡片
 src/home.ts             书的首页（把日记内联进去，有自己的 ETag）
@@ -267,6 +268,26 @@ key 是 Worker 密钥 `AI_API_KEY`（没有时读 `ANTHROPIC_API_KEY`），换�
 - OpenAI 格式：先要求 `response_format: json_object`，接口不认（400）就去掉再问。
 
 提示词里都要求只输出 JSON，读回答时也宽松（去掉代码块标记和多余的话），所以不支持结构化输出的模型也能用。
+
+## 缓存
+
+从浏览器到数据库分四层，每一层各管一样：
+
+| 层 | 缓什么 | 怎么保证不读到旧的 |
+|---|---|---|
+| 浏览器：`/assets/*`、`/vendor/*` | 脚本和样式，一年（`public/_headers`，`immutable`） | 引用它们的地方带 `?v=<版本>`，文件或它引用的文件变了版本就变（`src-build/stamp.py`） |
+| 浏览器：页面、首页、`/api/entries` | 存着，但每次先问（`no-cache`）；没变回 304，不用下载 | `ETag` 是回答内容的哈希（`src/etag.ts`） |
+| 边缘（Workers Cache API，`src/cache.ts`）：首页、`/api/entries` 的每种视图和分段 | 不带口令的读者看到的那一份，数据库里只读一行 | 键里有部署 id 和数据版本，见下 |
+| 浏览器和 CDN：`/p/`、`/card/`、`/img/` | 分享页 5 分钟、卡片 1 小时、图片一年 | 图片的键是随机 UUID，永远不重用；上了锁的页不缓存 |
+
+**边缘缓存怎么工作**
+- 键：`https://cache.internal/<名字>/<部署 id>/<数据版本>?<view、limit、before>`。别的查询参数不进键；出错的请求（400）不存。
+- **数据版本**是 `settings` 表里 `key='_v'` 那一行（读者和后台都看不到，不用迁移）。每次请求先读它，键里带着它。**每次改了读者能看到的东西（新建 / 改 / 发布 / 取消发布 / 删除一页、上锁和改口令、保存设置），写完数据库之后 `bumpVersion` 写一个新的版本**，旧的缓存立刻作废，读者下一次刷新就是新的。每晚写的草稿和随手记读者看不到，不用升。`tests/cache.test.mjs` 会检查：所有写这几张表的文件都调了 `bumpVersion`。
+- **部署 id**（`wrangler.jsonc` 的 `version_metadata`）：新部署换一批键，旧代码存的东西不会混进来。
+- 带 `X-Techo-Keys` 的请求（打开过上了锁的页的读者）不走缓存，也不往里存，照旧现算，响应头 `X-Cache: BYPASS`。命中是 `HIT`，没命中是 `MISS`；本地 `wrangler dev` 默认不用（改了页面立刻能看到），想试就 `--var CACHE_LOCAL:1`。
+- **兜底**：每份最多存 1 小时。绕开 Worker 改数据库（在 D1 里手动改数据、跑迁移、导入）之后，要么等一小时，要么在后台随便保存一次设置，要么 `UPDATE settings SET value = 'x' WHERE key = '_v'`（没有这一行就 `INSERT`）。
+- **以后新加会改读者可见内容的写入，记得写完调 `bumpVersion(c.env)`**（`src/cache.ts`）。
+- Cache API 每个数据中心各存各的，一次改动之后各地的第一个访问者各付一次「没命中」的代价；`workers.dev` 域名上用不了它（自定义域名可以），那时每次都是 `BYPASS`，只是没有加速。
 
 ## 数据库
 

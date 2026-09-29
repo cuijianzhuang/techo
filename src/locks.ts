@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { b64url, enc, hmac, sameText } from "./crypto";
 import { type EntriesView, rowToEntry, selectEntries } from "./entries";
 import { type C, type Env, type HonoEnv, bad } from "./env";
-import { revalidated } from "./etag";
+import { bumpVersion, cached } from "./cache";
 import { excerpt } from "./text";
 
 export const pub = new Hono<HonoEnv>();
@@ -115,7 +115,10 @@ pub.get("/api/entries", async (c) => {
   const n = limit === undefined ? (before ? 100 : 0) : Number(limit);
   if (limit !== undefined && (n < 1 || n > 500)) return bad(c, 400, "limit 是 1 到 500");
   const h = new Headers({ "Content-Type": "application/json; charset=UTF-8", "Cache-Control": "private, no-cache", Vary: "x-techo-keys" });
-  return revalidated(c.req.raw, JSON.stringify(await readerEntries(c.env, keysOf(c), view, n ? { limit: n, before } : undefined)), h);
+  const page = n ? { limit: n, before } : undefined;
+  // kept at the edge for a reader without keys: the answer is the view and the stretch asked for (and nothing else)
+  const params = new URLSearchParams({ view, ...(n ? { limit: String(n) } : {}), ...(n && before ? { before } : {}) }).toString();
+  return cached(c, "entries", params, async () => ({ body: JSON.stringify(await readerEntries(c.env, keysOf(c), view, page)), headers: h }));
 });
 
 /* the password for the book ('book') or a day (its entry id): right → a token; 10 guesses a minute */
@@ -147,12 +150,14 @@ admin.put("/api/admin/locks/:scope", async (c) => {
   try {
     if (o?.password === null) {
       await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(scope).run();
+      await bumpVersion(c.env);
       return c.json({ scope, locked: false });
     }
     const pw = typeof o?.password === "string" ? o.password : "";
     if ([...pw].length < 4 || pw.length > 128) return bad(c, 400, "口令至少 4 个字符");
     await c.env.DB.prepare("INSERT INTO locks (scope,hash,updated_at) VALUES (?,?,?) ON CONFLICT(scope) DO UPDATE SET hash=excluded.hash, updated_at=excluded.updated_at")
       .bind(scope, await hashPassword(pw), Date.now()).run();
+    await bumpVersion(c.env);
     return c.json({ scope, locked: true });
   } catch (e) {
     if (/no such table/i.test(String(e))) return bad(c, 500, "数据库还没有 locks 表：运行 migrations/0002_locks.sql");

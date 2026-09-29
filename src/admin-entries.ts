@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { CARD_KEY, ENTRY_ID, IMAGE_TYPES, MAX_PHOTO, type EntryInput, HttpError, cleanEntry, photoCols, photoKeys, rowToEntry, writeEntry } from "./entries";
+import { bumpVersion } from "./cache";
 import { type HonoEnv, bad } from "./env";
 import { dayScope, loadLocks } from "./locks";
 
@@ -27,6 +28,7 @@ admin.post("/api/admin/entries", async (c) => {
     ).bind(id, e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, ...photoCols(e.photos),
       e.stickers.join(","), e.status || "published", now, now, ...cols.map((k) => e[k as keyof EntryInput] as string)), e);
   } catch (err) { if (err instanceof HttpError) return bad(c, err.status, err.message); throw err; }
+  await bumpVersion(c.env);
   const row = await c.env.DB.prepare("SELECT * FROM entries WHERE id=?").bind(id).first();
   return c.json({ entry: rowToEntry(row!) }, 201);
 });
@@ -44,6 +46,7 @@ admin.put("/api/admin/entries/:id", async (c) => {
     ).bind(e.date, e.title, e.latin, e.stamp, e.aside, e.body, e.note, e.mood, e.quote, e.quoteSrc, ...photoCols(e.photos),
       e.stickers.join(","), e.status || old.status, Date.now(), ...cols.map((k) => e[k as keyof EntryInput] as string), id), e);
   } catch (err) { if (err instanceof HttpError) return bad(c, err.status, err.message); throw err; }
+  await bumpVersion(c.env);
   // photos taken off the page aren't used anywhere else
   const keep = new Set(e.photos.map((p) => p.key)), gone = photoKeys(old.photo_key).filter((k) => !keep.has(k));
   if (gone.length) c.executionCtx.waitUntil(c.env.PHOTOS.delete(gone));
@@ -70,6 +73,7 @@ admin.delete("/api/admin/entries/:id", async (c) => {
   if (!old) return bad(c, 404, "这一页不存在");
   await c.env.DB.prepare("DELETE FROM entries WHERE id=?").bind(id).run();
   await c.env.DB.prepare("DELETE FROM locks WHERE scope=?").bind(id).run().catch(() => {});
+  await bumpVersion(c.env);
   c.executionCtx.waitUntil(c.env.PHOTOS.delete([...(old.photo_key ? photoKeys(old.photo_key) : []), CARD_KEY(id)]));
   return c.json({ ok: true });
 });
