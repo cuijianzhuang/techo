@@ -4,7 +4,7 @@ export type Env = {
   DB: D1Database;
   PHOTOS: R2Bucket;
   ASSETS: Fetcher;
-  /** GitHub OAuth App (see README). The client id is public; the secret also keys the session cookie. */
+  /** GitHub OAuth App (see docs/deploy.md). The client id is public; the secret also keys the session cookie. */
   GITHUB_CLIENT_ID: string;
   /** secret: `wrangler secret put GITHUB_CLIENT_SECRET` */
   GITHUB_CLIENT_SECRET?: string;

@@ -18,7 +18,7 @@
     { "binding": "PHOTOS", "bucket_name": "techo-photos" }
   ],
   "vars": {
-    // admin login: a GitHub OAuth App whose callback is <site>/api/auth/github/callback (see README);
+    // admin login: a GitHub OAuth App whose callback is <site>/api/auth/github/callback (see docs/deploy.md);
     // its client secret goes in with `npx wrangler secret put GITHUB_CLIENT_SECRET`
     "GITHUB_CLIENT_ID": "Ov23limOXh1mfeDH8JJ5",
     "ADMIN_GITHUB_LOGIN": "cuijianzhuang",
