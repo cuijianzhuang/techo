@@ -857,7 +857,7 @@
       b.onclick=()=>{inp.value=v;draft.metingApi=v;changed();mark();};chips.appendChild(b);
     });
     inp.addEventListener('input',mark);mark();
-    // try it: a song through the address as it is now (saved or not), from this browser, as readers will
+    // try it: a song through the address (and token) as it is now, saved or not, asked by the Worker as readers' pages are
     const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（空着用 '+TRY_SONG+'）';song.setAttribute('aria-label','试听的歌');
     const t=el('button','b small','试一下');t.type='button';row.append(song,t);
     const out=el('div','mtest');
