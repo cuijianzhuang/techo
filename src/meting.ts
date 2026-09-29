@@ -8,10 +8,13 @@ import { UA } from "./ua";
    servers); one that only comes with the token is handed out through /api/meting/file. What the song doesn't say
    is asked for (type=url, pic, lrc), and then of NetEase itself: a song NetEase won't play (a VIP one, one taken
    down) still has its name, its singer and its cover. */
-export const METING_DEFAULT = "https://api.injahow.cn/meting/";
+/* No default address: the public Meting APIs have all stopped answering, so the journal's own is asked, and
+   without one there is nothing to ask. */
+export const NO_METING_API = "还没有配置 Meting 接口：在「手帐设置 → 接入服务 → 网易云音乐」填上你自己的（公共接口都失效了）";
 export type Song = { title: string; artist: string; url: string; pic: string; lrc: string; why?: string };
 export const metingUrl = (api: string, type: string, id: string) => {
-  const base = (api || METING_DEFAULT).trim();
+  const base = api.trim();
+  if (!base) throw new Error(NO_METING_API);
   return /:id/.test(base)
     ? base.replace(":server", "netease").replace(":type", type).replace(":id", encodeURIComponent(id)).replace(":r", String(Math.random()).slice(2))
     : base + (base.includes("?") ? "&" : "?") + "server=netease&type=" + type + "&id=" + encodeURIComponent(id);
@@ -25,7 +28,7 @@ export const metingHeaders = (token: string) => {
    https://music.example/api, as some Meting servers have it) answers with its page, not a song: then …/api */
 export async function metingGet(api: string, type: string, id: string, headers: Record<string, string>) {
   let r = await fetch(metingUrl(api, type, id), { headers });
-  const base = (api || METING_DEFAULT).trim();
+  const base = api.trim();
   let root = false;
   try { root = !/:id/.test(base) && new URL(base).pathname === "/"; } catch { /* not a URL: said by fetch */ }
   if (root && (r.status === 404 || (r.ok && /html/.test(r.headers.get("content-type") || "")))) {

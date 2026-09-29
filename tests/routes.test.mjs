@@ -70,3 +70,9 @@ test('an unknown API path is a JSON 404, not the assets', async () => {
   assert.equal(r.status, 404);
   assert.deepEqual(await r.json(), { error: '没有这个接口' });
 });
+
+test("a song with no Meting address set says so, in the Worker's words", async () => {
+  const res = await call('/api/meting?id=187745', {}, env({ DB: settingsDb([{ key: 'siteTitle', value: 'x' }]) }));
+  assert.equal(res.status, 500);
+  assert.match((await res.json()).error, /还没有配置 Meting 接口/);
+});

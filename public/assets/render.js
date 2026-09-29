@@ -262,7 +262,6 @@
   /* ---------- 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐): a song's name, singer, cover, words and sound ----------
      "网易云: 186016" or a music.163.com link. The Meting API is any of the public ones (or one's own); its
      answers differ a little (title / name, author / artist), both are taken. */
-  const METING_DEFAULT='https://api.injahow.cn/meting/';
   const neteaseId=v=>{const s=String(v||'').trim();if(!s)return '';if(/^\d{3,12}$/.test(s))return s;const m=/music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(s)||/[?&]id=(\d+)/.exec(/163\.com/.test(s)?s:'');return m?m[1]:'';};
   const metingCache=new Map();
   // A song, asked of the Worker (/api/meting, which carries the API's token when it wants one, and says what is
@@ -1576,5 +1575,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

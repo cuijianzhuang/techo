@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTs, withFetch, json, redirect } from './helpers.mjs';
 
-const { songIn, metingUrl, metingSong } = await loadTs('src/meting.ts');
+const { songIn, metingUrl, metingSong, NO_METING_API } = await loadTs('src/meting.ts');
 const API = 'https://meting.example/api';
 const self = (id, type) => `${API}?server=netease&id=${id}&type=${type}`;
 const text = (body, type = 'text/plain') => new Response(body, { status: 200, headers: { 'content-type': type } });
@@ -25,7 +25,8 @@ test('urls: placeholders or a query are added', () => {
   assert.equal(metingUrl('https://x.example/api', 'song', '5'), 'https://x.example/api?server=netease&type=song&id=5');
   assert.equal(metingUrl('https://x.example/api?a=1', 'lrc', '5'), 'https://x.example/api?a=1&server=netease&type=lrc&id=5');
   assert.match(metingUrl('https://x.example/?server=:server&type=:type&id=:id', 'pic', '5'), /^https:\/\/x\.example\/\?server=netease&type=pic&id=5$/);
-  assert.match(metingUrl('', 'song', '5'), /^https:\/\/api\.injahow\.cn\/meting\/\?server=netease&type=song&id=5$/);
+  // no address, no default: the public APIs are gone
+  assert.throws(() => metingUrl('  ', 'song', '5'), (e) => e.message === NO_METING_API);
 });
 
 test('songIn finds the song in an array, in data, in result, in a nest', () => {
@@ -90,4 +91,11 @@ test('the token: wanted, wrong', async () => {
 
 test('an answer not understood is shown as it came', async () => {
   await assert.rejects(ask(api({ song: () => json({ ok: 1, weird: true }) })), /没认出 Meting 接口的回答：\{"ok":1,"weird":true\}/);
+});
+
+test('without an address there is nothing to ask, and nothing is asked', async () => {
+  await withFetch(() => { throw new Error('nothing should be fetched'); }, async (seen) => {
+    await assert.rejects(metingSong('abc', '', '187745'), /还没有配置 Meting 接口/);
+    assert.equal(seen.length, 0);
+  });
 });
