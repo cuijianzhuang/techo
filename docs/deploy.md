@@ -12,7 +12,7 @@
 | `GITHUB_CLIENT_SECRET` | Worker 密钥 | `npx wrangler secret put GITHUB_CLIENT_SECRET` |
 | `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | 仓库的 Actions Secrets | 必须是同一个（新）账号的；Token 要有 Workers、D1、R2 的编辑权限 |
 
-桶和表不用手动建（下面第 1 步），新账号第一次部署前还要在 Cloudflare 的 Workers & Pages 里设一个 `workers.dev` 子域名。`TIMEZONE` 想按别的时区算“今天”时再改；`ratelimits`、`triggers`、`version_metadata` 不用动。Meting、和风天气、Mapbox、AI 的密钥都存在数据库的设置里，在新站后台的「手帐设置」里重新填。新库是空的，旧站的日记和照片不会跟过去。
+桶和表由部署自动建（下面第 1 步；Token 要有 D1 和 R2 的编辑权限，没有的话这一步会跳过并在日志里给出警告，部署照常进行，桶和表就要手动建），新账号第一次部署前还要在 Cloudflare 的 Workers & Pages 里设一个 `workers.dev` 子域名。`TIMEZONE` 想按别的时区算“今天”时再改；`ratelimits`、`triggers`、`version_metadata` 不用动。Meting、和风天气、Mapbox、AI 的密钥都存在数据库的设置里，在新站后台的「手帐设置」里重新填。新库是空的，旧站的日记和照片不会跟过去。
 
 ## 1. Cloudflare 上的数据库和照片桶
 
@@ -24,7 +24,7 @@
 npx wrangler d1 create techo-db
 ```
 
-照片桶和表由部署自己建：第一次部署前，`deploy.yml` 会在桶不存在时建 `techo-photos`，在库里还没有 `entries` 表时用 `schema.sql` 建表（已经在用的库不会被动，升级靠 `migrations/`）。想在本地或部署之外手动建，也可以：
+照片桶和表由部署自己建：部署前 `scripts/bootstrap.sh` 会在桶不存在时建 `techo-photos`，在数据库明确报“没有这张表”（`no such table`）时用 `schema.sql` 建表。已经在用的库不会被动；检查不了（比如 Token 没有 D1 权限）就跳过并给警告，不会让部署失败。想在部署之外手动建，也可以：
 
 ```bash
 npx wrangler r2 bucket create techo-photos
