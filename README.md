@@ -39,7 +39,7 @@
 |---|---|
 | 页面 | 原生 HTML / CSS / JS；立体的书用 [three.js](https://threejs.org)（esbuild 打包进 `public/assets/book3d.js`），平面翻页用 StPageFlip（已放在 `public/vendor/`） |
 | 托管 | Cloudflare Workers 静态资源（`public/`） |
-| API | Worker + [Hono](https://hono.dev)（`src/index.ts`） |
+| API | Worker + [Hono](https://hono.dev)（`src/`，入口 `src/index.ts`） |
 | 数据 | D1：`techo-db`（日记页、随手记、手帐设置、口令） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取；分享卡片也在这里（`cards/<id>.jpg`） |
 | 地图 | [Mapbox](https://www.mapbox.com)（可选）：GL JS 从 Mapbox 的 CDN 加载，页上的小地图用 Static Images API，地名用 Geocoding v6 |
@@ -67,7 +67,22 @@ public/                 静态文件（部署的就是这个目录）
     admin.js / admin.css 后台
     techo.css           样式（生成）
   vendor/               StPageFlip
-src/index.ts            Worker：/api/*、/img/*、/p/*、/card/*、每晚的定时任务
+src/index.ts            Worker 入口：把下面各部分的路由接起来（先是读者能访问的，再是 /api/admin/* 的登录关卡，再是后台的），每晚的定时任务
+src/env.ts              环境类型、bad()、localDay()
+src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键
+src/settings.ts         设置（哪些只有后台看得到）、AI 的设置和测试连接、/api/settings
+src/locks.ts            口令：整本或某一天上锁、/api/entries、/api/unlock
+src/pages.ts            书的首页、/p/<id> 分享页、/card/、/img/
+src/auth.ts             GitHub 登录和后台登录关卡（requireLogin）
+src/crypto.ts           登录和口令用的 HMAC、比较
+src/admin-entries.ts    后台：页的增删改、分享卡片、传照片
+src/drafts.ts           随手记、每晚（和「现在就写」）用 Claude 写草稿页
+src/lookup.ts           NeoDB 查书 / 影视 / 专辑、存封面
+src/music.ts            网易云：认歌、/api/meting、转发要 token 的音频
+src/weather.ts          后台查天气的路由
+src/meting.ts           取一首歌的全部逻辑（没有路由，测试直接用）
+src/qweather.ts         和风天气（没有路由，测试直接用）
+src/ua.ts               Worker 请求别的服务时用的名字
 src/compose.ts          调 Claude 把随手记写成一页
 src-build/              页面源文件和生成脚本
   design/               示例页、封面、扉页、封底的设计稿
@@ -75,7 +90,7 @@ src-build/              页面源文件和生成脚本
   build.py              生成 index.html、admin/index.html、techo.css
 schema.sql              D1 表结构（新建数据库用，可重复执行）
 migrations/             旧数据库升级用的 SQL
-tests/                  立体的书的翻页几何和动作测试
+tests/                  测试（`npm test`）：立体的书、Meting、和风天气、天气按小时的写法、账单、文件版本号、Worker 的路由
 wrangler.jsonc          Worker 配置（D1 / R2 已填好 ID）
 ```
 
