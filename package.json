@@ -9,8 +9,10 @@
     "db:init:local": "wrangler d1 execute techo-db --local --file=schema.sql",
     "db:init:remote": "wrangler d1 execute techo-db --remote --file=schema.sql",
     "typecheck": "tsc --noEmit",
+    "predev": "python3 src-build/stamp.py",
+    "test": "node --test tests/*.test.mjs",
     "build:pages": "python3 src-build/build.py",
-    "build:3d": "esbuild src-build/book3d/index.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=public/assets/book3d.js && esbuild src-build/card.js --bundle --format=iife --minify --target=es2020 --legal-comments=eof --outfile=public/assets/card.js"
+    "build:3d": "esbuild src-build/book3d/index.js --bundle --format=esm --minify --target=es2020 --legal-comments=eof --outfile=public/assets/book3d.js && esbuild src-build/card.js --bundle --format=iife --minify --target=es2020 --legal-comments=eof --outfile=public/assets/card.js && python3 src-build/stamp.py"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

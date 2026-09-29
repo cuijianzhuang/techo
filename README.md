@@ -13,7 +13,7 @@
 
 **在书里找**
 - 导航：← → 翻页；「封面」「时间线」直接翻过去；配了 Mapbox 时旁边还有📍足迹地图；🔍 放大看当前页（手机上看小字用，双击或双指缩放）；分享图标分享眼前这篇日记（封面、时间线、示例页上是灰的）；📅 日历，点有日记的日子翻过去；♪ 翻页声；☾/☀ 日夜切换。
-- **时间线**：扉页后面的几页是目录，列出后台写的每一篇日记，按月分组，最新的在前，点一行翻到那一天；页脚的「整页看 →」打开卡片样式的时间线页 `/timeline/`，带摘要、插画和照片。
+- **时间线**：扉页后面的几页是目录，列出后台写的每一篇日记，按月分组，最新的在前，点一行翻到那一天；页脚的「整页看 →」打开卡片样式的时间线页 `/timeline/`，带摘要、插画和照片。页很多时一次只拿最新的 100 页，滚到底再拿更早的 100 页（也有「更早的日子」按钮）。
 - **书架**（`/shelf/`）：日记里写过的书籍、影视、音乐卡片都收在这里，分「书 / 影 / 音」三格。书一本本立在木书架上，一年一层，书脊的颜色和竖排书名跟卡片上那本小书一样（有封面的封面朝外，在读的插着书签带）；电影是贴在墙上的白边海报；歌是露出半张唱片的唱片套。同一本书写过几天只算一本，点开是日记里那张卡片的原样，下面列出写到它的那几天，点一天翻过去。顶上统计一共几本、今年读了几本。
 - **票夹**（`/tickets/`）：日记里的机票、车票和电影票，按月插在透明插袋里，最新的在前；每月一行小结（飞了几趟、火车几趟、看了几场电影），可以只看某一种。点一张看大图和写它的那天。
 - **账本**（`/bills/`）：日记里的账单算好的账。顶上是本月、今年和今年平均每月花了多少；一根柱子一个月（最近 12 个月，悬停看金额，点一根看那个月）；选中的月份按「花在哪」列出来，每类一根横条、后面写金额和占比，下面是这个月的小票。花在哪：账单里的 `* 分组: ¥` 行；没有分组时用带金额的明细行；都没有就用账单标题。一张账单的金额看 `= 合计` 那行，没写就把各项加起来；分组加起来比合计少的，差额算「其他」。「按月看数字」里有每个月的表。这一页是公开的，谁都能看。
@@ -39,7 +39,7 @@
 |---|---|
 | 页面 | 原生 HTML / CSS / JS；立体的书用 [three.js](https://threejs.org)（esbuild 打包进 `public/assets/book3d.js`），平面翻页用 StPageFlip（已放在 `public/vendor/`） |
 | 托管 | Cloudflare Workers 静态资源（`public/`） |
-| API | Worker + [Hono](https://hono.dev)（`src/index.ts`） |
+| API | Worker + [Hono](https://hono.dev)（`src/`，入口 `src/index.ts`） |
 | 数据 | D1：`techo-db`（日记页、随手记、手帐设置、口令） |
 | 照片 | R2：`techo-photos`，经 `/img/...` 读取；分享卡片也在这里（`cards/<id>.jpg`） |
 | 地图 | [Mapbox](https://www.mapbox.com)（可选）：GL JS 从 Mapbox 的 CDN 加载，页上的小地图用 Static Images API，地名用 Geocoding v6 |
@@ -67,7 +67,26 @@ public/                 静态文件（部署的就是这个目录）
     admin.js / admin.css 后台
     techo.css           样式（生成）
   vendor/               StPageFlip
-src/index.ts            Worker：/api/*、/img/*、/p/*、/card/*、每晚的定时任务
+src/index.ts            Worker 入口：把下面各部分的路由接起来（先是读者能访问的，再是 /api/admin/* 的登录关卡，再是后台的），每晚的定时任务
+src/env.ts              环境类型、bad()、localDay()、aiKey()
+src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键（`selectEntries`：各种视图和分段直接在 SQL 里挑，只读要的列、要的行，分段走日期索引）
+src/settings.ts         设置（哪些只有后台看得到）、/api/settings、后台读写设置
+src/ai.ts               AI：用哪个模型、测试连接、一键补全
+src/locks.ts            口令：整本或某一天上锁、/api/entries（几种视图、分段、304）、/api/unlock
+src/etag.ts             ETag 和 304
+src/text.ts             正文去掉标记后的一行字（时间线的摘要，和 render.js 的 plainText 一致）、有没有卡片
+src/home.ts             书的首页（把日记内联进去，有自己的 ETag）
+src/share.ts            /p/<id> 分享页、/card/、/img/
+src/auth.ts             GitHub 登录和后台登录关卡（requireLogin）
+src/crypto.ts           登录和口令用的 HMAC、比较
+src/admin-entries.ts    后台：页的增删改、分享卡片、传照片
+src/drafts.ts           随手记、每晚（和「现在就写」）用 Claude 写草稿页
+src/lookup.ts           NeoDB 查书 / 影视 / 专辑、存封面
+src/music.ts            网易云：认歌、/api/meting、转发要 token 的音频
+src/weather.ts          后台查天气的路由
+src/meting.ts           取一首歌的全部逻辑（没有路由，测试直接用）
+src/qweather.ts         和风天气（没有路由，测试直接用）
+src/ua.ts               Worker 请求别的服务时用的名字
 src/compose.ts          调 Claude 把随手记写成一页
 src-build/              页面源文件和生成脚本
   design/               示例页、封面、扉页、封底的设计稿
@@ -75,7 +94,7 @@ src-build/              页面源文件和生成脚本
   build.py              生成 index.html、admin/index.html、techo.css
 schema.sql              D1 表结构（新建数据库用，可重复执行）
 migrations/             旧数据库升级用的 SQL
-tests/                  立体的书的翻页几何和动作测试
+tests/                  测试（`npm test`）：立体的书、Meting、和风天气、天气按小时的写法、账单、文件版本号、Worker 的路由
 wrangler.jsonc          Worker 配置（D1 / R2 已填好 ID）
 ```
 
@@ -161,7 +180,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **胶带和回形针**：每张卡片用一两条彩色和纸胶带贴在页上（颜色和位置随内容变），小票用回形针夹住。
 - **叠起来**：卡片连着写（中间不隔别的内容）就叠成一摞，每张往下错开一点、歪一点，露出上面一条（写着是什么）。点露出的那条，盖在它上面的卡片掀起来又落到它下面，它就在最上面了；离它越近的叠得越高，每张都留一点在外面，都点得到。右上角的「1/3」是最上面这张是从上往下第几张。手机、电脑、平面和立体的书都一样；最上面那张和纸一样，按住它照常翻页。一摞太高、这一页剩下的地方放不下时，卡片先挨得紧一点（最紧每张露出 44px，还看得见是什么）；还放不下，这一页有别的内容就整摞挪到下一页，一整页都放不下才拆成两摞，各自重新数「1/n」。
 - **图片**：`封面` / `海报` 可以写 `https://` 开头的图片地址，或上传照片后得到的 `p/….jpg`。
-- **网易云播放器**：正文里单独一行贴网易云的歌曲链接（`https://music.163.com/song?id=186016`）就是一个播放器。在编辑器里直接粘贴链接、或 App 里「分享 → 复制链接」得到的那段文字（包括 `163cn.tv` 短链接）都会自动变成这样一行；工具栏的「🎵 网易云」也能贴，还可以勾上「做成音乐卡片」，再写评分、听到哪、一句歌词。音乐卡片里写 `网易云: 链接或 ID` 也一样。歌名、歌手、封面没写的会自动填上；点 ▶ 播放，唱片转起来，进度条可以点着跳，歌词跟着走。进度条右边是音量：拖小滑块调大小，点喇叭静音 / 取消静音；所有播放器用同一个音量，这台浏览器会记住。同一时间只放一首。靠 [Meting API](https://github.com/metowolf/Meting) 取歌，默认用 `api.injahow.cn/meting/`，可以在「手帐设置 → 接入服务」换（见下）。VIP 和下架的歌放不了：卡片变灰，歌名、歌手、封面照样显示，下面写「在网易云放不了（VIP 或下架）」。
+- **网易云播放器**：正文里单独一行贴网易云的歌曲链接（`https://music.163.com/song?id=186016`）就是一个播放器。在编辑器里直接粘贴链接、或 App 里「分享 → 复制链接」得到的那段文字（包括 `163cn.tv` 短链接）都会自动变成这样一行；工具栏的「🎵 网易云」也能贴，还可以勾上「做成音乐卡片」，再写评分、听到哪、一句歌词。音乐卡片里写 `网易云: 链接或 ID` 也一样。歌名、歌手、封面没写的会自动填上；点 ▶ 播放，唱片转起来，进度条可以点着跳，歌词跟着走。进度条右边是音量：拖小滑块调大小，点喇叭静音 / 取消静音；所有播放器用同一个音量，这台浏览器会记住。同一时间只放一首。靠 [Meting API](https://github.com/metowolf/Meting) 取歌：公共的 Meting 接口都已经失效，要在「手帐设置 → 接入服务」填你自己的（见下），没填就放不了。VIP 和下架的歌放不了：卡片变灰，歌名、歌手、封面照样显示，下面写「在网易云放不了（VIP 或下架）」。
 - **🔍 NeoDB**：编辑器工具栏的「🔍 NeoDB」按书名、片名、专辑名或 ISBN 在 [NeoDB](https://neodb.social)（开放的书影音数据库）里搜，也可以贴 NeoDB 上这一条的链接（最准）。点一个结果就插入填好的书籍、影视或音乐卡片，封面存到自己的 R2。按 ISBN 查书时 NeoDB 没有就查 [Open Library](https://openlibrary.org)。想用别的 NeoDB 实例，给 Worker 设环境变量 `NEODB_URL`（比如 `https://neodb.example.com`）。
 
 空一行分段，段落里换行就是换行。没有照片时大约 250 字写满一页。
@@ -207,7 +226,7 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 - **联系方式**：邮箱、GitHub。
 
 **接入服务**
-- **网易云音乐**：Meting API 的地址（留空用默认的 `https://api.injahow.cn/meting/`）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`；只填了域名（`https://music.example/`）而那里是介绍页时，自动改问 `https://music.example/api`。下面有几个公共接口可以一点就换，「试一下」用填着的地址取一首歌（在浏览器里取，和读者看到的一样），能取到会显示歌名、封面和一个能播的小播放器。
+- **网易云音乐**：你自己的 Meting API 的地址（公共接口都已经失效，没有默认值；没填时歌曲卡片是灰的，「试一下」会提醒先填）。可以写成 `https://…/api?server=:server&type=:type&id=:id` 这种带占位符的形式，没有占位符时在后面加 `server=netease&type=song&id=`；只填了域名（`https://music.example/`）而那里是介绍页时，自动改问 `https://music.example/api`。「试一下」用填着的地址（和填着的 token，还没保存也行）取一首歌，走的路和读者看到的一样：都由 Worker 去问 Meting，页面里不会自己去连 Meting；能取到会显示歌名、封面和一个能播的小播放器。
   - **Meting token**：接口提示「需要 API Token，请使用 Authorization: Bearer <token>」时，把 token 填在这里（输入框默认遮住，可以点「显示」）。手帐里所有的 Meting 请求都经过 Worker（`/api/meting`），由 Worker 带上 `Authorization: Bearer` 去问；歌曲、封面地址如果又指回这个接口，Worker 会替浏览器跟到真正的地址（网易云的服务器），歌词直接取回文字；只有带着 token 才给的音频、图片，由 Worker 转过来（`/api/meting/file`）。接口的回答认几种常见格式（数组、`data`/`result` 里的对象），缺播放地址、封面、歌词时再按 `type=url` / `pic` / `lrc` 去问，还缺的问网易云自己（歌名、歌手、封面，以及免费歌的播放地址）。「试一下」取到歌但放不了时显示 △ 和原因（说明接口是通的，是这首歌的问题）；实在认不出接口的回答，会把回答的开头显示出来。token 和 AI 的设置一样只在后台，不会出现在 `/api/settings` 和网页里。不想存在设置里，也可以设成 Worker 密钥：`npx wrangler secret put METING_TOKEN`（设置里空着时用它）。
 - **天气**：[和风天气](https://console.qweather.com) 的 KEY 和 API Host。注册后建一个项目、凭据选 API KEY；API Host 在控制台「设置」里，每个账号不一样（像 `abc123.re.qweatherapi.com`，留空用旧的 `devapi.qweather.com`）。两项都只在后台，Worker 带着 `X-QW-Api-Key` 去查（`/api/admin/weather`），不会出现在网页里。「试一下」查北京今天的天气。KEY 不对、额度用完、查不到的日子，编辑页会说一句和风的原因，然后用 Open-Meteo 的结果。
 - **地图**：Mapbox 的 access token，要用公开的 `pk.` 开头的那种。在 [account.mapbox.com](https://account.mapbox.com/access-tokens/) 新建一个，URL restrictions 填你的域名，别人拿去也用不了。token 会出现在网页里，这是 Mapbox 公开 token 的正常用法。配上后才有足迹地图页、页上的小地图、后台的选点地图和 Mapbox 地名；「有坐标的日记页上贴一张小地图」可以单独关掉。
@@ -295,15 +314,20 @@ npm run dev                        # http://localhost:8787 ，后台 http://loca
 
 ```bash
 npm run typecheck
-node --test tests/*.mjs
+npm test                          # tests/*.test.mjs：立体书的动作、Meting、和风天气、天气按小时的写法、账单
 python3 src-build/build.py && npm run build:3d && git status   # public/ 不应该有没提交的改动
 ```
+
+测试放在 `tests/`，文件名 `*.test.mjs`。Worker 里的逻辑（`src/meting.ts`、`src/qweather.ts`）用 `tests/helpers.mjs` 的 `loadTs` 直接跑，网络用 `withFetch` 换成假的；浏览器脚本里的函数（`halfDay`、`bill`）没有模块，用 `slice` 按前后标记从源文件里取出来，标记找不到时测试会直接报错，不会悄悄什么都没测。
 
 ## 改页面
 
 - 示例页、封面、扉页、封底的内容在 `src-build/design/techo.html` 和 `src-build/index.tpl.html`，样式在 `src-build/design/extra.css` 和 `src-build/book-extra.css`。改完运行 `python3 src-build/build.py`，会重新生成 `public/index.html`、`public/admin/index.html`、`public/assets/techo.css` 和 `public/assets/paper.css`（纸色，书和 `/timeline/` 共用，源文件是 `src-build/paper.css`）。
 - 立体的书的源码在 `src-build/book3d/`，改完运行 `npm run build:3d` 重新打包 `public/assets/book3d.js`。
 - `public/assets/` 里其余的 js / css 和 `public/timeline/`、`public/404.html` 直接改。
+- **文件版本号**：页面里引用 `/assets/*` 和 `/vendor/*` 的地方都带着 `?v=<十位>`（比如 `/assets/render.js?v=59b61e98ef`），由 `src-build/stamp.py` 按文件内容算出；一个文件引用了别的文件（`boot.js` 加载 `book3d.js`，它又读 `techo.css`），版本里也算进了那个文件的版本，所以改了 CSS，用到它的脚本和页面的地址也跟着变。`public/_headers` 让这两个目录缓存一年（`immutable`），回访的读者不再为每个文件问一遍服务器；新部署地址就变了，读到的一定是新的。页面本身（HTML）仍是每次向服务器确认。
+  - **改了 `public/` 里的 js / css / html 之后运行 `python3 src-build/build.py`**（它最后会跑 `stamp.py`；`npm run build:3d` 也会）。忘了的话 `npm test` 和 CI 会报「版本不是现在算出来的」，不会带着旧版本上线。`npm run dev` 启动前会自动跑一遍，但开着 dev 时再改文件要手动跑，浏览器也要强制刷新（Ctrl/⌘+Shift+R），不然会拿到缓存里的旧文件。
+  - 新写的引用要用引号、`(` 或 `=` 紧挨着写 `/assets/…`（`src="/assets/x.js"`、`import('/assets/x.js')`），`stamp.py` 才认得出来；Worker 里找 `boot.js` 用的是 `script[src^="/assets/boot.js"]`。
 - 生成的文件要和源码一起提交，CI 会检查两边一致。
 - 后台写的页面按日期排在示例页后面。
 
@@ -311,7 +335,7 @@ python3 src-build/build.py && npm run build:3d && git status   # public/ 不应�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/entries` | 已发布的日记页（按日期）；上了锁、没给口令的只有日期。口令令牌放在 `X-Techo-Keys` 请求头里 |
+| GET | `/api/entries` | 已发布的日记页（按日期）；上了锁、没给口令的只有日期。口令令牌放在 `X-Techo-Keys` 请求头里。按页面需要给不同的量：`?view=index`（不带正文，只带前 100 个字的 `excerpt`：时间线用）、`?view=map`（只有带地点的页，只有地图要画的字段）、`?view=cards`（只有带卡片或网易云链接的页才带正文：书架、票夹、账本用），不写就是全部（书要排每一个字）。`?limit=100`（最多 500）只给一段，新的在前，`&before=<页的 id>` 给那一页之前的一段，另外带 `page: {total, days, first, last, more}` 说明整本是多少。带 `ETag`，没变时对 `If-None-Match` 回 304；`Cache-Control: private, no-cache`，`Vary: X-Techo-Keys` |
 | POST | `/api/unlock` | 用口令换一个 12 小时有效的令牌（`{"scope", "password"}`） |
 | GET | `/api/settings` | 手帐设置（没设置过的项返回默认值；不含 AI 三项） |
 | GET | `/api/meting?id=` | 网易云歌曲（经 Meting，带上设置里的 token）：`{title, artist, url, pic, lrc}`；放不了的歌 `url` 为空，另有 `why` |

@@ -552,7 +552,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=2e1dbfe52e';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -838,26 +838,15 @@
     w.append(pick,row,key,acts);
     return w;
   }
-  /* 手帐设置 → 接入服务 → 网易云音乐: which Meting API (a few known ones, or one's own), and a song to try it on */
-  const METING_PRESETS=[
-    ['','api.injahow.cn（默认）'],
-    ['https://api.i-meto.com/meting/api?server=:server&type=:type&id=:id&r=:r','api.i-meto.com'],
-    ['https://meting.qjqq.cn/?server=:server&type=:type&id=:id','meting.qjqq.cn']];
+  /* 手帐设置 → 接入服务 → 网易云音乐: the journal's own Meting API (the public ones have all stopped answering), a token for it if it wants one, and a song to try it on */
   // the song 试一下 plays when none is typed (https://music.163.com/song?id=187745)
   const TRY_SONG='187745';
   function musicField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
-    const f=field('Meting API 地址','metingApi','text',{ph:T.METING_DEFAULT,max:200,
-      hint:'留空用默认的公共接口。可以写成带占位符的 …?server=:server&type=:type&id=:id（:server :type :id :r 会被替换）；没有占位符的，后面会加上 server=netease&type=song&id=…。公共接口时好时坏，放不了就换一个，或者自己搭一个 Meting（github.com/metowolf/Meting-API）。'});
+    const f=field('Meting API 地址','metingApi','text',{ph:'https://你的域名/api',max:200,
+      hint:'填你自己的 Meting 接口：公共的都已经失效，自己搭一个（github.com/metowolf/Meting-API），或者用兼容它的服务。可以写成带占位符的 …?server=:server&type=:type&id=:id（:server :type :id :r 会被替换）；没有占位符的，后面会加上 server=netease&type=song&id=…。只填域名、那里是介绍页时，会改问它的 /api。留空就放不了网易云的歌。'});
     const inp=f.querySelector('input');
-    const chips=el('div','chips');
-    const mark=()=>chips.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===(inp.value.trim()))));
-    METING_PRESETS.forEach(([v,n])=>{
-      const b=el('button','chip pre',n);b.type='button';b.dataset.v=v;
-      b.onclick=()=>{inp.value=v;draft.metingApi=v;changed();mark();};chips.appendChild(b);
-    });
-    inp.addEventListener('input',mark);mark();
-    // try it: a song through the address as it is now (saved or not), from this browser, as readers will
+    // try it: a song through the address (and token) as it is now, saved or not, asked by the Worker as readers' pages are
     const row=el('div','drow'),song=el('input');song.type='text';song.placeholder='试一首：歌曲链接或 ID（空着用 '+TRY_SONG+'）';song.setAttribute('aria-label','试听的歌');
     const t=el('button','b small','试一下');t.type='button';row.append(song,t);
     const out=el('div','mtest');
@@ -866,7 +855,9 @@
       if(!id){out.textContent='✗ 没认出歌曲 ID：贴 music.163.com 的歌曲链接，或者直接写数字 ID';out.className='mtest err';return;}
       t.disabled=true;out.className='mtest';out.textContent='正在取……';
       try{
-        const x=await T.meting(id,inp.value.trim()||T.METING_DEFAULT,ti.value.trim());
+        const api=inp.value.trim();
+        if(!api&&!settings.metingApi)throw new Error('先填 Meting 接口地址：公共接口都失效了，要用你自己的');
+        const x=await T.meting(id,api||settings.metingApi,ti.value.trim());
         out.textContent='';out.className='mtest ok';
         if(x.pic){const i=el('img');i.src=x.pic;i.alt='';i.referrerPolicy='no-referrer';out.appendChild(i);}
         // found, but NetEase won't play it: the API is fine, the song isn't
@@ -883,7 +874,7 @@
     const ti=tk.querySelector('input');ti.autocomplete='off';ti.spellcheck=false;
     const eye=el('button','b small','显示');eye.type='button';eye.onclick=()=>{const on=ti.type==='password';ti.type=on?'text':'password';eye.textContent=on?'隐藏':'显示';};
     const trow=el('div','drow');trow.style.alignItems='start';eye.style.marginTop='22px';trow.append(tk,eye);
-    w.append(f,chips,trow,row,out);
+    w.append(f,trow,row,out);
     return w;
   }
   /* 手帐设置 → 接入服务 → 天气: 和风天气's key and API Host (both admin only), and today's weather in Beijing to
@@ -1411,7 +1402,7 @@
           const x=await T.meting(id).catch(()=>null);
           close();q.value='';
           block(cb.checked?['```音乐','网易云: '+link,'评分:','听到:','歌词:','```'].join('\n'):link+'\n');
-          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+(x.url?'。':'，不过'+(x.why||'这首歌放不了')+'。'):'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，可以在「手帐设置 → 接入服务」换个接口试试。',x?'ok':'err');
+          status(x?'已贴上「'+x.title+'」'+(x.artist?' — '+x.artist:'')+(x.url?'。':'，不过'+(x.why||'这首歌放不了')+'。'):'已贴上。现在取不到这首歌的信息（Meting 接口或这首歌放不了），页上会显示成灰的，先到「手帐设置 → 接入服务 → 网易云音乐」看看 Meting 接口填了没有、通不通。',x?'ok':'err');
         }catch(e){say.textContent=e.message||'没认出来';}
         finally{go.disabled=false;}
       }

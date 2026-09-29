@@ -19,7 +19,7 @@
   let entries,settings={};
   try{
     const [e,s]=await Promise.all([
-      fetch('/api/entries',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
+      fetch('/api/entries?view=map',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
       fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     entries=(e.entries||[]).filter(en=>!en.locked&&parseDate(en.date)&&T.geoOf(en));

@@ -1,6 +1,7 @@
 /* The timeline (/timeline/): every diary page written from the admin, newest first, a month at a time. Each
    day opens the book at that page (/#YYYY-MM-DD). Pages come from /api/entries with the keys this tab holds,
-   so a locked page the reader has opened shows; one they haven't shows only its date, sealed. */
+   so a locked page the reader has opened shows; one they haven't shows only its date, sealed. A hundred at a
+   time, the next hundred as the end of the list comes into view: a journal of years is no longer a page. */
 (async function(){
   "use strict";
   const T=window.Techo,{el,parseDate}=T;
@@ -16,13 +17,17 @@
   }
 
   const held=T.keys();
-  let entries,settings={};
+  const STRETCH=100;
+  // a stretch of the pages, newest first (with `before`: the stretch before that page)
+  const fetchStretch=before=>fetch('/api/entries?view=index&limit='+STRETCH+(before?'&before='+encodeURIComponent(before):''),{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();});
+  let entries,meta,settings={};
   try{
     const [e,s]=await Promise.all([
-      fetch('/api/entries',{headers:{accept:'application/json','x-techo-keys':Object.values(held).join(' ')}}).then(r=>{if(!r.ok)throw new Error('entries '+r.status);return r.json();}),
+      fetchStretch(),
       fetch('/api/settings',{headers:{accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     entries=(e.entries||[]).filter(en=>parseDate(en.date));
+    meta=e.page||{total:entries.length,days:new Set(entries.map(en=>en.date)).size,first:entries.length?entries[entries.length-1].date:'',last:entries.length?entries[0].date:'',more:false};
     settings=(s&&s.settings)||{};
   }catch(err){
     console.warn('techo timeline:',err);
@@ -35,11 +40,9 @@
   {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}             // ☾/☀
   // where they were written: the map page, when the journal has a Mapbox token
   if(settings.mapboxToken){const a=el('a','tl-back','足迹地图 →');a.href='/map/';a.style.marginLeft='14px';document.querySelector('.tl-back').after(a);}
-  if(!entries.length){say('还没有写下的日子。','去手帐看看');return;}
+  if(!meta.total){say('还没有写下的日子。','去手帐看看');return;}
 
-  entries=T.sortEntries(entries).reverse();
-  const days=new Set(entries.map(en=>en.date));
-  stat.textContent='共 '+entries.length+' 页'+(days.size!==entries.length?'，'+days.size+' 天':'')+' · '+dot(entries[entries.length-1].date)+' → '+dot(entries[0].date);
+  stat.textContent='共 '+meta.total+' 页'+(meta.days!==meta.total?'，'+meta.days+' 天':'')+' · '+dot(meta.first)+' → '+dot(meta.last);
 
   const today=T.todayStr();
   function card(en){
@@ -60,7 +63,7 @@
       if(en.latin)main.appendChild(el('div','tl-latin',en.latin));
       const pw=[en.place,en.weather].filter(Boolean).join(' · ');
       if(pw)main.appendChild(el('div','tl-meta',pw));
-      const ex=T.plainText(en.body);
+      const ex=en.excerpt!=null?en.excerpt:T.plainText(en.body);
       if(ex)main.appendChild(el('p','tl-ex',ex));
       const stk=(en.stickers||[]).map(k=>T.stickerSvg(k,30)).filter(Boolean);
       if(stk.length){const r=el('div','tl-stk');r.setAttribute('aria-hidden','true');stk.forEach(s=>r.appendChild(s));main.appendChild(r);}
@@ -79,7 +82,9 @@
 
   list.textContent='';
   let month=null,ol=null,count=0,shown=0;
-  for(const en of entries){
+  // more pages under the last month (or a month of their own): the count in its heading keeps up
+  function add(pages){
+   for(const en of pages){
     const key=en.date.slice(0,7);
     if(key!==month){
       if(ol)ol.previousSibling.querySelector('em').textContent=count+' 页';
@@ -96,7 +101,33 @@
     li.style.setProperty('--i',String(Math.min(shown++,8)));   // the first few come in one after another
     li.appendChild(card(en));
     ol.appendChild(li);count++;
+   }
+   if(ol)ol.previousSibling.querySelector('em').textContent=count+' 页';
   }
-  if(ol)ol.previousSibling.querySelector('em').textContent=count+' 页';
-  list.appendChild(el('p','tl-end',dot(entries[entries.length-1].date)+' · 从这里开始记'));
+  add(entries);
+  // the end of the list: the pages before, when there are some (the button too, for a keyboard and a reader who scrolls no more)
+  let oldest=entries.length?entries[entries.length-1].id:null;
+  function end(){
+    const tail=el('p','tl-end',dot(meta.first)+' · 从这里开始记');
+    list.appendChild(tail);
+  }
+  if(!meta.more||!oldest){end();return;}
+  const more=el('button','tl-more','更早的日子');more.type='button';
+  list.appendChild(more);
+  let busy=false;
+  async function older(){
+    if(busy)return;busy=true;more.disabled=true;more.textContent='正在翻……';
+    try{
+      const e=await fetchStretch(oldest),got=(e.entries||[]).filter(en=>parseDate(en.date));
+      if(got.length){add(got);oldest=got[got.length-1].id;}
+      meta.more=!!(e.page&&e.page.more)&&got.length>0;
+    }catch(err){console.warn('techo timeline:',err);more.disabled=false;more.textContent='没翻开，再点一下';busy=false;return;}
+    busy=false;
+    if(!meta.more){io&&io.disconnect();more.remove();end();return;}
+    more.disabled=false;more.textContent='更早的日子';
+    list.appendChild(more);   // (under the new ones)
+  }
+  more.onclick=older;
+  const io='IntersectionObserver' in window?new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting))older();},{rootMargin:'600px 0px'}):null;
+  if(io)io.observe(more);
 })();

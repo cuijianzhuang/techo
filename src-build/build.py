@@ -57,3 +57,6 @@ adm=open(os.path.join(root,'src-build/admin.tpl.html'),encoding='utf-8').read().
 os.makedirs(os.path.join(root,'public/admin'),exist_ok=True)
 open(os.path.join(root,'public/admin/index.html'),'w',encoding='utf-8').write(adm)
 print('ok',len(out),len(css))
+# every reference to a script or stylesheet gets its version (see stamp.py)
+import subprocess
+subprocess.check_call([sys.executable,os.path.join(root,'src-build','stamp.py')])

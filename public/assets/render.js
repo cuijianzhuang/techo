@@ -262,29 +262,17 @@
   /* ---------- 网易云 through Meting (手帐设置 → 接入服务 → 网易云音乐): a song's name, singer, cover, words and sound ----------
      "网易云: 186016" or a music.163.com link. The Meting API is any of the public ones (or one's own); its
      answers differ a little (title / name, author / artist), both are taken. */
-  const METING_DEFAULT='https://api.injahow.cn/meting/';
   const neteaseId=v=>{const s=String(v||'').trim();if(!s)return '';if(/^\d{3,12}$/.test(s))return s;const m=/music\.163\.com\/.*?(?:song\?id=|song\/)(\d+)/.exec(s)||/[?&]id=(\d+)/.exec(/163\.com/.test(s)?s:'');return m?m[1]:'';};
   const metingCache=new Map();
-  // api (and token): another Meting API than the journal's, as typed in 手帐设置 for its 试一下. Asked through the
-  // Worker (/api/meting, which carries the API's token when it wants one); straight from here only if that can't
-  // answer
+  // A song, asked of the Worker (/api/meting, which carries the API's token when it wants one, and says what is
+  // wrong in its own words: a token wanted, a song that can't play, an answer not understood). api (and token):
+  // another Meting API than the journal's, as typed in 手帐设置 for its 试一下. Not asked of the API from the
+  // browser: that would need its token here, and the Worker's word is the one worth showing.
   function meting(id,api,token){
-    const base=(api||site.metingApi||METING_DEFAULT).trim(),ck=base+'|'+id+(token?'|'+token:'');
+    const ck=(api||'')+'|'+id+(token?'|'+token:'');
     if(!metingCache.has(ck)){
-      const viaWorker=()=>fetch(api?'/api/admin/meting?id='+encodeURIComponent(id)+'&api='+encodeURIComponent(api):'/api/meting?id='+encodeURIComponent(id),{headers:Object.assign({accept:'application/json'},api&&token?{'x-meting-token':token}:{}),credentials:'same-origin'})
-        .then(r=>r.json().catch(()=>({})).then(j=>{if(!r.ok||!(j.url||j.title)){const e=new Error(j.error||'meting '+r.status);e.said=r.status!==404&&!!j.error;throw e;}return j;}));
-      const direct=()=>{
-        const u=/:id/.test(base)?base.replace(':server','netease').replace(':type','song').replace(':id',encodeURIComponent(id)).replace(':r',String(Math.random()).slice(2))
-          :base+(base.includes('?')?'&':'?')+'server=netease&type=song&id='+encodeURIComponent(id);
-        return fetch(u).then(r=>{if(!r.ok)throw new Error('meting '+r.status);return r.json();}).then(j=>{
-          const x=Array.isArray(j)?j[0]:j&&(j.data&&j.data[0]||j);
-          if(!x||!x.url)throw new Error('meting: no song '+id);
-          return{title:x.title||x.name||'',artist:x.author||x.artist||'',url:x.url,pic:x.pic||x.cover||'',lrc:x.lrc||''};
-        });
-      };
-      // the Worker said what's wrong (a token wanted, a song that can't play): that's the answer; it couldn't be
-      // reached (a page opened without it): straight from here
-      metingCache.set(ck,viaWorker().catch(e=>e.said||e.message.startsWith('这首歌')?Promise.reject(e):direct()));
+      metingCache.set(ck,fetch(api?'/api/admin/meting?id='+encodeURIComponent(id)+'&api='+encodeURIComponent(api):'/api/meting?id='+encodeURIComponent(id),{headers:Object.assign({accept:'application/json'},api&&token?{'x-meting-token':token}:{}),credentials:'same-origin'})
+        .then(r=>r.json().catch(()=>({})).then(j=>{if(!r.ok||!(j.url||j.title))throw new Error(j.error||'meting '+r.status);return j;})));
       metingCache.get(ck).catch(()=>metingCache.delete(ck));
     }
     return metingCache.get(ck);
@@ -1587,5 +1575,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,METING_DEFAULT,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();
