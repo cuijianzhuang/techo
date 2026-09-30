@@ -7,6 +7,8 @@
 .pt-white{--paper:#fffefa;--grid:rgba(110,125,140,.15);--grid-strong:rgba(110,125,140,.28);--pp-edge:#f3f2ee}
 .pt-aged{--paper:#f5e9ca;--grid:rgba(150,115,60,.17);--grid-strong:rgba(150,115,60,.32);--pp-edge:#eadcb7}
 .pt-mint{--paper:#eef4ea;--grid:rgba(80,130,110,.16);--grid-strong:rgba(80,130,110,.3);--pp-edge:#e2eadd}
+/* 向日葵 (梵高): paper the yellow of the sunflowers, the grid in ochre */
+.pt-sunflower{--paper:#fbedb6;--grid:rgba(170,120,20,.2);--grid-strong:rgba(170,120,20,.34);--pp-edge:#efdb96}
 
 /* 夜间书页 (手帐设置 → 纸张): with the system in dark mode the paper goes dark too, like paper under a desk lamp.
    Techo.nightTheme puts data-theme="dark" on the page only then (and not when switched off), and the 3D book's
@@ -21,6 +23,7 @@
 [data-theme="dark"] :is(.page.pt-white:not(.cover):not(.backcover):not(.inside),.pt-white .tl-card){--paper:#1f2125;--grid:rgba(205,218,235,.07);--grid-strong:rgba(205,218,235,.15);--pp-edge:#36393e}
 [data-theme="dark"] :is(.page.pt-aged:not(.cover):not(.backcover):not(.inside),.pt-aged .tl-card){--paper:#2a251b;--grid:rgba(235,205,150,.08);--grid-strong:rgba(235,205,150,.17);--pp-edge:#41392b}
 [data-theme="dark"] :is(.page.pt-mint:not(.cover):not(.backcover):not(.inside),.pt-mint .tl-card){--paper:#1d2521;--grid:rgba(190,230,210,.07);--grid-strong:rgba(190,230,210,.15);--pp-edge:#323d37}
+[data-theme="dark"] :is(.page.pt-sunflower:not(.cover):not(.backcover):not(.inside),.pt-sunflower .tl-card){--paper:#2e2914;--grid:rgba(240,200,90,.1);--grid-strong:rgba(240,200,90,.2);--pp-edge:#463d1f}
 /* line drawings inked in the day's ink (the doodles, the sample pages' sketches) take the evening's; shapes
    filled with the paper's own colour stay the paper's */
 [data-theme="dark"] .page:not(.cover):not(.backcover) svg [stroke="#2a2724"]{stroke:var(--ink)}
@@ -40,5 +43,6 @@
 [data-theme="dark"] .page.inside.cv-leather{--end:#29251f;--end-dot:rgba(215,185,120,.18)}
 [data-theme="dark"] .page.inside.cv-linen{--end:#292823;--end-dot:rgba(215,210,185,.16)}
 [data-theme="dark"] .page.inside.cv-wine{--end:#2c2224;--end-dot:rgba(230,185,190,.16)}
+[data-theme="dark"] .page.inside.cv-starry{--end:#1c2233;--end-dot:rgba(170,195,240,.18)}
 /* the envelope on 写信给我: its 复制 button is on the envelope's paper, not the page's */
 [data-theme="dark"] .page .envelope{--paper:#fffdf6}

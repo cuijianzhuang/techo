@@ -1345,15 +1345,15 @@
 
   /* the cover styles (手帐设置 → 封面款式): a cv-<key> class on the covers and endpapers, their colours in
      book-extra.css. slate is the built-in one (no class). */
-  const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面'};
+  const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面',starry:'星夜'};
   function coverStyle(node,key){
     Object.keys(COVERS).forEach(k=>node.classList.remove('cv-'+k));
     if(COVERS[key]&&key!=='slate')node.classList.add('cv-'+key);
   }
   /* the paper (手帐设置 → 纸张): its pattern (pp-<key>) and colour (pt-<key>), in book-extra.css. 方格 and
      米白 are the built-in ones (no class). */
-  const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白'};
-  const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷'};
+  const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白',strokes:'笔触'};
+  const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷',sunflower:'向日葵'};
   /* ---------- fonts ----------
      A font is a pair: the face of the big title (--title) and of the handwriting (--hand). The book has one
      (settings.bookFont) and a page may have its own (entry.font); FONT_IDS in src/entries.ts is this list's ids
@@ -1369,6 +1369,7 @@
     {id:'kuaile',name:'站酷快乐体',hand:'ZCOOL KuaiLe',title:'ZCOOL KuaiLe',g:'ZCOOL+KuaiLe'},
     {id:'xiaowei',name:'站酷小薇',hand:'ZCOOL XiaoWei',title:'ZCOOL XiaoWei',g:'ZCOOL+XiaoWei'},
     {id:'huangyou',name:'黄油体 · 龙藏体',hand:'Long Cang',title:'ZCOOL QingKe HuangYou',g:'ZCOOL+QingKe+HuangYou'},
+    {id:'vangogh',name:'梵高 · 流江毛草',hand:'Long Cang',title:'Liu Jian Mao Cao',g:'Liu+Jian+Mao+Cao'},
     {id:'songti',name:'思源宋体',hand:'Noto Serif SC',title:'Noto Serif SC',g:'Noto+Serif+SC:wght@500;700',serif:true}
   ];
   const customFonts=new Map();   // u-<uuid> → {id,name,family,url}: the uploaded ones (registerFonts)

@@ -191,7 +191,8 @@ export async function start() {
   // them at the start: a few thousand pages in the document make every style read dear. The covers and the flyleaf are
   // read for their colours below.
   const attach = (node) => { if (!node.isConnected) meas.appendChild(node); };
-  for (const i of [0, 1, 2, N - 2, N - 1]) attach(pages[i].node);
+  // (moved, not attach()ed: those still inside `src` count as in the document, and go with it below)
+  for (const i of new Set([0, 1, 2, N - 2, N - 1])) meas.appendChild(pages[i].node);
   src.remove();
   // "Written on the page": a diary page is blank until it's first opened at rest, then its words and doodles
   // are written in (Techo.playDraw), like the page-flip book.

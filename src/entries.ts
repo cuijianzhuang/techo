@@ -17,7 +17,7 @@ export type Entry = {
 
 /* the fonts a page (or the book: settings.ts bookFont) can be written in. The list, with the faces, is FONTS in
    public/assets/render.js; a test keeps the two in step. u-<uuid> is an uploaded font (fonts.ts). */
-export const FONT_IDS = ["default", "mashan", "zhimang", "liujian", "kuaile", "xiaowei", "huangyou", "songti"];
+export const FONT_IDS = ["default", "mashan", "zhimang", "liujian", "kuaile", "xiaowei", "huangyou", "vangogh", "songti"];
 export const UPLOADED_FONT = /^u-[0-9a-f-]{36}$/;
 export const validFont = (id: string) => FONT_IDS.includes(id) || UPLOADED_FONT.test(id);
 
