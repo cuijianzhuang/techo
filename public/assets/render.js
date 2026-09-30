@@ -1408,10 +1408,13 @@
   /** the book's own font (手帐设置 → 字体) for everything on the page that isn't a diary page: the cover, the
       contents, the timeline… Called next to nightTheme by every page a reader sees. */
   function applyBookFont(S){
+    registerFonts(S&&S.customFonts);
     const id=(S&&S.bookFont)||'default';
     fontStyle(document.documentElement,id==='default'?'':id);
     return useFont(id);
   }
+  /** the uploaded fonts, as {id,name,family,url} */
+  const customFontList=()=>[...customFonts.values()];
   /** upload list → the registry (settings.customFonts is JSON: [{id,name,key}]) */
   function registerFonts(json){
     let list=[];try{list=JSON.parse(json||'[]');}catch(e){}
@@ -1676,5 +1679,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

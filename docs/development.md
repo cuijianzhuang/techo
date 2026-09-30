@@ -35,6 +35,8 @@ src/etag.ts             ETag 和 304
 src/text.ts             正文去掉标记后的一行字（时间线的摘要，和 render.js 的 plainText 一致）、有没有卡片
 src/home.ts             书的首页（把日记内联进去，有自己的 ETag）
 src/share.ts            /p/<id> 分享页、/card/、/img/
+src/fonts.ts            上传字体：`POST/DELETE /api/admin/fonts`（存 R2 的 `fonts/`，列表在设置 `customFonts`），`GET /font/<uuid>.<ext>`
+src/fontfile.ts         字体文件是什么（按开头几个字节认）、`customFonts` 列表的读取（没有路由，测试直接用）
 src/photos.ts           把旧的 `p/<uuid>.jpg` 搬进日期文件夹的迁移接口（手动、分步，不会自己运行）
 src/auth.ts             GitHub 登录和后台登录关卡（requireLogin）
 src/crypto.ts           登录和口令用的 HMAC、比较
@@ -173,6 +175,9 @@ npx wrangler d1 execute techo-db --remote --file=migrations/0004_font.sql
 | POST | `/api/admin/jots/delete` | 一次删几条（`{"ids": [...]}`，最多 100 条） |
 | POST | `/api/admin/compose` | 用今天的随手记让 AI 写一页草稿（今天已有页或没有随手记时返回 409） |
 | POST | `/api/admin/photos` | 上传照片（请求体为图片本身，≤10MB）；`?date=YYYY-MM-DD` 是放进哪天的文件夹（编辑器传这一页的日期），没带或不是真日期就用今天；返回 `{"key": "p/2026/09/28/<uuid>.jpg"}` |
+| POST | `/api/admin/fonts?name=` | 上传一个字体（请求体是字体文件本身，woff2 / woff / ttf / otf，≤3MB，最多 8 个），返回 `{font, customFonts}` |
+| DELETE | `/api/admin/fonts/:id` | 删一个字体（用到它的整本和页改回默认） |
+| GET | `/font/<uuid>.<ext>` | 上传的字体文件（公开，长缓存） |
 | POST | `/api/admin/photos/migrate` | 把旧照片搬进日期文件夹：`{"step": "preview\|copy\|cleanup", "limit": 4}`，见[使用说明 · 照片在 R2 里的位置](guide.md#照片在-r2-里的位置) |
 | POST | `/api/admin/lookup` | 查书、影视、音乐（`{"q": "书名或链接", "kind": "book\|film\|music"}`，数据来自 NeoDB，ISBN 退到 Open Library）；贴链接时 NeoDB 还在抓会返回 `{"pending": true}` |
 | POST | `/api/admin/cover` | 把一张远程封面存进 R2（`{"url": "https://…"}`，≤10MB 的图片），返回 `{"key": "p/….jpg"}` |

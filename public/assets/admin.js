@@ -561,7 +561,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=77059dd4d7';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=54ebf0fe14';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -713,8 +713,63 @@
       tile.append(t,h);
       o.append(r,tile,el('span',null,name));w.appendChild(o);
     });
-    wrap.append(w,el('div','hintx','标题和手写的字一起换，整本书、时间线、分享卡片都用它；单独一页想用别的字体，在那一页的编辑页里选。字体只在有人用到时才加载。'));
+    T.customFontList().forEach(f=>T.useFont(f.id));
+    wrap.append(w,el('div','hintx','标题和手写的字一起换，整本书、时间线、分享卡片都用它；单独一页想用别的字体，在那一页的编辑页里选。字体只在有人用到时才加载。'),fontUploads());
     return wrap;
+  }
+  /* the uploaded fonts (POST/DELETE /api/admin/fonts): they are saved by their own routes, at once, not with 保存设置 */
+  function fontsChanged(json,bookFont){
+    settings.customFonts=draft.customFonts=json;
+    if(bookFont){settings.bookFont=draft.bookFont=bookFont;}
+    // the settings not yet saved stay unsaved: only these two are moved in the baseline
+    try{const b=JSON.parse(base);b.customFonts=json;if(bookFont)b.bookFont=bookFont;base=JSON.stringify(b);}catch(e){}
+    T.useSite(settings);
+    drawForm();
+  }
+  function fontUploads(){
+    const box=el('div');box.style.cssText='display:grid;gap:10px;padding-top:6px';
+    const h=el('div');h.style.cssText='font:500 12px/1.2 var(--print)';h.textContent='上传自己的字体';
+    const note=el('div','hintx','woff2 / woff / ttf / otf，每个不超过 3MB，最多 8 个。整套中文字库动辄十几 MB，请先只留常用字（子集化，woff2 通常 1–2MB）再传。字体的版权由你自己负责：只上传你有权使用、并且允许放到网页上的字体。');
+    const list=T.customFontList();
+    const rows=el('div');rows.style.cssText='display:grid;gap:6px';
+    list.forEach(f=>{
+      const r=el('div');r.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+      const nm=el('span',null,f.name);nm.style.fontFamily='"'+f.family+'"';nm.style.fontSize='18px';
+      const del=el('button','b small warn','删除');del.type='button';
+      del.onclick=async()=>{
+        if(busy)return;
+        if(!confirm('删除字体「'+f.name+'」？用到它的页和整本会改回默认字体。'))return;
+        busy=true;
+        try{
+          const res=await api('/api/admin/fonts/'+encodeURIComponent(f.id),{method:'DELETE'});
+          fontsChanged(res.customFonts,draft.bookFont===f.id?'default':'');
+          status('已删除字体「'+f.name+'」。','ok');
+        }catch(e){status('✗ '+(e.message||'没删成'),'err');}
+        finally{busy=false;}
+      };
+      r.append(nm,del);rows.appendChild(r);
+    });
+    const pick=el('input');pick.type='file';pick.accept='.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf';pick.setAttribute('aria-label','选择字体文件');
+    pick.onchange=async()=>{
+      const file=pick.files&&pick.files[0];pick.value='';
+      if(!file||busy)return;
+      if(file.size>3*1024*1024){status('✗ 字体超过 3MB：请先只留常用字（子集化）再传。','err');return;}
+      busy=true;status('正在上传字体……');
+      try{
+        const name=file.name.replace(/\.[^.]+$/,'').slice(0,30)||'字体';
+        const res=await api('/api/admin/fonts?name='+encodeURIComponent(name),{method:'POST',headers:{'content-type':'application/octet-stream',accept:'application/json'},body:file});
+        fontsChanged(res.customFonts,'');
+        status('已上传字体「'+res.font.name+'」，现在可以选它了。','ok');
+      }catch(e){status('✗ '+(e.message||'没传成'),'err');}
+      finally{busy=false;}
+    };
+    // (the file input itself is left plain and out of sight: the button is its label)
+    pick.style.cssText='position:absolute;opacity:0;width:1px;height:1px;pointer-events:none';
+    const lab=el('label','b small','选择字体文件上传…');lab.style.cssText='position:relative;justify-self:start;cursor:pointer';lab.appendChild(pick);
+    box.append(h,note);
+    if(list.length)box.appendChild(rows);
+    box.appendChild(lab);
+    return box;
   }
   function paperField(){
     const wrap=el('div');wrap.style.cssText='display:grid;gap:14px';

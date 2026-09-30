@@ -38,6 +38,7 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .b.warn:hover:not(:disabled){background:rgba(200,70,50,.17);color:var(--red-deep)}
 .admin .b.small{padding:7px 12px;font-size:12px}
 .admin .b:disabled{opacity:.5;cursor:default}
+.admin label.b:focus-within{outline:2px solid var(--red);outline-offset:2px}
 .admin .status{font:400 13px/1.45 var(--print);color:var(--ink-soft);min-height:19px}
 .admin .status.err{color:var(--red-deep)}
 .admin .status.ok{color:#5d6b1c}

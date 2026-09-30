@@ -23,6 +23,7 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   paperTone: "cream",   // and its colour: cream / white / aged / mint
   nightPaper: "auto",   // 夜间书页: "auto" the paper darkens with the system's dark mode, "off" it stays as by day
   coverStyle: "slate",
+  customFonts: "[]",    // the fonts uploaded (fonts.ts): JSON, only ever written by that module
   bookFont: "default",   // the book's font (entries.ts FONT_IDS, render.js FONTS); a page can have its own
   // Mapbox: a public token (pk.…, restricted to this site's URL in the Mapbox account) for the map page
   // (/map/), the little maps on the pages, the admin's map and its place names. Empty: no maps.
@@ -44,6 +45,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   aiFormat: "anthropic", aiBaseUrl: "", aiModel: DEFAULT_MODEL,
 };
 
+/** settings that are written by their own routes, not by PUT /api/admin/settings (the admin sends every setting back) */
+const READ_ONLY = new Set(["customFonts"]);
 const PAPER_STYLES = ["grid", "lined", "dots", "plain"], PAPER_TONES = ["cream", "white", "aged", "mint"];
 const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine"];
 /** settings only the admin sees: kept out of /api/settings and the page */
@@ -71,7 +74,7 @@ export async function loadSettings(env: Env): Promise<Record<string, string>> {
 export function cleanSettings(o: Record<string, unknown>): { ok: true; value: Record<string, string> } | { ok: false; error: string } {
   const v: Record<string, string> = {};
   for (const k of Object.keys(SETTING_DEFAULTS)) {
-    if (!(k in o)) continue;
+    if (!(k in o) || READ_ONLY.has(k)) continue;
     if (typeof o[k] !== "string") return { ok: false, error: `${k} 必须是文字` };
     const t = (o[k] as string).replace(/\r\n/g, "\n").trim();
     if (SETTING_MAX[k] && [...t].length > SETTING_MAX[k]) return { ok: false, error: `${k} 超过 ${SETTING_MAX[k]} 个字` };

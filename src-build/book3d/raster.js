@@ -83,10 +83,15 @@ function pageText(node) {
 
 async function fontCSSFor(node) {
   const [faces, { families, chars }] = [await fontFaces(), pageText(node)];
+  // an uploaded font (render.js customFontList) goes in whole, when the page is written in it: it can't be cut by character
+  const mine = ((window.Techo && window.Techo.customFontList && window.Techo.customFontList()) || []).filter((f) => families.has(f.family));
   const wanted = faces.filter((f) => families.has(f.family) && chars.some((c) => f.ranges.some(([lo, hi]) => c >= lo && c <= hi)));
   const parts = await Promise.all(wanted.map(async (f) => {
     try { return '@font-face{' + f.body.replace(f.url, await dataURL(f.url)) + '}'; } catch { return ''; }
   }));
+  for (const f of mine) {
+    try { parts.push(`@font-face{font-family:'${f.family}';src:url(${await dataURL(f.url)})}`); } catch { /* the page is drawn in the fallback */ }
+  }
   return parts.join('\n');
 }
 
