@@ -31,6 +31,7 @@
   }
   if(settings.siteTitle)document.title='足迹 · '+settings.siteTitle;
   T.nightTheme(settings);
+  T.applyBookFont(settings);
   {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}   // ☾/☀ (the map redraws in the other style)
   if(!settings.mapboxToken){say('这本手帐还没有接上地图。','看看时间线','/timeline/');return;}
   if(!entries.length){say('还没有写下地点的日子。','去手帐看看');return;}

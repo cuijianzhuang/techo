@@ -718,6 +718,16 @@
     return lo;
   }
   function entryPages(en,side){
+    // the page's font, else the book's; measured in it, and left on the pages (the admin's preview gets it the same way)
+    const id=en.font||(site&&site.bookFont)||'',explicit=id&&(id!=='default'||en.font);
+    const m=measure();fontStyle(m,explicit?id:'');
+    try{
+      const out=entryPagesIn(en,side);
+      out.forEach(n=>fontStyle(n,explicit?id:''));
+      return out;
+    }finally{fontStyle(m,'');}
+  }
+  function entryPagesIn(en,side){
     if(en.locked)return [lockedPage(en,side)];
     const m=measure();
     m.textContent='';   // (the pages laid out before this one are done with: a growing box makes every measure dearer)
@@ -1229,7 +1239,7 @@
   }
   /* The journal's settings the pages are drawn with (loadBook sets them; the admin's preview too). */
   let site={};
-  function useSite(s){site=s||{};}
+  function useSite(s){site=s||{};registerFonts(site.customFonts);}
   /* Mapbox (手帐设置 → 地图): the GL library, loaded once when a map is wanted, and the little map on a
      page (a Static Images API picture, pinned where the page was written). Nothing without a token. */
   const MAPBOX_GL='https://api.mapbox.com/mapbox-gl-js/v3.31.0/';
@@ -1344,6 +1354,77 @@
      米白 are the built-in ones (no class). */
   const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白'};
   const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷'};
+  /* ---------- fonts ----------
+     A font is a pair: the face of the big title (--title) and of the handwriting (--hand). The book has one
+     (settings.bookFont) and a page may have its own (entry.font); FONT_IDS in src/entries.ts is this list's ids
+     (a test keeps them in step). 'default' is what the book has always worn, set in :root by techo.css, so it
+     needs no override. Google's faces are loaded when first wanted (useFont), not all up front; an uploaded font
+     (u-<uuid>, settings.customFonts) is a @font-face on /font/…. */
+  const FONT_TAIL='"Kaiti SC","STKaiti","KaiTi",cursive',SERIF_TAIL='"Songti SC","STSong","SimSun",serif';
+  const FONTS=[
+    {id:'default',name:'龙藏体 · 马善政',hand:'Long Cang',title:'Ma Shan Zheng'},
+    {id:'mashan',name:'马善政',hand:'Ma Shan Zheng',title:'Ma Shan Zheng'},
+    {id:'zhimang',name:'志莽行书',hand:'Zhi Mang Xing',title:'Zhi Mang Xing',g:'Zhi+Mang+Xing'},
+    {id:'liujian',name:'流江毛草',hand:'Liu Jian Mao Cao',title:'Liu Jian Mao Cao',g:'Liu+Jian+Mao+Cao'},
+    {id:'kuaile',name:'站酷快乐体',hand:'ZCOOL KuaiLe',title:'ZCOOL KuaiLe',g:'ZCOOL+KuaiLe'},
+    {id:'xiaowei',name:'站酷小薇',hand:'ZCOOL XiaoWei',title:'ZCOOL XiaoWei',g:'ZCOOL+XiaoWei'},
+    {id:'huangyou',name:'黄油体 · 龙藏体',hand:'Long Cang',title:'ZCOOL QingKe HuangYou',g:'ZCOOL+QingKe+HuangYou'},
+    {id:'songti',name:'思源宋体',hand:'Noto Serif SC',title:'Noto Serif SC',g:'Noto+Serif+SC:wght@500;700',serif:true}
+  ];
+  const customFonts=new Map();   // u-<uuid> → {id,name,family,url}: the uploaded ones (registerFonts)
+  const fontOf=id=>FONTS.find(f=>f.id===id)||customFonts.get(id)||null;
+  const faceStack=(fam,serif)=>'"'+fam+'",'+(serif?SERIF_TAIL:'"Long Cang","Ma Shan Zheng",'+FONT_TAIL);
+  /** {hand,title}: the two CSS font-family lists for a font id, or null for an id nobody knows */
+  function fontVars(id){
+    const f=fontOf(id);if(!f)return null;
+    if(f.url){const s=faceStack(f.family);return{hand:s,title:s};}
+    return{hand:faceStack(f.hand,f.serif),title:faceStack(f.title,f.serif)};
+  }
+  const fontLoads=new Map();
+  /** load a font's faces (once); resolves when they are there, or after a moment if the network isn't */
+  function useFont(id){
+    const f=fontOf(id);if(!f||(!f.g&&!f.url))return Promise.resolve();
+    if(!fontLoads.has(id))fontLoads.set(id,new Promise(res=>{
+      setTimeout(res,2500);
+      if(f.url){
+        const st=document.createElement('style');
+        st.textContent='@font-face{font-family:"'+f.family+'";src:url("'+f.url+'");font-display:swap}';
+        document.head.appendChild(st);
+        if(document.fonts&&document.fonts.load)document.fonts.load('16px "'+f.family+'"').then(()=>res(),()=>res());else res();
+        return;
+      }
+      const l=document.createElement('link');l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family='+f.g+'&display=swap';
+      l.onload=l.onerror=()=>res();
+      document.head.appendChild(l);
+    }));
+    return fontLoads.get(id);
+  }
+  /** the node writes in font `id` ('' = as its surroundings do) */
+  function fontStyle(node,id){
+    const v=id&&fontVars(id);
+    if(v){node.style.setProperty('--hand',v.hand);node.style.setProperty('--title',v.title);}
+    else{node.style.removeProperty('--hand');node.style.removeProperty('--title');}
+  }
+  /** the book's own font (手帐设置 → 字体) for everything on the page that isn't a diary page: the cover, the
+      contents, the timeline… Called next to nightTheme by every page a reader sees. */
+  function applyBookFont(S){
+    registerFonts(S&&S.customFonts);
+    const id=(S&&S.bookFont)||'default';
+    fontStyle(document.documentElement,id==='default'?'':id);
+    return useFont(id);
+  }
+  /** the uploaded fonts, as {id,name,family,url} */
+  const customFontList=()=>[...customFonts.values()];
+  /** upload list → the registry (settings.customFonts is JSON: [{id,name,key}]) */
+  function registerFonts(json){
+    let list=[];try{list=JSON.parse(json||'[]');}catch(e){}
+    customFonts.clear();
+    (Array.isArray(list)?list:[]).forEach(u=>{
+      if(u&&/^u-[0-9a-f-]{36}$/.test(u.id)&&/^fonts\/[0-9a-f-]{36}\.(woff2|woff|ttf|otf)$/.test(u.key||''))
+        customFonts.set(u.id,{id:u.id,name:String(u.name||'字体'),family:'techo-'+u.id,url:'/font/'+u.key.slice(6)});
+    });
+  }
+
   function paperStyle(node,pattern,tone){
     Object.keys(PAPERS).forEach(k=>node.classList.remove('pp-'+k));
     Object.keys(TONES).forEach(k=>node.classList.remove('pt-'+k));
@@ -1464,6 +1545,11 @@
     useSite(settings);
     nightTheme(settings);
     applySettings(settings);
+    // the fonts the book and its pages are written in (only those are fetched)
+    const wanted=new Set([(settings.bookFont||'default')]);
+    entries.forEach(en=>{if(en.font)wanted.add(en.font);});
+    applyBookFont(settings);
+    await Promise.all([...wanted].map(useFont));
     // wait for the handwriting fonts so text fitting measures the real glyphs
     if(document.fonts&&document.fonts.ready)await Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,2500))]);
 
@@ -1593,5 +1679,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

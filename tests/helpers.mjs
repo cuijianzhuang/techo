@@ -50,13 +50,15 @@ export async function loadApp() {
 
 /** a D1 look-alike over real SQLite (node:sqlite) with the schema in schema.sql, holding `entries` and `locks`: the
     Worker's SQL is run, not imitated. `log`, when given, gets {sql, rows} for every statement run. */
-export async function sqliteD1({ entries = [], locks = [], settings = {}, log = null } = {}) {
+export async function sqliteD1({ entries = [], locks = [], settings = {}, log = null, schema = (sql) => sql } = {}) {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(root('schema.sql'), 'utf8'));
+  db.exec(schema(readFileSync(root('schema.sql'), 'utf8')));   // (`schema`: a database from before some migration, for the tests of that)
   const cols = ['id', 'date', 'title', 'latin', 'stamp', 'aside', 'body', 'note', 'mood', 'quote', 'quote_src', 'photo_key', 'photo_cap', 'stickers', 'status', 'place', 'geo', 'weather', 'created_at', 'updated_at'];
-  const put = db.prepare(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
-  for (const e of entries) put.run(...cols.map((c) => e[c] ?? ''));
+  if (entries.length) {
+    const put = db.prepare(`INSERT INTO entries (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
+    for (const e of entries) put.run(...cols.map((c) => e[c] ?? ''));
+  }
   for (const l of locks) db.prepare('INSERT INTO locks (scope, hash, updated_at) VALUES (?, ?, 0)').run(l.scope, l.hash);
   for (const [k, v] of Object.entries(settings)) db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(k, v);
   const note = (sql, rows) => { if (log) log.push({ sql, rows }); };

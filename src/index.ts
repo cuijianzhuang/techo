@@ -8,6 +8,7 @@ import { pub as authPub, admin as authAdmin, requireLogin } from "./auth";
 import { pub as musicPub, admin as musicAdmin } from "./music";
 import { admin as adminEntries } from "./admin-entries";
 import { admin as photosAdmin } from "./photos";
+import { pub as fontsPub, admin as fontsAdmin } from "./fonts";
 import { admin as locksAdmin } from "./locks";
 import { admin as settingsAdmin } from "./settings";
 import { admin as aiAdmin } from "./ai";
@@ -24,6 +25,7 @@ app.route("/", locksPub);      // /api/entries, /api/unlock
 app.route("/", settingsPub);   // /api/settings
 app.route("/", homePub);       // the book's page
 app.route("/", sharePub);      // /p/<id>, /card/, /img/
+app.route("/", fontsPub);      // /font/ (the fonts one uploaded)
 app.route("/", authPub);       // GitHub login
 app.route("/", musicPub);      // /api/meting
 
@@ -32,6 +34,7 @@ app.use("/api/admin/*", requireLogin);
 app.route("/", authAdmin);     // me, logout
 app.route("/", adminEntries);  // pages, photos
 app.route("/", photosAdmin);   // moving the older photos into their day folders
+app.route("/", fontsAdmin);    // uploading fonts
 app.route("/", locksAdmin);    // passwords
 app.route("/", settingsAdmin); // settings
 app.route("/", aiAdmin);       // the AI: test, suggest

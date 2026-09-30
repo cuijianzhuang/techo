@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS entries (
   place      TEXT NOT NULL DEFAULT '',   -- where it was written, e.g. 上海 · 徐汇
   geo        TEXT NOT NULL DEFAULT '',   -- "lat,lon", two decimals
   weather    TEXT NOT NULL DEFAULT '',   -- that day's weather, e.g. 多云 18~25°
+  font       TEXT NOT NULL DEFAULT '',   -- this page's font (a font id, render.js FONTS); empty: the book's
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

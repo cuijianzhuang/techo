@@ -39,7 +39,7 @@
   /* 手帐设置 in four parts, each a page of its own: what the journal looks like, how it's read, the site, and
      the services it's plugged into. The parts are the sections (SECTS, in drawForm) */
   const SET_PAGES=[
-    {key:'look',title:'外观',sum:'封面 · 纸张 · 扉页 · 封底',parts:['cover','paper','readme','back']},
+    {key:'look',title:'外观',sum:'封面 · 纸张 · 字体 · 扉页 · 封底',parts:['cover','paper','font','readme','back']},
     {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
     {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
     {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI · 照片文件夹',parts:['music','weather','map','ai','photos']}];
@@ -139,7 +139,7 @@
     if(across){drawList();drawForm();changed();if(matchMedia('(max-width:700px)').matches)window.scrollTo(0,0);return;}
     if(isSet(id)){draft=Object.assign({},settings);}
     else if(id==='jots'||id==='pages'){draft=null;}
-    else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',stickers:[],status:'published'};}
+    else if(id==='new'){newLock=null;draft={date:T.todayStr(),title:'',latin:'',stamp:'',aside:'',body:'',note:'',mood:'mug',quote:'',quoteSrc:'',photoKey:'',photoCap:'',photos:[],place:'',geo:'',weather:'',font:'',stickers:[],status:'published'};}
     else{const en=entries.find(e=>e.id===id);draft=en?Object.assign({},en,{photos:(en.photos||[]).map(p=>Object.assign({},p))}):null;}
     base=draft?JSON.stringify(stripLocal(draft)):'';
     drawList();drawForm();
@@ -173,8 +173,12 @@
     status(d?'有改动还没保存（⌘/Ctrl+S 保存）':'');
     const a=main.querySelector('.actbar');if(a)a.classList.toggle('dirty',!!d);
   }
+  const pvFonts=new Set();
   function drawPreview(){
     if(!pvbox||!draft||isSet(sel))return;
+    // the page's font (else the book's) is fetched the first time it is wanted, and the preview drawn again once it is there
+    const fid=draft.font||settings.bookFont||'';
+    if(fid&&!pvFonts.has(fid)){pvFonts.add(fid);const d0=draft;T.useFont(fid).then(()=>{if(draft===d0)drawPreview();});}
     pvbox.textContent='';
     // as it will be in the book: as many pages as it takes, one at a time with ‹ › when there are more
     const ps=T.entryPages(draft,'r');
@@ -240,6 +244,7 @@
           field('大字下面的一行','coverSub','text',{max:40}),
           coverStickerField(),
           coverPhotoField()]],
+        font:()=>['字体','标题和手写的字用哪一种艺术字体。',[fontField()]],
         paper:()=>['纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]],
         readme:()=>['扉页','翻开封面后第一页的 README。',[
           field('whoami（名字）','readmeName','text',{max:30}),
@@ -299,7 +304,7 @@
       card('这一页',[r1,r2,suggestField()]),
       card('正文',[mdField()]),
       card('照片',[photoField()]),
-      card('插画和小物',[stickerField(),r3,field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60})]),
+      card('插画和小物',[stickerField(),r3,fontRow(),field('贴一张便签（可空）','note','text',{ph:'一句话，像纸条一样贴在正文下面',max:60})]),
       card('页脚引文',[r4],{fold:true,open:!!draft.quote,sum:draft.quote?'「'+([...draft.quote].length>12?[...draft.quote].slice(0,12).join('')+'…':draft.quote)+'」':'可空'}),
       card('地点和天气',[placeField()],{fold:true,open:!!pw,sum:pw||'可空，写在页眉右上角'}),
       card('上锁',locks,{fold:true,open:locked,sum:locked?'🔒 已上锁':'不上锁'}));
@@ -556,7 +561,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=72e57c4fc0';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=54ebf0fe14';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -672,6 +677,100 @@
     wrap.append(l,w);return wrap;
   }
   /* 纸张: the pattern and the colour, each shown as a little page in the other's current choice */
+  /* the fonts one can pick: the built-in ones (render.js FONTS) and the uploaded */
+  const fontChoices=()=>T.FONTS.map(f=>[f.id,f.name]).concat((T.customFontList?T.customFontList():[]).map(f=>[f.id,f.name+'（上传）']));
+  const fontName=id=>(fontChoices().find(([k])=>k===id)||[0,'龙藏体 · 马善政'])[1];
+  /* in the entry editor: this page's font, or the book's */
+  function fontRow(){
+    const l=field('这一页的字体','font','select',{options:[['','跟整本（'+fontName(settings.bookFont||'default')+'）']].concat(fontChoices()),hint:'标题和手写的字一起换。整本的字体在「手帐设置 → 外观 → 字体」。'});
+    const sel=l.querySelector('select');
+    if(sel&&!draft.font)sel.value='';
+    return l;
+  }
+  /* 手帐设置 → 外观 → 字体: the book's font, each shown in its own hand (the samples fetch only the few characters they show) */
+  const FONT_SAMPLE_TITLE='今天也要好好记录',FONT_SAMPLE_HAND='慢慢来，比较快。';
+  let fontSamples=false;
+  function loadFontSamples(){
+    if(fontSamples)return;fontSamples=true;
+    const fam=T.FONTS.filter(f=>f.g).map(f=>'family='+f.g).join('&');
+    const l=document.createElement('link');l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?'+fam+'&text='+encodeURIComponent(FONT_SAMPLE_TITLE+FONT_SAMPLE_HAND)+'&display=swap';
+    document.head.appendChild(l);
+  }
+  function fontField(){
+    loadFontSamples();
+    const wrap=el('div');wrap.style.cssText='display:grid;gap:12px';
+    const w=el('div','cvpick fontpick');w.setAttribute('role','radiogroup');w.setAttribute('aria-label','整本的字体');
+    const cur=draft.bookFont||'default';
+    fontChoices().forEach(([k,name])=>{
+      const v=T.fontVars(k)||T.fontVars('default');
+      const o=el('label','cvopt fontopt');
+      const r=el('input');r.type='radio';r.name='f-bookFont';r.value=k;r.checked=cur===k;
+      r.onchange=()=>{if(r.checked){draft.bookFont=k;changed();}};
+      const tile=el('div','fonttile');tile.setAttribute('aria-hidden','true');
+      const t=el('div','ft-title',FONT_SAMPLE_TITLE),h=el('div','ft-hand',FONT_SAMPLE_HAND);
+      t.style.fontFamily=v.title;h.style.fontFamily=v.hand;
+      tile.append(t,h);
+      o.append(r,tile,el('span',null,name));w.appendChild(o);
+    });
+    T.customFontList().forEach(f=>T.useFont(f.id));
+    wrap.append(w,el('div','hintx','标题和手写的字一起换，整本书、时间线、分享卡片都用它；单独一页想用别的字体，在那一页的编辑页里选。字体只在有人用到时才加载。'),fontUploads());
+    return wrap;
+  }
+  /* the uploaded fonts (POST/DELETE /api/admin/fonts): they are saved by their own routes, at once, not with 保存设置 */
+  function fontsChanged(json,bookFont){
+    settings.customFonts=draft.customFonts=json;
+    if(bookFont){settings.bookFont=draft.bookFont=bookFont;}
+    // the settings not yet saved stay unsaved: only these two are moved in the baseline
+    try{const b=JSON.parse(base);b.customFonts=json;if(bookFont)b.bookFont=bookFont;base=JSON.stringify(b);}catch(e){}
+    T.useSite(settings);
+    drawForm();
+  }
+  function fontUploads(){
+    const box=el('div');box.style.cssText='display:grid;gap:10px;padding-top:6px';
+    const h=el('div');h.style.cssText='font:500 12px/1.2 var(--print)';h.textContent='上传自己的字体';
+    const note=el('div','hintx','woff2 / woff / ttf / otf，每个不超过 3MB，最多 8 个。整套中文字库动辄十几 MB，请先只留常用字（子集化，woff2 通常 1–2MB）再传。字体的版权由你自己负责：只上传你有权使用、并且允许放到网页上的字体。');
+    const list=T.customFontList();
+    const rows=el('div');rows.style.cssText='display:grid;gap:6px';
+    list.forEach(f=>{
+      const r=el('div');r.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap';
+      const nm=el('span',null,f.name);nm.style.fontFamily='"'+f.family+'"';nm.style.fontSize='18px';
+      const del=el('button','b small warn','删除');del.type='button';
+      del.onclick=async()=>{
+        if(busy)return;
+        if(!confirm('删除字体「'+f.name+'」？用到它的页和整本会改回默认字体。'))return;
+        busy=true;
+        try{
+          const res=await api('/api/admin/fonts/'+encodeURIComponent(f.id),{method:'DELETE'});
+          fontsChanged(res.customFonts,draft.bookFont===f.id?'default':'');
+          status('已删除字体「'+f.name+'」。','ok');
+        }catch(e){status('✗ '+(e.message||'没删成'),'err');}
+        finally{busy=false;}
+      };
+      r.append(nm,del);rows.appendChild(r);
+    });
+    const pick=el('input');pick.type='file';pick.accept='.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf';pick.setAttribute('aria-label','选择字体文件');
+    pick.onchange=async()=>{
+      const file=pick.files&&pick.files[0];pick.value='';
+      if(!file||busy)return;
+      if(file.size>3*1024*1024){status('✗ 字体超过 3MB：请先只留常用字（子集化）再传。','err');return;}
+      busy=true;status('正在上传字体……');
+      try{
+        const name=file.name.replace(/\.[^.]+$/,'').slice(0,30)||'字体';
+        const res=await api('/api/admin/fonts?name='+encodeURIComponent(name),{method:'POST',headers:{'content-type':'application/octet-stream',accept:'application/json'},body:file});
+        fontsChanged(res.customFonts,'');
+        status('已上传字体「'+res.font.name+'」，现在可以选它了。','ok');
+      }catch(e){status('✗ '+(e.message||'没传成'),'err');}
+      finally{busy=false;}
+    };
+    // (the file input itself is left plain and out of sight: the button is its label)
+    pick.style.cssText='position:absolute;opacity:0;width:1px;height:1px;pointer-events:none';
+    const lab=el('label','b small','选择字体文件上传…');lab.style.cssText='position:relative;justify-self:start;cursor:pointer';lab.appendChild(pick);
+    box.append(h,note);
+    if(list.length)box.appendChild(rows);
+    box.appendChild(lab);
+    return box;
+  }
   function paperField(){
     const wrap=el('div');wrap.style.cssText='display:grid;gap:14px';
     const minis=[];

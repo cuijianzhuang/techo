@@ -79,9 +79,10 @@ Worker `techo` → **Settings** → **Domains & Routes** → **Add** → **Custo
 | `migrations/0001_drafts_stickers_jots.sql` | 草稿状态、小插画、随手记 |
 | `migrations/0002_locks.sql` | 口令（可以重复跑） |
 | `migrations/0003_place_weather.sql` | 地点、坐标、天气（没跑之前照常能写，只是不能填这几项） |
+| `migrations/0004_font.sql` | 每一页可以单独选字体（没跑之前照常能写，只是选不了每页的字体） |
 
 ```bash
-npx wrangler d1 execute techo-db --remote --file=migrations/0003_place_weather.sql
+npx wrangler d1 execute techo-db --remote --file=migrations/0004_font.sql
 ```
 
 不知道跑过哪些时，先看一眼表结构：`npx wrangler d1 execute techo-db --remote --command "PRAGMA table_info(entries)"`。

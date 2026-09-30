@@ -3,7 +3,7 @@
 # It is best effort and never fails the deploy: a deploy that can't check or make something says so and goes on.
 #   - the photo bucket, if there isn't one
 #   - the tables (schema.sql), only when the database says "no such table". A database in use is never touched, and a
-#     check that fails for any other reason (a token without D1 permission, a network error) is not taken for "empty".
+#     check that fails for any other reason (a token's permissions, a network error) is not taken for "empty".
 set -u
 
 if ! npx wrangler r2 bucket info techo-photos >/dev/null 2>&1; then
@@ -19,7 +19,10 @@ elif grep -qi "no such table" <<<"$out"; then
   npx wrangler d1 execute DB --remote --file=schema.sql \
     || echo "::warning::couldn't create the tables; run \`npm run db:init:remote\` by hand"
 else
-  echo "::warning::couldn't check the D1 tables, leaving them alone (a token needs D1 edit permission for this step):"
-  echo "$out" | tail -4
+  # (all of what wrangler said, not the end of it: the reason is above its closing lines)
+  echo "::warning::couldn't check the D1 tables, so they are left alone (see the log above for why)"
+  echo "---- wrangler d1 execute said:"
+  echo "$out" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^\s*$' | head -40
+  echo "----"
 fi
 exit 0

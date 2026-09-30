@@ -16,6 +16,7 @@
     T.useSite(settings);                      // (the 网易云 player's Meting API)
     if(settings.siteTitle)document.title=label+' · '+settings.siteTitle;
     T.nightTheme(settings);
+    T.applyBookFont(settings);
     {const t=T.themeButton('theme-sw');if(t)document.body.appendChild(t);}
     // 足迹, when the journal has a map
     if(settings.mapboxToken){const tl=document.querySelector('.kp-back[href="/timeline/"]');if(tl){const m=el('a','kp-back','足迹');m.href='/map/';tl.after(m);}}
