@@ -39,7 +39,7 @@
   /* 手帐设置 in four parts, each a page of its own: what the journal looks like, how it's read, the site, and
      the services it's plugged into. The parts are the sections (SECTS, in drawForm) */
   const SET_PAGES=[
-    {key:'look',title:'外观',sum:'封面 · 纸张 · 字体 · 扉页 · 封底',parts:['cover','paper','font','readme','back']},
+    {key:'look',title:'外观',sum:'主题 · 封面 · 纸张 · 字体 · 扉页 · 封底',parts:['theme','cover','paper','font','readme','back']},
     {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
     {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
     {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI · 照片文件夹',parts:['music','weather','map','ai','photos']}];
@@ -244,6 +244,7 @@
           field('大字下面的一行','coverSub','text',{max:40}),
           coverStickerField(),
           coverPhotoField()]],
+        theme:()=>['主题',null,[themeField()]],
         font:()=>['字体','标题和手写的字用哪一种艺术字体。',[fontField()]],
         paper:()=>['纸张','手帐里每一页纸的纹路和颜色（封面、封底和环衬不变）。',[paperField()]],
         readme:()=>['扉页','翻开封面后第一页的 README。',[
@@ -561,7 +562,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=54ebf0fe14';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=1d6d45a6a2';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -658,6 +659,24 @@
   const csv=v=>String(v||'').split(',').filter(Boolean);
   /* 封面款式: each style as a little cover with this journal's title on it; the covers, endpapers and the 3D
      book's boards all change with it */
+  /* 主题: a set of looks in one click (the cover, the paper and the font, each of which can also be picked on its own below) */
+  const THEMES=[
+    {id:'default',name:'默认 · 石板青布面',cover:'slate',paperStyle:'grid',paperTone:'cream',bookFont:'default'},
+    {id:'vangogh',name:'梵高 · 星夜',cover:'starry',paperStyle:'strokes',paperTone:'sunflower',bookFont:'vangogh'}
+  ];
+  const themeIs=t=>(draft.coverStyle||'slate')===t.cover&&(draft.paperStyle||'grid')===t.paperStyle&&(draft.paperTone||'cream')===t.paperTone&&(draft.bookFont||'default')===t.bookFont;
+  function themeField(){
+    const wrap=el('div');wrap.style.cssText='display:grid;gap:10px';
+    const row=el('div','chips');row.setAttribute('role','group');row.setAttribute('aria-label','主题');
+    THEMES.forEach(t=>{
+      const b=el('button','chip pre',t.name);b.type='button';
+      b.setAttribute('aria-pressed',themeIs(t)?'true':'false');
+      b.onclick=()=>{draft.coverStyle=t.cover;draft.paperStyle=t.paperStyle;draft.paperTone=t.paperTone;draft.bookFont=t.bookFont;changed();drawForm();};
+      row.appendChild(b);
+    });
+    wrap.append(row,el('div','hintx','一下子换上一整套：封面（含封底和环衬）、纸张的纹路和颜色、字体；夜间书页也有配套的深色版。换上之后每一项还可以在下面单独改。'));
+    return wrap;
+  }
   function coverStyleField(){
     const wrap=el('div');
     const l=el('div','hintx');l.style.cssText='font:500 12px/1.2 var(--print);margin-bottom:6px';l.textContent='封面款式（封面、封底和环衬一起换）';
