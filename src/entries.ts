@@ -10,8 +10,16 @@ export type Entry = {
   photos: Photo[];
   /** where it was written: a place name, "lat,lon" (two decimals, about a kilometre), and that day's weather */
   place: string; geo: string; weather: string;
+  /** the font this page is written in (FONT_IDS, or an uploaded one); empty: the book's */
+  font: string;
   createdAt: number; updatedAt: number;
 };
+
+/* the fonts a page (or the book: settings.ts bookFont) can be written in. The list, with the faces, is FONTS in
+   public/assets/render.js; a test keeps the two in step. u-<uuid> is an uploaded font (fonts.ts). */
+export const FONT_IDS = ["default", "mashan", "zhimang", "liujian", "kuaile", "xiaowei", "huangyou", "songti"];
+export const UPLOADED_FONT = /^u-[0-9a-f-]{36}$/;
+export const validFont = (id: string) => FONT_IDS.includes(id) || UPLOADED_FONT.test(id);
 
 /* doodles a page can carry; the drawings live in public/assets/render.js */
 export const STICKER_LABELS: Record<string, string> = {
@@ -65,6 +73,7 @@ export function rowToEntry(r: Record<string, unknown>): Entry {
     id: String(r.id), date: String(r.date), title: String(r.title), latin: String(r.latin),
     stamp: String(r.stamp), aside: String(r.aside), body: String(r.body), note: String(r.note),
     place: String(r.place ?? ""), geo: String(r.geo ?? ""), weather: String(r.weather ?? ""),
+    font: validFont(String(r.font ?? "")) ? String(r.font) : "",
     mood: (r.mood as Entry["mood"]) || "mug", quote: String(r.quote), quoteSrc: String(r.quote_src),
     ...(() => { const photos = photosOf(r.photo_key, r.photo_cap); return { photos, photoKey: photos[0]?.key || "", photoCap: photos[0]?.cap || "" }; })(),
     stickers: String(r.stickers || "").split(",").filter((k) => STICKERS.has(k)),
@@ -118,13 +127,15 @@ export function cleanEntry(input: unknown): { ok: true; value: EntryInput } | { 
     if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return { ok: false, error: "坐标应为「纬度,经度」，比如 31.23,121.47" };
     geo = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   }
+  const font = str("font").trim();
+  if (font && !validFont(font)) return { ok: false, error: "有不认识的字体" };
   const status = str("status");
   if (status && status !== "draft" && status !== "published") return { ok: false, error: "status 只能是 draft / published" };
   return {
     ok: true,
     value: {
       date, title: v.title, latin: v.latin, stamp: v.stamp, aside: v.aside, body: v.body, note: v.note,
-      place: v.place, geo, weather: v.weather,
+      place: v.place, geo, weather: v.weather, font,
       mood: mood as Entry["mood"], quote: v.quote, quoteSrc: v.quoteSrc, photos, photoKey: photos[0]?.key || "", photoCap: photos[0]?.cap || "",
       stickers, status: (status || undefined) as Entry["status"] | undefined,
     },
@@ -169,16 +180,27 @@ export async function selectEntries(env: Env, view: EntriesView, page?: { limit:
   return { rows: results.slice(0, page.limit), meta: { ...meta, more: results.length > page.limit } };
 }
 
-/* place / geo / weather live in columns added by migrations/0003_place_weather.sql. Until that has run a page
-   still saves, without them; one that has them says what to run. */
-const PLACE_COLS = ["place", "geo", "weather"] as const;
+/* place / geo / weather live in columns added by migrations/0003_place_weather.sql, font by 0004_font.sql. Until a
+   migration has run a page still saves, without what it added; one that has something for such a column says what
+   to run. (SQLite says which column is missing, but not all of them: the columns are given up in steps, the
+   newest first.) */
+const COLUMN_STEPS = [["place", "geo", "weather", "font"], ["place", "geo", "weather"], []] as const;
+const MIGRATION_HINT: Record<string, string> = {
+  place: "数据库还没有地点和天气这几列：运行 migrations/0003_place_weather.sql",
+  geo: "数据库还没有地点和天气这几列：运行 migrations/0003_place_weather.sql",
+  weather: "数据库还没有地点和天气这几列：运行 migrations/0003_place_weather.sql",
+  font: "数据库还没有字体这一列：运行 migrations/0004_font.sql",
+};
 const missingColumn = (e: unknown) => /no (such )?column|has no column named/i.test(String(e));
 export async function writeEntry(sql: (cols: string[]) => D1PreparedStatement, e: EntryInput) {
-  try { return await sql([...PLACE_COLS]).run(); }
-  catch (err) {
-    if (!missingColumn(err)) throw err;
-    if (PLACE_COLS.some((k) => e[k])) throw new HttpError(500, "数据库还没有地点和天气这几列：运行 migrations/0003_place_weather.sql");
-    return await sql([]).run();
+  for (let i = 0; ; i++) {
+    try { return await sql([...COLUMN_STEPS[i]]).run(); }
+    catch (err) {
+      if (!missingColumn(err) || i === COLUMN_STEPS.length - 1) throw err;
+      const lost = COLUMN_STEPS[i].filter((k) => !(COLUMN_STEPS[i + 1] as readonly string[]).includes(k));
+      const needed = lost.find((k) => e[k as keyof EntryInput]);
+      if (needed) throw new HttpError(500, MIGRATION_HINT[needed]);
+    }
   }
 }
 

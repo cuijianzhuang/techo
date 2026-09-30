@@ -19,7 +19,7 @@
   var load;
   // kept out of this file's syntax, so a browser without dynamic import() still gets the page-flip book
   try{load=new Function('u','return import(u)');}catch(e){flip();return;}
-  load('/assets/book3d.js?v=b3d4a4fbf7').then(function(m){return m.start();}).catch(function(err){
+  load('/assets/book3d.js?v=6574d8a82c').then(function(m){return m.start();}).catch(function(err){
     console.warn('techo: 3D book failed, using the page-flip book',err);
     var host=document.querySelector('.book3d');if(host)host.remove();
     document.body.classList.remove('is-3d');

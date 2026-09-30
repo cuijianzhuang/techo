@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { bumpVersion } from "./cache";
 import { DEFAULT_MODEL } from "./compose";
-import { PHOTO_KEY } from "./entries";
+import { PHOTO_KEY, validFont } from "./entries";
 import { type Env, type HonoEnv, aiKey, bad } from "./env";
 
 export const pub = new Hono<HonoEnv>();
@@ -23,6 +23,7 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   paperTone: "cream",   // and its colour: cream / white / aged / mint
   nightPaper: "auto",   // 夜间书页: "auto" the paper darkens with the system's dark mode, "off" it stays as by day
   coverStyle: "slate",
+  bookFont: "default",   // the book's font (entries.ts FONT_IDS, render.js FONTS); a page can have its own
   // Mapbox: a public token (pk.…, restricted to this site's URL in the Mapbox account) for the map page
   // (/map/), the little maps on the pages, the admin's map and its place names. Empty: no maps.
   mapboxToken: "", mapOnPage: "show",
@@ -98,6 +99,7 @@ export function cleanSettings(o: Record<string, unknown>): { ok: true; value: Re
   }
   if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
+  if (v.bookFont !== undefined && !validFont(v.bookFont)) return { ok: false, error: "bookFont 是不认识的字体" };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
   if (v.aiFormat !== undefined && !["anthropic", "openai"].includes(v.aiFormat)) return { ok: false, error: "aiFormat 只能是 anthropic / openai" };
   if (v.aiBaseUrl) {

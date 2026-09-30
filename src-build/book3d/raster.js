@@ -37,11 +37,12 @@ async function bookCSS() {
   return cache.css;
 }
 
-/* Google Fonts CSS → [{css: '@font-face{…}', family, url, ranges: [[lo,hi],…]}] */
-async function fontFaces() {
-  if (!cache.faces) {
-    const link = [...document.querySelectorAll('link[rel="stylesheet"]')].find((l) => /fonts\.googleapis\.com/.test(l.href));
-    cache.faces = !link ? Promise.resolve([]) : fetch(link.href).then((r) => r.text()).then((text) => {
+/* Google Fonts CSS → [{css: '@font-face{…}', family, url, ranges: [[lo,hi],…]}]. The page can have several such
+   links (the book's own, and one for each other font it is written in: render.js useFont); each is read once. */
+const faceCache = new Map();
+function facesOf(href) {
+  if (!faceCache.has(href)) {
+    faceCache.set(href, fetch(href).then((r) => r.text()).then((text) => {
       const out = [];
       for (const m of text.matchAll(/@font-face\s*{([^}]*)}/g)) {
         const body = m[1];
@@ -57,9 +58,13 @@ async function fontFaces() {
         out.push({ body, family: fam[1], url: src[1], ranges });
       }
       return out;
-    }).catch(() => []);
+    }).catch(() => []));
   }
-  return cache.faces;
+  return faceCache.get(href);
+}
+async function fontFaces() {
+  const links = [...document.querySelectorAll('link[rel="stylesheet"]')].filter((l) => /fonts\.googleapis\.com/.test(l.href));
+  return (await Promise.all(links.map((l) => facesOf(l.href)))).flat();
 }
 
 /* the font families this page actually sets text in, and the characters it uses */
@@ -133,9 +138,11 @@ function context(node) {
   const cs = getComputedStyle(node.parentElement || document.body);
   const keep = ['font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'color', 'letter-spacing', 'text-rendering', '-webkit-font-smoothing'];
   const style = keep.map((k) => { const v = cs.getPropertyValue(k); return v ? `${k}:${v.replace(/"/g, "'")};` : ''; }).join('');
+  // …and the book's font (--hand / --title, set on :root or the page by render.js): the techo.css inlined below only says the default
+  const vars = ['--hand', '--title'].map((k) => { const v = cs.getPropertyValue(k).trim(); return v ? `${k}:${v.replace(/"/g, "'")};` : ''; }).join('');
   const lang = (node.closest('[lang]') || document.documentElement).getAttribute('lang') || '';
   const theme = document.documentElement.getAttribute('data-theme') || '';
-  return { style, lang, theme };
+  return { style: style + vars, lang, theme };
 }
 
 /* The page as an SVG image `scale` times its size. The scaling is a CSS transform on the page itself, not the

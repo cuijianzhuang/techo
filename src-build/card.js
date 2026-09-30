@@ -7,7 +7,8 @@ import { rasterize } from './book3d/raster.js';
 const W = 1200, H = 630;
 const INK = '#2a2724', SOFT = '#5a544c', OLIVE = '#8a9a2b', DESK = '#e8e6e1', DESK_INK = '#6d6a63';
 const WD = '日一二三四五六';
-const HAND = '"Long Cang","Ma Shan Zheng","Kaiti SC",KaiTi,cursive', TITLE = '"Ma Shan Zheng","Long Cang","Kaiti SC",KaiTi,cursive';
+// (the faces of the book's default; a page written in another font brings its own: fonts())
+const HAND0 = '"Long Cang","Ma Shan Zheng","Kaiti SC",KaiTi,cursive', TITLE0 = '"Ma Shan Zheng","Long Cang","Kaiti SC",KaiTi,cursive';
 const PRINT = '"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif';
 
 // lines of `text` no wider than `max` (a character at a time: Chinese has no spaces to break at)
@@ -22,10 +23,17 @@ function lines(g, text, max, most) {
   return out;
 }
 
+/** the two font lists the page is written in, as the page itself has them (--hand / --title: its own font, the book's, or the default) */
+function fonts(page) {
+  const cs = getComputedStyle(page);
+  return { HAND: cs.getPropertyValue('--hand').trim() || HAND0, TITLE: cs.getPropertyValue('--title').trim() || TITLE0 };
+}
+
 /** page: the page's first page (a live node, laid out); en: the entry; site: the settings. → JPEG Blob */
 async function make(page, en, site) {
   const c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
+  const { HAND, TITLE } = fonts(page);
   // the desk, faintly woven
   g.fillStyle = DESK; g.fillRect(0, 0, W, H);
   g.fillStyle = 'rgba(120,110,90,.035)';

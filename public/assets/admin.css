@@ -80,6 +80,13 @@ body.admin{--desk:#e8e6e1;--desk-ink:#6d6a63;color-scheme:light;padding:0;min-he
 .admin .cvopt input:checked+.cvmini{outline:2px solid var(--ink);outline-offset:3px}
 .admin .cvopt input:focus-visible+.cvmini{outline:2px solid var(--red);outline-offset:3px}
 .admin .cvopt input:checked~span{color:var(--ink);font-weight:500}
+.admin .fontpick{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.admin .fonttile{width:100%;box-sizing:border-box;padding:12px 10px 10px;border-radius:6px;background:#fbf8ee;box-shadow:0 1px 3px rgba(60,50,30,.18);display:grid;gap:4px;justify-items:center;text-align:center;transition:transform .15s}
+.admin .cvopt:hover .fonttile{transform:translateY(-2px)}
+.admin .cvopt input:checked+.fonttile{outline:2px solid var(--ink);outline-offset:3px}
+.admin .cvopt input:focus-visible+.fonttile{outline:2px solid var(--red);outline-offset:3px}
+.admin .ft-title{font-size:20px;line-height:1.15;color:var(--ink);white-space:nowrap;overflow:hidden;max-width:100%}
+.admin .ft-hand{font-size:14px;line-height:1.2;color:var(--ink-soft);white-space:nowrap;overflow:hidden;max-width:100%}
 .admin .ppmini{border-radius:2px 5px 5px 2px}
 .admin .cvopt .ppmini.page{width:74px;height:103px;box-shadow:0 1px 2px rgba(40,30,10,.25),0 4px 10px rgba(40,30,10,.15)}   /* a scrap of the paper at its own size */
 .admin .ppmini.page::before,.admin .ppmini.page::after{display:none}
