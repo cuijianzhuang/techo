@@ -543,6 +543,17 @@
     const jc=card('随手记',[ta,bar2]);jc.querySelector('.ctitle').appendChild(el('span','csum',''));jc.querySelector('.csum').appendChild(count);
     f.appendChild(jc);
     api('/api/admin/jots').then(r=>{jots=r.jots||[];paintCount();}).catch(()=>{});
+    // 那年今日: this day in the years before (drafts too: they are yours)
+    const past=T.onThisDay(entries,today);
+    if(past.length){
+      const rows=past.map(r=>{
+        const en=entries.find(e=>e.id===r.id)||{};
+        const b=el('button','item'+(en.status==='draft'?' draft':''));b.type='button';
+        b.append(el('b',null,en.title||'（无题）'),el('span',null,r.years+' 年前 · '+r.date.replace(/-/g,'.')+(en.status==='draft'?' · 草稿':'')));
+        b.onclick=()=>select(r.id);return b;
+      });
+      f.appendChild(card('那年今日',rows,{hint:'往年的今天写过的页，点开看看。'}));
+    }
     // drafts waiting
     if(drafts.length){
       const rows=drafts.map(en=>{
@@ -562,7 +573,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=1d6d45a6a2';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=54c5930d87';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});

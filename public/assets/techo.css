@@ -334,6 +334,7 @@ html{scrollbar-gutter:stable}
 /* ================= nav ================= */
 .stage{z-index:1}
 .nav,.hint{position:relative;z-index:2}
+.nav{z-index:3}   /* (above the hint under it: the day picker and 找 open over it) */
 .nav{display:flex;align-items:center;justify-content:center;gap:6px;margin:12px auto 0;flex-wrap:nowrap;max-width:100%}
 #dots{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;min-width:0}
 #dots::-webkit-scrollbar{display:none}
@@ -369,6 +370,18 @@ html{scrollbar-gutter:stable}
 .nav .daypop .dp-now::after{background:#fff}
 .nav .daypop .dp-now:hover{background:var(--red-deep)}
 .nav .daypop button:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.findpop{width:300px}
+.find-q{display:block;width:100%;box-sizing:border-box;margin:0 0 8px;padding:8px 12px;border:1px solid rgba(90,84,76,.28);border-radius:999px;background:var(--paper);color:var(--ink);font:400 14px/1.2 var(--print);outline:none}
+.find-q:focus{border-color:var(--olive);box-shadow:0 0 0 2px rgba(138,154,43,.2)}
+.find-list{display:grid;gap:2px;max-height:min(46vh,340px);overflow:auto;overscroll-behavior:contain}
+.find-h{margin:2px 4px 4px;color:var(--olive);font:500 12px/1 var(--print);letter-spacing:.5px}
+.nav .daypop .find-row{display:grid;gap:3px;width:100%;white-space:normal;padding:7px 8px;border-radius:6px;text-align:left;background:transparent;color:var(--ink);cursor:pointer}
+.nav .daypop .find-row:hover,.nav .daypop .find-row:focus-visible{background:rgba(138,154,43,.14)}
+.find-top{display:flex;align-items:baseline;gap:8px;min-width:0}
+.find-top b{flex:1;min-width:0;font:400 19px/1.15 var(--title);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.find-top i{flex:none;font:400 11px/1 var(--print);font-style:normal;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.find-snip{font:400 12.5px/1.45 var(--print);color:var(--ink-soft);overflow-wrap:anywhere}
+.find-snip mark{background:rgba(236,214,150,.75);color:inherit;border-radius:2px;padding:0 1px}
 .dp-foot{margin-top:8px;padding-top:7px;border-top:1px dashed rgba(90,84,76,.3);color:var(--ink-soft);font:400 14px/1.2 var(--latin),var(--hand);text-align:center}
 .nav .sound[aria-pressed=false]{opacity:.45;text-decoration:line-through}
 .nav .arrow{flex:none}
@@ -678,6 +691,7 @@ button.jbar::before{content:"";position:absolute;left:0;right:0;top:-8px;bottom:
   .nav .sound{margin-left:0}
   /* the day picker would hang off the screen edge beside the nav's right end: centre it on the screen */
   .daypop{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px)}
+  .findpop{width:min(330px,calc(100vw - 32px))}
 }
 /* the page-flip book's desk shadow has nothing to sit under until that book is built */
 .bookwrap:has(#book:empty)::before{display:none}

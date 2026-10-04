@@ -12,14 +12,14 @@
   var mode=set.bookMode||'auto';
   var q=new URLSearchParams(location.search).get('book')||(mode==='flip'||(mode==='auto'&&phone)?'flip':null);
   function script(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.body.appendChild(s);});}
-  function flip(){return script('/vendor/page-flip.browser.js?v=bbaca0bbef').then(function(){return script('/assets/book.js?v=fc6915b268');});}
+  function flip(){return script('/vendor/page-flip.browser.js?v=bbaca0bbef').then(function(){return script('/assets/book.js?v=50f55c1ab4');});}
   function webgl(){try{var c=document.createElement('canvas');return !!(window.WebGLRenderingContext&&(c.getContext('webgl2')||c.getContext('webgl')));}catch(e){return false;}}
   var reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
   if(!(q==='3d'||(q!=='flip'&&!reduced&&webgl()))){flip();return;}
   var load;
   // kept out of this file's syntax, so a browser without dynamic import() still gets the page-flip book
   try{load=new Function('u','return import(u)');}catch(e){flip();return;}
-  load('/assets/book3d.js?v=634cb907f1').then(function(m){return m.start();}).catch(function(err){
+  load('/assets/book3d.js?v=183aeb1164').then(function(m){return m.start();}).catch(function(err){
     console.warn('techo: 3D book failed, using the page-flip book',err);
     var host=document.querySelector('.book3d');if(host)host.remove();
     document.body.classList.remove('is-3d');

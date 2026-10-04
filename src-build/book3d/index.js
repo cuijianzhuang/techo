@@ -184,7 +184,7 @@ export async function start() {
   stage.appendChild(host);
 
   /* ---------- the book's content (shared with the page-flip book) ---------- */
-  const { pages } = await T.loadBook(src);
+  const { pages, entries } = await T.loadBook(src);
   const N = pages.length, S = N / 2, P = Math.max(0, S - 2);
   const meas = T.measure();
   // a page joins the document (the measuring box, or the slot it is open in) when it is first come near, not all of
@@ -724,7 +724,11 @@ const LIFT = 0.25 * H, CREASE = 2.5;
     || dated.find((d) => d.date >= day) || dated[dated.length - 1] || {}).i;
   function openDay(day) { const i = pageFor(day); if (i != null) openPage(i); }
   { const pick = T.dayPicker(dated.map((d) => d.date), () => { const i = pageInView(); return (i >= 0 && pages[i] && pages[i].date) || null; }, openDay);
-    if (pick) nav.insertBefore(pick, $('next').nextSibling); }
+    if (pick) nav.insertBefore(pick, $('next').nextSibling);
+    // 找 (search, and 那年今日 when nothing is typed) beside it; the 那年今日 chip with 封面 and 时间线 on a day that has one
+    const go = (id) => { const i = pages.findIndex((p) => p.id === id); if (i >= 0) openPage(i); };
+    const find = T.findButton(entries, go); nav.insertBefore(find, $('next').nextSibling);
+    const tc = T.todayChip(entries, go, find); if (tc) dots.appendChild(tc); }
   // the page in view, for the link: on a phone the one looked at, otherwise the spread's dated page
   function pageInView() {
     if (cur <= 0 || cur >= S) return -1;
