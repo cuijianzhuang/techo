@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>年度回顾 · 手帐</title>
+<meta name="description" content="手帐里的这一年：写了多少页、去过哪里、读了什么、看了什么、花了多少。">
+<meta name="theme-color" content="#e8e6e1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Long+Cang&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500&display=swap">
+<!-- A year of the diary at a glance: how much was written and when (a square a day, a column a month), where,
+     what was read, watched and heard, the tickets and the money, the doodles. Any year there are pages for
+     (/year/?y=2026). Filled by /assets/year.js, from the pages a reader can see. -->
+<link rel="stylesheet" href="/assets/cards.css?v=638b4c3d71">
+<link rel="stylesheet" href="/assets/keep.css?v=ecd56f3297">
+<style>
+/* the writing calendar: a square a day, a column a week (Monday on top), darker for more pages (one hue) */
+:root{--y0:rgba(90,84,76,.09);--y1:#d2d996;--y2:#bcc66f;--y3:#93a136;--y4:#66741c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--y0:rgba(235,230,218,.07);--y1:#3a4120;--y2:#5b6826;--y3:#8a9a33;--y4:#c0cf62}}
+:root[data-theme="dark"]{--y0:rgba(235,230,218,.07);--y1:#3a4120;--y2:#5b6826;--y3:#8a9a33;--y4:#c0cf62}
+.yr-cal{position:relative;overflow-x:auto;padding:4px 0 6px}
+.yr-weeks{display:grid;grid-auto-flow:column;grid-template-rows:14px repeat(7,12px);grid-auto-columns:12px;gap:3px;width:max-content}
+.yr-wd{grid-column:1;color:var(--desk-ink);font:400 10px/12px var(--print);text-align:right;padding-right:4px}
+.yr-mo{grid-row:1;color:var(--desk-ink);font:400 10px/12px var(--print);white-space:nowrap}
+.yr-day{appearance:none;border:0;padding:0;width:12px;height:12px;border-radius:3px;background:var(--y0);cursor:default}
+.yr-day.l1{background:var(--y1)}.yr-day.l2{background:var(--y2)}.yr-day.l3{background:var(--y3)}.yr-day.l4{background:var(--y4)}
+a.yr-day{cursor:pointer;display:block}
+a.yr-day:hover,a.yr-day:focus-visible{outline:2px solid var(--desk-strong);outline-offset:1px}
+.yr-legend{display:flex;align-items:center;gap:4px;margin-top:8px;color:var(--desk-ink);font:400 11px/1 var(--print)}
+.yr-legend i{display:inline-block;width:11px;height:11px;border-radius:3px}
+/* the facts: a card each */
+.yr-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin:8px 0 6px}
+.yr-fact{padding:14px 16px;border-radius:8px;background:rgba(255,255,255,.28);box-shadow:inset 0 0 0 1px var(--rule);display:grid;align-content:start;gap:6px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .yr-fact{background:rgba(255,255,255,.04)}}
+:root[data-theme="dark"] .yr-fact{background:rgba(255,255,255,.04)}
+.yr-fact h3{margin:0;color:var(--desk-ink);font:500 12.5px/1.2 var(--print)}
+.yr-big{font:600 26px/1.15 var(--print);color:var(--desk-strong);font-variant-numeric:tabular-nums}
+.yr-big small{margin-left:4px;font:400 13px/1 var(--print);color:var(--desk-ink)}
+.yr-line{color:var(--desk-strong);font:400 13.5px/1.6 var(--print)}
+.yr-line a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.yr-line a:hover{border-bottom-color:var(--desk-strong)}
+.yr-muted{color:var(--desk-ink)}
+.yr-chips{display:flex;flex-wrap:wrap;gap:6px}
+.yr-chips span{padding:3px 9px;border-radius:999px;background:rgba(120,100,60,.1);font:400 12.5px/1.4 var(--print);color:var(--desk-strong)}
+.yr-chips span b{font-weight:500;margin-left:4px;color:var(--desk-ink)}
+.yr-stk{display:flex;gap:12px;align-items:flex-end}
+.yr-stk figure{margin:0;display:grid;justify-items:center;gap:2px;color:var(--desk-ink);font:400 11.5px/1.2 var(--print)}
+.yr-share{appearance:none;border:0;border-radius:999px;padding:8px 16px;background:rgba(120,100,60,.12);color:var(--desk-strong);font:500 13px/1 var(--print);cursor:pointer}
+.yr-share:hover{background:rgba(120,100,60,.2)}
+.yr-tip{position:absolute;z-index:3;padding:6px 10px;border-radius:6px;pointer-events:none;white-space:nowrap;background:var(--desk-strong);color:var(--desk);font:400 12px/1.4 var(--print)}
+.yr-tip b{font-weight:600}
+@media (max-width:640px){.yr-facts{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="kp-top">
+  <a class="kp-back" href="/">← 回到手帐</a><a class="kp-back" href="/timeline/">时间线</a><a class="kp-back" href="/shelf/">书架</a><a class="kp-back" href="/tickets/">票夹</a><a class="kp-back" href="/bills/">账本</a><a class="kp-back" href="/year/" aria-current="page">回顾</a>
+  <h1>年度回顾</h1>
+  <p class="kp-sub">a year in the journal</p>
+  <p class="kp-stat" id="stat"></p>
+</header>
+<main class="kp-main" id="book"><p class="kp-msg">正在翻这一年……</p></main>
+<script src="/assets/render.js?v=40a4c8eda3"></script>
+<script src="/assets/keep.js?v=96e36e7b7e"></script>
+<script src="/assets/year.js?v=d160e6ede1"></script>
+</body>
+</html>

@@ -1602,7 +1602,7 @@
       // where they were written: the map page (/map/), when there's a Mapbox token
       if(site.mapboxToken){const mp=el('a','tlp-all','地图 →');mp.href='/map/';left.append(' · ',mp);}
       // what was stuck in it, kept together: the shelf, the ticket folder and the bills (/shelf/, /tickets/, /bills/)
-      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
+      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本'],['/year/','回顾']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
       f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;
