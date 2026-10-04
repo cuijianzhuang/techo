@@ -1137,6 +1137,190 @@
     return box;
   }
 
+  /* ---------- 那年今日 and 找 (both books' nav) ----------
+     Over the diary pages the reader has (the book's own data: a locked page they haven't opened is only its date). */
+  /** the pages of this day in the years before, newest first: [{id,date,title,locked,years}] */
+  function onThisDay(entries,today){
+    const md=today.slice(5),y=+today.slice(0,4);
+    return sortEntries((entries||[]).filter(en=>en.date&&en.date.slice(5)===md&&+en.date.slice(0,4)<y)).reverse()
+      .map(en=>({id:en.id,date:en.date,title:en.locked?'上了锁的一页':(en.title||'（无题）'),locked:!!en.locked,years:y-+en.date.slice(0,4)}));
+  }
+  /** what a page says, as one line of plain words (what is searched) */
+  const searchText=en=>[en.title,en.latin,en.aside,plainText(en.body),en.note,en.quote,en.quoteSrc,en.place,en.weather].filter(Boolean).join(' · ');
+  /** pages with every word of `q` in them (any case), those with it in the title first, then the newest:
+      [{id,date,title,snip:[before,match,after]}]. Locked pages aren't searched (their words aren't here). */
+  function searchEntries(entries,q,most){
+    const terms=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
+    if(!terms.length)return [];
+    const out=[];
+    for(const en of entries||[]){
+      if(en.locked||!en.id)continue;
+      const text=searchText(en),low=text.toLowerCase();
+      if(!terms.every(t=>low.includes(t)))continue;
+      // the words shown around the match: the page's words without its title (shown above them), when the match is there
+      const rest=searchText(Object.assign({},en,{title:''})),view=rest.toLowerCase().includes(terms[0])?rest:text;
+      const title=String(en.title||'').toLowerCase(),inTitle=terms.some(t=>title.includes(t));
+      // a few words either side of the first place the first word is (by characters: Chinese has no spaces)
+      const chars=[...view],lowc=[...view.toLowerCase()],tc=[...terms[0]];
+      let at=0;for(;at<=lowc.length-tc.length;at++){if(lowc.slice(at,at+tc.length).join('')===terms[0])break;}
+      const from=Math.max(0,at-14),to=Math.min(chars.length,at+tc.length+26);
+      out.push({id:en.id,date:en.date,title:en.title||'（无题）',inTitle,
+        snip:[(from>0?'…':'')+chars.slice(from,at).join(''),chars.slice(at,at+tc.length).join(''),chars.slice(at+tc.length,to).join('')+(to<chars.length?'…':'')]});
+    }
+    out.sort((a,b)=>(b.inTitle-a.inTitle)||String(b.date).localeCompare(String(a.date)));
+    return out.slice(0,most||40);
+  }
+  const FIND_SVG='<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5 14.5 14.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const fmtDay=d=>d.replace(/-/g,'.');
+  /* 找: a scrap of paper above the nav (as the day picker), with a search box; empty, it shows 那年今日.
+     go(id) opens that page. The returned node has .openToday() (for the 那年今日 chip). */
+  function findButton(entries,go){
+    const b=el('button','arrow findbtn');b.type='button';b.innerHTML=FIND_SVG;
+    b.setAttribute('aria-label','找一页');b.title='找一页（搜标题、正文、地点）';
+    b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-expanded','false');
+    const pop=el('div','daypop findpop');pop.hidden=true;pop.setAttribute('role','dialog');pop.setAttribute('aria-label','找一页');
+    const box=el('span','calbox');box.append(b,pop);
+    const inp=el('input','find-q');inp.type='search';inp.placeholder='搜标题、正文、地点…';inp.setAttribute('aria-label','搜什么');inp.enterKeyHint='search';
+    const list=el('div','find-list');list.setAttribute('role','list');
+    const foot=el('div','dp-foot');
+    pop.append(inp,list,foot);
+    const row=(r,meta)=>{
+      const a=el('button','find-row');a.type='button';a.setAttribute('role','listitem');
+      const top=el('span','find-top');top.append(el('b',null,r.title),el('i',null,meta));
+      a.appendChild(top);
+      if(r.snip){const sn=el('span','find-snip');sn.append(r.snip[0],el('mark',null,r.snip[1]),r.snip[2]);a.appendChild(sn);}
+      a.onclick=()=>{close();go(r.id);};
+      return a;
+    };
+    function paint(){
+      const q=inp.value.trim();list.textContent='';
+      if(!q){
+        const past=onThisDay(entries,todayStr());
+        if(past.length){
+          list.appendChild(el('div','find-h','那年今日'));
+          past.forEach(r=>list.appendChild(row(r,r.years+' 年前 · '+fmtDay(r.date))));
+          foot.textContent='往年的今天写过的页 · 也可以在上面搜';
+        }else foot.textContent='往年的今天还没写过 · 在上面搜标题、正文或地点';
+        return;
+      }
+      const hits=searchEntries(entries,q,40);
+      hits.forEach(r=>list.appendChild(row(r,fmtDay(r.date))));
+      foot.textContent=hits.length?(hits.length>=40?'只列出前 40 页，多写几个字能找得更准':'找到 '+hits.length+' 页'):'没有找到。上了锁的页不在搜索里。';
+    }
+    let t=null;inp.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(paint,120);});
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const f=list.querySelector('.find-row');if(f)f.click();}});
+    const onDoc=e=>{if(!box.contains(e.target))close();};
+    const onKey=e=>{if(e.key==='Escape'){close();b.focus();}};
+    function open(clear){
+      if(clear)inp.value='';
+      paint();pop.hidden=false;b.setAttribute('aria-expanded','true');
+      document.addEventListener('pointerdown',onDoc,true);document.addEventListener('keydown',onKey);
+      inp.focus({preventScroll:true});
+    }
+    function close(){
+      pop.hidden=true;b.setAttribute('aria-expanded','false');
+      document.removeEventListener('pointerdown',onDoc,true);document.removeEventListener('keydown',onKey);
+    }
+    b.onclick=()=>(pop.hidden?open(false):close());
+    box.openToday=()=>open(true);
+    return box;
+  }
+  /* 那年今日 in the nav: a chip, only on a day that has pages in the years before. One page: straight there;
+     more: the list (find.openToday). */
+  function todayChip(entries,go,find){
+    const past=onThisDay(entries,todayStr());
+    if(!past.length)return null;
+    const c=el('button','chip todaychip');c.type='button';
+    c.innerHTML='<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2a5.8 5.8 0 1 0 5.6 4.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M13.9 2.6v3.8h-3.8M8 5v3.2l2.2 1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const label='那年今日：'+past.map(r=>r.years+' 年前').join('、');
+    c.setAttribute('aria-label',label);c.title=label;
+    c.onclick=()=>{if(past.length===1)go(past[0].id);else if(find&&find.openToday)find.openToday();};
+    return c;
+  }
+
+  /* ---------- a square a day (the year in review, the admin's writing calendar) ----------
+     perDay: Map 'YYYY-MM-DD' → pages. A column a week, Monday on top, from the week of `from` to `to`; darker for
+     more pages (one hue, light to dark: four steps and empty). opts.href(day) makes a day with pages a link,
+     opts.pick(day) a button; hovering or focusing one says how many pages and when. Its styles come with it. */
+  let dayGridStyled=false;
+  function dayGridStyle(){
+    if(dayGridStyled)return;dayGridStyled=true;
+    const st=document.createElement('style');
+    st.textContent=[
+      '.dg{--dg0:rgba(90,84,76,.09);--dg1:#d2d996;--dg2:#bcc66f;--dg3:#93a136;--dg4:#66741c;--dg-ink:#6d6a63;--dg-tip:#2a2724;--dg-tipink:#f4f1e8;position:relative}',
+      '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dg{--dg0:rgba(235,230,218,.07);--dg1:#3a4120;--dg2:#5b6826;--dg3:#8a9a33;--dg4:#c0cf62;--dg-ink:#9c988f;--dg-tip:#ebe6da;--dg-tipink:#1e1f22}}',
+      ':root[data-theme="dark"] .dg{--dg0:rgba(235,230,218,.07);--dg1:#3a4120;--dg2:#5b6826;--dg3:#8a9a33;--dg4:#c0cf62;--dg-ink:#9c988f;--dg-tip:#ebe6da;--dg-tipink:#1e1f22}',
+      /* the admin stays on its light desk whatever the system's mode */
+      ':root body.admin .dg{--dg0:rgba(90,84,76,.09);--dg1:#d2d996;--dg2:#bcc66f;--dg3:#93a136;--dg4:#66741c;--dg-ink:#6d6a63;--dg-tip:#2a2724;--dg-tipink:#f4f1e8}',
+      '.dg-scroll{overflow-x:auto;padding:2px 0 4px}',
+      '.dg-weeks{display:grid;grid-auto-flow:column;grid-template-rows:14px repeat(7,12px);gap:3px;width:max-content}',
+      '.dg-wd{grid-column:1;color:var(--dg-ink);font:400 10px/12px "Noto Sans SC",system-ui,sans-serif;text-align:right;padding-right:4px}',
+      '.dg-mo{grid-row:1;color:var(--dg-ink);font:400 10px/12px "Noto Sans SC",system-ui,sans-serif;white-space:nowrap}',
+      '.dg-day{appearance:none;border:0;padding:0;margin:0;display:block;width:12px;height:12px;border-radius:3px;background:var(--dg0)}',
+      '.dg-day.l1{background:var(--dg1)}.dg-day.l2{background:var(--dg2)}.dg-day.l3{background:var(--dg3)}.dg-day.l4{background:var(--dg4)}',
+      '.dg-day.now{box-shadow:inset 0 0 0 1.5px var(--dg-ink)}',
+      'a.dg-day,button.dg-day{cursor:pointer}',
+      'a.dg-day:hover,a.dg-day:focus-visible,button.dg-day:hover,button.dg-day:focus-visible{outline:2px solid var(--dg-ink);outline-offset:1px}',
+      '.dg-legend{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:8px;color:var(--dg-ink);font:400 11px/1.3 "Noto Sans SC",system-ui,sans-serif}',
+      '.dg-legend i{display:inline-block;width:11px;height:11px;border-radius:3px}',
+      '.dg-tip{position:absolute;z-index:5;padding:5px 9px;border-radius:6px;pointer-events:none;white-space:nowrap;background:var(--dg-tip);color:var(--dg-tipink);font:400 12px/1.4 "Noto Sans SC",system-ui,sans-serif}',
+      '.dg-tip b{font-weight:600}',
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+  function dayGrid(perDay,from,to,opts){
+    opts=opts||{};dayGridStyle();
+    const pad=n=>String(n).padStart(2,'0'),day=t=>t.getUTCFullYear()+'-'+pad(t.getUTCMonth()+1)+'-'+pad(t.getUTCDate());
+    const a=Date.parse(from+'T00:00:00Z'),b=Date.parse(to+'T00:00:00Z');
+    const lead=(new Date(a).getUTCDay()+6)%7,count=Math.round((b-a)/864e5)+1,weeks=Math.ceil((lead+count)/7);
+    const box=el('div','dg'),scroll=el('div','dg-scroll'),grid=el('div','dg-weeks');
+    grid.style.gridTemplateColumns='auto repeat('+weeks+',12px)';
+    grid.appendChild(el('span'));
+    ['一','','三','','五','',''].forEach((w,i)=>{const s=el('span','dg-wd',w);s.style.gridRow=String(i+2);grid.appendChild(s);});
+    const tip=el('div','dg-tip');tip.hidden=true;tip.setAttribute('role','status');
+    const show=(c,parts)=>{
+      tip.textContent='';tip.append(el('b',null,parts[0]),' · '+parts[1]);tip.hidden=false;
+      const r=c.getBoundingClientRect(),br=box.getBoundingClientRect();
+      tip.style.left=Math.max(0,Math.min(br.width-tip.offsetWidth,r.left-br.left+r.width/2-tip.offsetWidth/2))+'px';
+      tip.style.top=(r.top-br.top-tip.offsetHeight-6)+'px';
+    };
+    const hide=()=>{tip.hidden=true;};
+    const today=todayStr();
+    for(let i=0;i<count;i++){
+      const t=new Date(a+i*864e5),d=day(t),col=Math.floor((lead+i)/7)+2,row=(lead+i)%7+2,n=perDay.get(d)||0;
+      // a month's name over the week its first day is in (and over the first week, when it starts mid-month)
+      if(t.getUTCDate()===1||(i===0&&t.getUTCDate()<=21)){const m=el('span','dg-mo',(t.getUTCMonth()+1)+'月');m.style.gridColumn=col+' / span 3';grid.appendChild(m);}
+      const lvl=Math.min(n,4),when=(t.getUTCMonth()+1)+'月'+t.getUTCDate()+'日 周'+WD[t.getUTCDay()];
+      const c=el(n&&opts.href?'a':n&&opts.pick?'button':'span','dg-day'+(lvl?' l'+lvl:'')+(d===today?' now':''));
+      c.style.gridColumn=String(col);c.style.gridRow=String(row);
+      c.setAttribute('aria-label',when+(n?'，写了 '+n+' 页':'，没写'));
+      if(n&&opts.href)c.href=opts.href(d);
+      if(n&&opts.pick){c.type='button';c.onclick=()=>opts.pick(d);}
+      if(!n)c.setAttribute('aria-hidden','true');
+      const parts=[n?n+' 页':'没写',when];
+      c.addEventListener('pointerenter',()=>show(c,parts));c.addEventListener('focus',()=>show(c,parts));
+      c.addEventListener('pointerleave',hide);c.addEventListener('blur',hide);
+      grid.appendChild(c);
+    }
+    scroll.appendChild(grid);
+    const lg=el('div','dg-legend');lg.append('少');
+    [0,1,2,3,4].forEach(i=>{const s=el('i');s.style.background='var(--dg'+i+')';s.title=['没写','1 页','2 页','3 页','4 页及以上'][i];lg.appendChild(s);});
+    lg.append('多'+(opts.note?'　·　'+opts.note:''));
+    box.append(scroll,lg,tip);
+    // a long stretch opens at its end (today), not its start
+    if(opts.endFirst)requestAnimationFrame(()=>{scroll.scrollLeft=scroll.scrollWidth;});
+    return box;
+  }
+  /** runs of days written on, one after another: {longest:{len,from,to}, current: the run that ends today or
+      yesterday (0 when neither was written on)} */
+  function dayRuns(days,today){
+    const no=d=>Math.round(Date.parse(d+'T00:00:00Z')/864e5),sorted=[...new Set(days)].sort();
+    let best={len:0,from:'',to:''},run=null;
+    sorted.forEach(d=>{if(run&&no(d)===no(run.to)+1){run.to=d;run.len++;}else run={len:1,from:d,to:d};if(run.len>best.len)best={...run};});
+    const t=no(today),cur=run&&(no(run.to)===t||no(run.to)===t-1)?run.len:0;
+    return {longest:best,current:cur};
+  }
+
   /* ---------- page sounds, for both books ----------
      Synthesised with WebAudio (no files to load): a paper rustle as a sheet turns and a soft flap as it lands;
      a heavier swing and a low thump for a cover. Silent until the reader first touches the page (browsers
@@ -1345,15 +1529,15 @@
 
   /* the cover styles (手帐设置 → 封面款式): a cv-<key> class on the covers and endpapers, their colours in
      book-extra.css. slate is the built-in one (no class). */
-  const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面',starry:'星夜'};
+  const COVERS={slate:'石板青布面',kraft:'牛皮纸',leather:'黑皮烫金',linen:'米白亚麻',wine:'酒红绒面',starry:'星夜',monet:'睡莲',ukiyoe:'浮世绘',news:'旧报纸'};
   function coverStyle(node,key){
     Object.keys(COVERS).forEach(k=>node.classList.remove('cv-'+k));
     if(COVERS[key]&&key!=='slate')node.classList.add('cv-'+key);
   }
   /* the paper (手帐设置 → 纸张): its pattern (pp-<key>) and colour (pt-<key>), in book-extra.css. 方格 and
      米白 are the built-in ones (no class). */
-  const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白',strokes:'笔触'};
-  const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷',sunflower:'向日葵'};
+  const PAPERS={grid:'方格',lined:'横线',dots:'点阵',plain:'空白',strokes:'笔触',dabs:'涟漪',waves:'青海波',columns:'分栏'};
+  const TONES={cream:'米白',white:'雪白',aged:'旧黄',mint:'薄荷',sunflower:'向日葵',lily:'睡莲',washi:'和纸',newsprint:'新闻纸'};
   /* ---------- fonts ----------
      A font is a pair: the face of the big title (--title) and of the handwriting (--hand). The book has one
      (settings.bookFont) and a page may have its own (entry.font); FONT_IDS in src/entries.ts is this list's ids
@@ -1501,7 +1685,7 @@
       // where they were written: the map page (/map/), when there's a Mapbox token
       if(site.mapboxToken){const mp=el('a','tlp-all','地图 →');mp.href='/map/';left.append(' · ',mp);}
       // what was stuck in it, kept together: the shelf, the ticket folder and the bills (/shelf/, /tickets/, /bills/)
-      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
+      [['/shelf/','书架'],['/tickets/','票夹'],['/bills/','账本'],['/year/','回顾']].forEach(([h,t])=>{const x=el('a','tlp-all',t);x.href=h;left.append(' · ',x);});
       f.append(left,el('span','tlp-n',n>1?(k+1)+' / '+n:''));
       p.append(h,list,f);
       return p;
@@ -1669,7 +1853,7 @@
     // backing) takes the colour too
     pages.forEach(p=>{if(!p.hard)paperStyle(p.node,settings.paperStyle,settings.paperTone);});
     paperStyle(document.documentElement,null,settings.paperTone);
-    return {pages,settings,lock};
+    return {pages,settings,lock,entries};
   }
   const stickerList=Object.keys(STICKERS).map(k=>({key:k,label:STICKERS[k][0]}));
   /* the "drag the corner" note beside the cover: fades and drifts away when the book opens (or a corner is
@@ -1680,5 +1864,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,onThisDay,searchEntries,findButton,todayChip,dayGrid,dayRuns,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

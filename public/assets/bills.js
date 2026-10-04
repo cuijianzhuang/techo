@@ -12,26 +12,7 @@
   try{({entries}=await K.load('账本'));}
   catch(err){console.warn('techo bills:',err);K.say(box,'暂时翻不开账本，过一会儿再来。<br><a href="/">回到手帐</a>');return;}
 
-  // an amount: "¥1,280.50", "65", "¥45.00 元" (not a date or a count: "2026年9月28日")
-  const AMOUNT=/^[¥￥$€]?\s*-?[\d,，]+(?:\.\d+)?\s*元?$/;
-  const num=v=>{const s=String(v||'').trim();if(!AMOUNT.test(s))return null;const n=/-?[\d,，]+(?:\.\d+)?/.exec(s);return n?+n[0].replace(/[,，]/g,''):null;};
-  function bill(lines){
-    let title='',total=null;const groups=[],items=[];
-    lines.forEach(raw=>{
-      const l=raw.trim();let m;
-      if((m=/^#\s+(.+)$/.exec(l))){title=m[1].trim();return;}
-      if((m=/^=\s*(.+)$/.exec(l))){const kv=T.kvOf(m[1]);total=num(kv?kv[1]:m[1]);return;}
-      if((m=/^\*\s+(.+)$/.exec(l))){const kv=T.kvOf(m[1]),v=kv&&num(kv[1]);if(v!=null)groups.push([kv[0].trim(),v]);return;}
-      const kv=T.kvOf((/^-\s+(.+)$/.exec(l)||[])[1]||l),v=kv&&num(kv[1]);
-      if(v!=null)items.push([kv[0].trim(),v]);
-    });
-    let cats=groups.length?groups:items;
-    const added=cats.reduce((a,c)=>a+c[1],0);
-    if(total==null)total=added;
-    if(!cats.length)cats=[[title||'其他',total]];
-    else if(total-added>0.005)cats=cats.concat([['其他',total-added]]);
-    return {total,cats};
-  }
+  const bill=K.bill;
   const bills=[];
   entries.forEach(en=>T.cardsOf(en.body).forEach(c=>{if(c.kind==='receipt')bills.push(Object.assign({lines:c.lines,en,month:en.date.slice(0,7)},bill(c.lines)));}));
   if(!bills.length){K.say(box,'账本还空着。<br>在日记里写 <code>```账单</code>，就会记到这里。');return;}

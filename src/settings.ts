@@ -47,8 +47,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
 
 /** settings that are written by their own routes, not by PUT /api/admin/settings (the admin sends every setting back) */
 const READ_ONLY = new Set(["customFonts"]);
-const PAPER_STYLES = ["grid", "lined", "dots", "plain", "strokes"], PAPER_TONES = ["cream", "white", "aged", "mint", "sunflower"];
-const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine", "starry"];
+const PAPER_STYLES = ["grid", "lined", "dots", "plain", "strokes", "dabs", "waves", "columns"], PAPER_TONES = ["cream", "white", "aged", "mint", "sunflower", "lily", "washi", "newsprint"];
+const COVER_STYLES = ["slate", "kraft", "leather", "linen", "wine", "starry", "monet", "ukiyoe", "news"];
 /** settings only the admin sees: kept out of /api/settings and the page */
 const PRIVATE_SETTINGS = new Set(["aiFormat", "aiBaseUrl", "aiModel", "metingToken", "qweatherKey", "qweatherHost"]);
 export const publicSettings = (s: Record<string, string>) => Object.fromEntries(Object.entries(s).filter(([k]) => !PRIVATE_SETTINGS.has(k)));

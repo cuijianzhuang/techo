@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { slice } from './helpers.mjs';
 
 const kv = slice('public/assets/render.js', 'const kvOf=', 'function ticketFields');
-const src = slice('public/assets/bills.js', 'const AMOUNT=', 'const bills=[];');
+const src = slice('public/assets/keep.js', 'const AMOUNT=', '  const dayOf=');
 const bill = new Function(`${kv}\nconst T={kvOf};\n${src}\nreturn bill;`)();
 
 test('groups (* name: ¥) are what it went on; the = line is what it came to', () => {

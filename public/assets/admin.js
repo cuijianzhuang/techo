@@ -543,6 +543,27 @@
     const jc=card('随手记',[ta,bar2]);jc.querySelector('.ctitle').appendChild(el('span','csum',''));jc.querySelector('.csum').appendChild(count);
     f.appendChild(jc);
     api('/api/admin/jots').then(r=>{jots=r.jots||[];paintCount();}).catch(()=>{});
+    // 写作日历: the last year, a square a day (drafts too: they are writing); a day with pages opens its first
+    {
+      const perDay=new Map();entries.forEach(e=>perDay.set(e.date,(perDay.get(e.date)||0)+1));
+      const from=new Date(Date.parse(today+'T00:00:00Z')-364*864e5).toISOString().slice(0,10);
+      const inYear=[...perDay.keys()].filter(d=>d>=from&&d<=today);
+      const runs=T.dayRuns([...perDay.keys()].filter(d=>d<=today),today);
+      const grid=T.dayGrid(perDay,from,today,{endFirst:true,note:'点一天打开那天的页',pick:d=>{const f=T.sortEntries(entries.filter(e=>e.date===d))[0];if(f)select(f.id);}});
+      const sum=el('div','hintx','过去一年写了 '+inYear.length+' 天，'+inYear.reduce((n,d)=>n+perDay.get(d),0)+' 页　·　'+(runs.current?'已经连续写了 '+runs.current+' 天':'今天写一页，就开始新的连续')+'　·　最长连续 '+runs.longest.len+' 天');
+      f.appendChild(card('写作日历',[sum,grid]));
+    }
+    // 那年今日: this day in the years before (drafts too: they are yours)
+    const past=T.onThisDay(entries,today);
+    if(past.length){
+      const rows=past.map(r=>{
+        const en=entries.find(e=>e.id===r.id)||{};
+        const b=el('button','item'+(en.status==='draft'?' draft':''));b.type='button';
+        b.append(el('b',null,en.title||'（无题）'),el('span',null,r.years+' 年前 · '+r.date.replace(/-/g,'.')+(en.status==='draft'?' · 草稿':'')));
+        b.onclick=()=>select(r.id);return b;
+      });
+      f.appendChild(card('那年今日',rows,{hint:'往年的今天写过的页，点开看看。'}));
+    }
     // drafts waiting
     if(drafts.length){
       const rows=drafts.map(en=>{
@@ -562,7 +583,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=1d6d45a6a2';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=5608c6b969';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -662,7 +683,10 @@
   /* 主题: a set of looks in one click (the cover, the paper and the font, each of which can also be picked on its own below) */
   const THEMES=[
     {id:'default',name:'默认 · 石板青布面',cover:'slate',paperStyle:'grid',paperTone:'cream',bookFont:'default'},
-    {id:'vangogh',name:'梵高 · 星夜',cover:'starry',paperStyle:'strokes',paperTone:'sunflower',bookFont:'vangogh'}
+    {id:'vangogh',name:'梵高 · 星夜',cover:'starry',paperStyle:'strokes',paperTone:'sunflower',bookFont:'vangogh'},
+    {id:'monet',name:'莫奈 · 睡莲',cover:'monet',paperStyle:'dabs',paperTone:'lily',bookFont:'xiaowei'},
+    {id:'ukiyoe',name:'浮世绘 · 神奈川',cover:'ukiyoe',paperStyle:'waves',paperTone:'washi',bookFont:'zhimang'},
+    {id:'news',name:'复古报纸',cover:'news',paperStyle:'columns',paperTone:'newsprint',bookFont:'songti'}
   ];
   const themeIs=t=>(draft.coverStyle||'slate')===t.cover&&(draft.paperStyle||'grid')===t.paperStyle&&(draft.paperTone||'cream')===t.paperTone&&(draft.bookFont||'default')===t.bookFont;
   function themeField(){

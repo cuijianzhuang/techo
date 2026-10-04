@@ -9,7 +9,7 @@
   const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* data, settings and the page list (shared with the 3D book): see Techo.loadBook in render.js */
-  const {pages}=await T.loadBook(src);
+  const {pages,entries}=await T.loadBook(src);
 
   // lay pages out once off-screen (a page is prepared for the draw-in, Techo.prepOnce, when it is first come near)
   const meas=T.measure();
@@ -170,7 +170,11 @@
   // 跳到某一天: the calendar in the nav
   {const pick=T.dayPicker(dated.map(d=>d.date),()=>visible(pf.getCurrentPageIndex()).map(k=>pages[k]&&pages[k].date).find(Boolean)||null,
     day=>{const i=pageFor(day);if(i!=null)pf.flip(i);});
-   if(pick)$('next').after(pick);}
+   if(pick)$('next').after(pick);
+   // 找 (search, and 那年今日 when nothing is typed) beside it; the 那年今日 chip with 封面 and 时间线 on a day that has one
+   const go=id=>{const i=pages.findIndex(p=>p.id===id);if(i>=0)pf.flip(i);};
+   const find=T.findButton(entries,go);$('next').after(find);
+   const tc=T.todayChip(entries,go,find);if(tc)dots.appendChild(tc);}
   const start=hashPage()||0;
   if(location.hash)clearHash();
   if(start)pf.turnToPage(start);   // arrived by a link: open straight there

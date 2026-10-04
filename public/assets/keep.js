@@ -23,6 +23,28 @@
     const entries=T.sortEntries((e.entries||[]).filter(en=>!en.locked&&en.body&&parseDate(en.date))).reverse();   // newest first
     return {entries,settings};
   }
+  /* what a 账单 came to and what it went on (the bills page, and the year in review): its "* 分组: ¥" lines, or its
+     lines with an amount when it has no groups, or else its title; its "= 合计" line, or what those add up to */
+  // an amount: "¥1,280.50", "65", "¥45.00 元" (not a date or a count: "2026年9月28日")
+  const AMOUNT=/^[¥￥$€]?\s*-?[\d,，]+(?:\.\d+)?\s*元?$/;
+  const num=v=>{const s=String(v||'').trim();if(!AMOUNT.test(s))return null;const n=/-?[\d,，]+(?:\.\d+)?/.exec(s);return n?+n[0].replace(/[,，]/g,''):null;};
+  function bill(lines){
+    let title='',total=null;const groups=[],items=[];
+    lines.forEach(raw=>{
+      const l=raw.trim();let m;
+      if((m=/^#\s+(.+)$/.exec(l))){title=m[1].trim();return;}
+      if((m=/^=\s*(.+)$/.exec(l))){const kv=T.kvOf(m[1]);total=num(kv?kv[1]:m[1]);return;}
+      if((m=/^\*\s+(.+)$/.exec(l))){const kv=T.kvOf(m[1]),v=kv&&num(kv[1]);if(v!=null)groups.push([kv[0].trim(),v]);return;}
+      const kv=T.kvOf((/^-\s+(.+)$/.exec(l)||[])[1]||l),v=kv&&num(kv[1]);
+      if(v!=null)items.push([kv[0].trim(),v]);
+    });
+    let cats=groups.length?groups:items;
+    const added=cats.reduce((a,c)=>a+c[1],0);
+    if(total==null)total=added;
+    if(!cats.length)cats=[[title||'其他',total]];
+    else if(total-added>0.005)cats=cats.concat([['其他',total-added]]);
+    return {total,cats};
+  }
   const dayOf=en=>{const d=parseDate(en.date);return d.y+'.'+String(d.mo).padStart(2,'0')+'.'+String(d.d).padStart(2,'0')+' 周'+WD[d.wd];};
   // the card, big, over the desk: Esc, the ✕ or a click beside it puts it back
   function show(kind,lines,days){
@@ -42,5 +64,5 @@
     document.body.appendChild(pop);x.focus();
   }
   function say(box,text){box.textContent='';const p=el('p','kp-msg');p.innerHTML=text;box.appendChild(p);}   // (fixed words only)
-  window.Keep={load,show,say,dayOf};
+  window.Keep={load,show,say,dayOf,bill};
 })();
