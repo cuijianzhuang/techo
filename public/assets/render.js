@@ -1238,6 +1238,89 @@
     return c;
   }
 
+  /* ---------- a square a day (the year in review, the admin's writing calendar) ----------
+     perDay: Map 'YYYY-MM-DD' → pages. A column a week, Monday on top, from the week of `from` to `to`; darker for
+     more pages (one hue, light to dark: four steps and empty). opts.href(day) makes a day with pages a link,
+     opts.pick(day) a button; hovering or focusing one says how many pages and when. Its styles come with it. */
+  let dayGridStyled=false;
+  function dayGridStyle(){
+    if(dayGridStyled)return;dayGridStyled=true;
+    const st=document.createElement('style');
+    st.textContent=[
+      '.dg{--dg0:rgba(90,84,76,.09);--dg1:#d2d996;--dg2:#bcc66f;--dg3:#93a136;--dg4:#66741c;--dg-ink:#6d6a63;--dg-tip:#2a2724;--dg-tipink:#f4f1e8;position:relative}',
+      '@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dg{--dg0:rgba(235,230,218,.07);--dg1:#3a4120;--dg2:#5b6826;--dg3:#8a9a33;--dg4:#c0cf62;--dg-ink:#9c988f;--dg-tip:#ebe6da;--dg-tipink:#1e1f22}}',
+      ':root[data-theme="dark"] .dg{--dg0:rgba(235,230,218,.07);--dg1:#3a4120;--dg2:#5b6826;--dg3:#8a9a33;--dg4:#c0cf62;--dg-ink:#9c988f;--dg-tip:#ebe6da;--dg-tipink:#1e1f22}',
+      /* the admin stays on its light desk whatever the system's mode */
+      ':root body.admin .dg{--dg0:rgba(90,84,76,.09);--dg1:#d2d996;--dg2:#bcc66f;--dg3:#93a136;--dg4:#66741c;--dg-ink:#6d6a63;--dg-tip:#2a2724;--dg-tipink:#f4f1e8}',
+      '.dg-scroll{overflow-x:auto;padding:2px 0 4px}',
+      '.dg-weeks{display:grid;grid-auto-flow:column;grid-template-rows:14px repeat(7,12px);gap:3px;width:max-content}',
+      '.dg-wd{grid-column:1;color:var(--dg-ink);font:400 10px/12px "Noto Sans SC",system-ui,sans-serif;text-align:right;padding-right:4px}',
+      '.dg-mo{grid-row:1;color:var(--dg-ink);font:400 10px/12px "Noto Sans SC",system-ui,sans-serif;white-space:nowrap}',
+      '.dg-day{appearance:none;border:0;padding:0;margin:0;display:block;width:12px;height:12px;border-radius:3px;background:var(--dg0)}',
+      '.dg-day.l1{background:var(--dg1)}.dg-day.l2{background:var(--dg2)}.dg-day.l3{background:var(--dg3)}.dg-day.l4{background:var(--dg4)}',
+      '.dg-day.now{box-shadow:inset 0 0 0 1.5px var(--dg-ink)}',
+      'a.dg-day,button.dg-day{cursor:pointer}',
+      'a.dg-day:hover,a.dg-day:focus-visible,button.dg-day:hover,button.dg-day:focus-visible{outline:2px solid var(--dg-ink);outline-offset:1px}',
+      '.dg-legend{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:8px;color:var(--dg-ink);font:400 11px/1.3 "Noto Sans SC",system-ui,sans-serif}',
+      '.dg-legend i{display:inline-block;width:11px;height:11px;border-radius:3px}',
+      '.dg-tip{position:absolute;z-index:5;padding:5px 9px;border-radius:6px;pointer-events:none;white-space:nowrap;background:var(--dg-tip);color:var(--dg-tipink);font:400 12px/1.4 "Noto Sans SC",system-ui,sans-serif}',
+      '.dg-tip b{font-weight:600}',
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+  function dayGrid(perDay,from,to,opts){
+    opts=opts||{};dayGridStyle();
+    const pad=n=>String(n).padStart(2,'0'),day=t=>t.getUTCFullYear()+'-'+pad(t.getUTCMonth()+1)+'-'+pad(t.getUTCDate());
+    const a=Date.parse(from+'T00:00:00Z'),b=Date.parse(to+'T00:00:00Z');
+    const lead=(new Date(a).getUTCDay()+6)%7,count=Math.round((b-a)/864e5)+1,weeks=Math.ceil((lead+count)/7);
+    const box=el('div','dg'),scroll=el('div','dg-scroll'),grid=el('div','dg-weeks');
+    grid.style.gridTemplateColumns='auto repeat('+weeks+',12px)';
+    grid.appendChild(el('span'));
+    ['一','','三','','五','',''].forEach((w,i)=>{const s=el('span','dg-wd',w);s.style.gridRow=String(i+2);grid.appendChild(s);});
+    const tip=el('div','dg-tip');tip.hidden=true;tip.setAttribute('role','status');
+    const show=(c,parts)=>{
+      tip.textContent='';tip.append(el('b',null,parts[0]),' · '+parts[1]);tip.hidden=false;
+      const r=c.getBoundingClientRect(),br=box.getBoundingClientRect();
+      tip.style.left=Math.max(0,Math.min(br.width-tip.offsetWidth,r.left-br.left+r.width/2-tip.offsetWidth/2))+'px';
+      tip.style.top=(r.top-br.top-tip.offsetHeight-6)+'px';
+    };
+    const hide=()=>{tip.hidden=true;};
+    const today=todayStr();
+    for(let i=0;i<count;i++){
+      const t=new Date(a+i*864e5),d=day(t),col=Math.floor((lead+i)/7)+2,row=(lead+i)%7+2,n=perDay.get(d)||0;
+      // a month's name over the week its first day is in (and over the first week, when it starts mid-month)
+      if(t.getUTCDate()===1||(i===0&&t.getUTCDate()<=21)){const m=el('span','dg-mo',(t.getUTCMonth()+1)+'月');m.style.gridColumn=col+' / span 3';grid.appendChild(m);}
+      const lvl=Math.min(n,4),when=(t.getUTCMonth()+1)+'月'+t.getUTCDate()+'日 周'+WD[t.getUTCDay()];
+      const c=el(n&&opts.href?'a':n&&opts.pick?'button':'span','dg-day'+(lvl?' l'+lvl:'')+(d===today?' now':''));
+      c.style.gridColumn=String(col);c.style.gridRow=String(row);
+      c.setAttribute('aria-label',when+(n?'，写了 '+n+' 页':'，没写'));
+      if(n&&opts.href)c.href=opts.href(d);
+      if(n&&opts.pick){c.type='button';c.onclick=()=>opts.pick(d);}
+      if(!n)c.setAttribute('aria-hidden','true');
+      const parts=[n?n+' 页':'没写',when];
+      c.addEventListener('pointerenter',()=>show(c,parts));c.addEventListener('focus',()=>show(c,parts));
+      c.addEventListener('pointerleave',hide);c.addEventListener('blur',hide);
+      grid.appendChild(c);
+    }
+    scroll.appendChild(grid);
+    const lg=el('div','dg-legend');lg.append('少');
+    [0,1,2,3,4].forEach(i=>{const s=el('i');s.style.background='var(--dg'+i+')';s.title=['没写','1 页','2 页','3 页','4 页及以上'][i];lg.appendChild(s);});
+    lg.append('多'+(opts.note?'　·　'+opts.note:''));
+    box.append(scroll,lg,tip);
+    // a long stretch opens at its end (today), not its start
+    if(opts.endFirst)requestAnimationFrame(()=>{scroll.scrollLeft=scroll.scrollWidth;});
+    return box;
+  }
+  /** runs of days written on, one after another: {longest:{len,from,to}, current: the run that ends today or
+      yesterday (0 when neither was written on)} */
+  function dayRuns(days,today){
+    const no=d=>Math.round(Date.parse(d+'T00:00:00Z')/864e5),sorted=[...new Set(days)].sort();
+    let best={len:0,from:'',to:''},run=null;
+    sorted.forEach(d=>{if(run&&no(d)===no(run.to)+1){run.to=d;run.len++;}else run={len:1,from:d,to:d};if(run.len>best.len)best={...run};});
+    const t=no(today),cur=run&&(no(run.to)===t||no(run.to)===t-1)?run.len:0;
+    return {longest:best,current:cur};
+  }
+
   /* ---------- page sounds, for both books ----------
      Synthesised with WebAudio (no files to load): a paper rustle as a sheet turns and a soft flap as it lands;
      a heavier swing and a low thump for a cover. Silent until the reader first touches the page (browsers
@@ -1781,5 +1864,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,onThisDay,searchEntries,findButton,todayChip,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,onThisDay,searchEntries,findButton,todayChip,dayGrid,dayRuns,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();

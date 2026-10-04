@@ -9,7 +9,6 @@
 
   /* ---------- the year's numbers (yearStats: tests/year.test.mjs runs it) ---------- */
   const pad=n=>String(n).padStart(2,'0');
-  const dayNo=d=>Math.round(Date.parse(d+'T00:00:00Z')/864e5);
   /** everything the page shows of year `y`, from `entries` (the reader's: locked ones only their date) */
   function yearStats(entries,y){
     const all=(entries||[]).filter(en=>en&&/^\d{4}-\d{2}-\d{2}$/.test(en.date||'')&&+en.date.slice(0,4)===y);
@@ -17,11 +16,7 @@
     const perDay=new Map();all.forEach(en=>perDay.set(en.date,(perDay.get(en.date)||0)+1));
     const days=[...perDay.keys()].sort();
     // the longest run of days written on, one after another
-    let best={len:0,from:'',to:''},run=null;
-    days.forEach(d=>{
-      if(run&&dayNo(d)===dayNo(run.to)+1){run.to=d;run.len++;}else run={len:1,from:d,to:d};
-      if(run.len>best.len)best={...run};
-    });
+    const best=T.dayRuns(days,days[days.length-1]||'1970-01-01').longest;
     const months=Array(12).fill(0);all.forEach(en=>months[+en.date.slice(5,7)-1]++);
     const weekdays=Array(7).fill(0);all.forEach(en=>weekdays[new Date(en.date+'T00:00:00Z').getUTCDay()]++);
     const chars=new Map();open.forEach(en=>chars.set(en,[...T.plainText(en.body||'')].length));
@@ -112,33 +107,7 @@
     // the calendar: a square a day
     const cal=el('section','bl-chart');
     {const h=el('h2','kp-year','每一天');h.appendChild(el('small',null,'颜色越深，那天写得越多'));cal.appendChild(h);}
-    const wrap=el('div','yr-cal'),grid=el('div','yr-weeks');
-    const start=Date.UTC(year,0,1),startWd=(new Date(start).getUTCDay()+6)%7;   // Monday first
-    const dayCount=(Date.UTC(year+1,0,1)-start)/864e5,weeks=Math.ceil((startWd+dayCount)/7);
-    grid.style.gridTemplateColumns='auto repeat('+weeks+',12px)';
-    // weekday labels (一 三 五), then a column a week
-    grid.appendChild(el('span'));
-    ['一','','三','','五','',''].forEach((w,i)=>{const s=el('span','yr-wd',w);s.style.gridRow=String(i+2);grid.appendChild(s);});
-    for(let i=0;i<dayCount;i++){
-      const t=new Date(start+i*864e5),d=t.getUTCFullYear()+'-'+pad(t.getUTCMonth()+1)+'-'+pad(t.getUTCDate());
-      const col=Math.floor((startWd+i)/7)+2,row=(startWd+i)%7+2,n=st.perDay.get(d)||0;
-      // a month's name over the week its first day is in
-      if(t.getUTCDate()===1){const m=el('span','yr-mo',(t.getUTCMonth()+1)+'月');m.style.gridColumn=col+' / span 3';grid.appendChild(m);}
-      const lvl=n>=4?4:n;
-      const c=el(n?'a':'span','yr-day'+(lvl?' l'+lvl:''));
-      c.style.gridColumn=String(col);c.style.gridRow=String(row);
-      const label=(t.getUTCMonth()+1)+'月'+t.getUTCDate()+'日 周'+WD[t.getUTCDay()]+(n?'，写了 '+n+' 页':'，没写');
-      c.setAttribute('aria-label',label);
-      if(n){c.href='/#'+d;}
-      const parts=[n?n+' 页':'没写',(t.getUTCMonth()+1)+'月'+t.getUTCDate()+'日 周'+WD[t.getUTCDay()]];
-      c.addEventListener('pointerenter',()=>showTip(c,wrap,parts));c.addEventListener('focus',()=>showTip(c,wrap,parts));
-      c.addEventListener('pointerleave',hideTip);c.addEventListener('blur',hideTip);
-      grid.appendChild(c);
-    }
-    wrap.appendChild(grid);cal.appendChild(wrap);
-    const lg=el('div','yr-legend');lg.append('少');
-    ['--y0','--y1','--y2','--y3','--y4'].forEach((v,i)=>{const s=el('i');s.style.background='var('+v+')';s.title=['没写','1 页','2 页','3 页','4 页及以上'][i];lg.appendChild(s);});
-    lg.append('多　·　点一天翻到那一页');cal.appendChild(lg);
+    cal.appendChild(T.dayGrid(st.perDay,year+'-01-01',year+'-12-31',{href:d=>'/#'+d,note:'点一天翻到那一页'}));
     box.appendChild(cal);
 
     // a column a month

@@ -16,20 +16,6 @@
 <link rel="stylesheet" href="/assets/cards.css?v=638b4c3d71">
 <link rel="stylesheet" href="/assets/keep.css?v=ecd56f3297">
 <style>
-/* the writing calendar: a square a day, a column a week (Monday on top), darker for more pages (one hue) */
-:root{--y0:rgba(90,84,76,.09);--y1:#d2d996;--y2:#bcc66f;--y3:#93a136;--y4:#66741c}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--y0:rgba(235,230,218,.07);--y1:#3a4120;--y2:#5b6826;--y3:#8a9a33;--y4:#c0cf62}}
-:root[data-theme="dark"]{--y0:rgba(235,230,218,.07);--y1:#3a4120;--y2:#5b6826;--y3:#8a9a33;--y4:#c0cf62}
-.yr-cal{position:relative;overflow-x:auto;padding:4px 0 6px}
-.yr-weeks{display:grid;grid-auto-flow:column;grid-template-rows:14px repeat(7,12px);grid-auto-columns:12px;gap:3px;width:max-content}
-.yr-wd{grid-column:1;color:var(--desk-ink);font:400 10px/12px var(--print);text-align:right;padding-right:4px}
-.yr-mo{grid-row:1;color:var(--desk-ink);font:400 10px/12px var(--print);white-space:nowrap}
-.yr-day{appearance:none;border:0;padding:0;width:12px;height:12px;border-radius:3px;background:var(--y0);cursor:default}
-.yr-day.l1{background:var(--y1)}.yr-day.l2{background:var(--y2)}.yr-day.l3{background:var(--y3)}.yr-day.l4{background:var(--y4)}
-a.yr-day{cursor:pointer;display:block}
-a.yr-day:hover,a.yr-day:focus-visible{outline:2px solid var(--desk-strong);outline-offset:1px}
-.yr-legend{display:flex;align-items:center;gap:4px;margin-top:8px;color:var(--desk-ink);font:400 11px/1 var(--print)}
-.yr-legend i{display:inline-block;width:11px;height:11px;border-radius:3px}
 /* the facts: a card each */
 .yr-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin:8px 0 6px}
 .yr-fact{padding:14px 16px;border-radius:8px;background:rgba(255,255,255,.28);box-shadow:inset 0 0 0 1px var(--rule);display:grid;align-content:start;gap:6px}
@@ -62,8 +48,8 @@ a.yr-day:hover,a.yr-day:focus-visible{outline:2px solid var(--desk-strong);outli
   <p class="kp-stat" id="stat"></p>
 </header>
 <main class="kp-main" id="book"><p class="kp-msg">正在翻这一年……</p></main>
-<script src="/assets/render.js?v=2dc4ea1a3c"></script>
+<script src="/assets/render.js?v=191286bca1"></script>
 <script src="/assets/keep.js?v=96e36e7b7e"></script>
-<script src="/assets/year.js?v=d160e6ede1"></script>
+<script src="/assets/year.js?v=f2f69c37a2"></script>
 </body>
 </html>

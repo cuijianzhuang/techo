@@ -13,7 +13,8 @@ const T = new Function([
   slice(R, '  const TICKET_NAMES=', '  // "PEK 北京首都"'),
   slice(R, '  const neteaseId=', '  const metingCache='),
   slice(R, '  const neteaseLine=', '  const cardNode='),
-].join('\n') + '; return { sortEntries, plainText, cardsOf, ticketFields, neteaseId, kvOf };')();
+  slice(R, '  function dayRuns(', '  /* ---------- page sounds'),
+].join('\n') + '; return { sortEntries, plainText, cardsOf, ticketFields, neteaseId, kvOf, dayRuns };')();
 const K = new Function('T', slice('public/assets/keep.js', 'const AMOUNT=', '  const dayOf=') + '; return { bill };')(T);
 const { yearStats } = new Function('T', 'K', slice('public/assets/year.js', '  const pad=n=>', '  /* ---------- drawing ---------- */') + '; return { yearStats };')(T, K);
 
@@ -81,4 +82,13 @@ test('a year with no pages: zeros, nothing to point at', () => {
   assert.equal(none.first, null);
   assert.equal(none.longest, null);
   assert.equal(none.streak.len, 0);
+});
+
+test('runs of days: the longest, and the one going on now (it ends today or yesterday)', () => {
+  const runs = (days, today) => T.dayRuns(days, today);
+  assert.deepEqual(runs(['2026-01-01', '2026-01-02', '2026-01-04'], '2026-01-05'), { longest: { len: 2, from: '2026-01-01', to: '2026-01-02' }, current: 1 });
+  assert.equal(runs(['2026-01-01', '2026-01-02'], '2026-01-02').current, 2);
+  assert.equal(runs(['2026-01-01', '2026-01-02'], '2026-01-04').current, 0);
+  assert.equal(runs(['2026-02-28', '2026-03-01', '2026-03-01'], '2026-03-01').longest.len, 2);   // (across a month; a day twice is one day)
+  assert.deepEqual(runs([], '2026-01-01'), { longest: { len: 0, from: '', to: '' }, current: 0 });
 });
