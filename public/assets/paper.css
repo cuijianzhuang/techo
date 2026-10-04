@@ -9,6 +9,12 @@
 .pt-mint{--paper:#eef4ea;--grid:rgba(80,130,110,.16);--grid-strong:rgba(80,130,110,.3);--pp-edge:#e2eadd}
 /* 向日葵 (梵高): paper the yellow of the sunflowers, the grid in ochre */
 .pt-sunflower{--paper:#fbedb6;--grid:rgba(170,120,20,.2);--grid-strong:rgba(170,120,20,.34);--pp-edge:#efdb96}
+/* 睡莲 (莫奈): a pale water-lilac, the grid in soft violet */
+.pt-lily{--paper:#eef0f6;--grid:rgba(110,100,170,.15);--grid-strong:rgba(110,100,170,.28);--pp-edge:#e2e4ee}
+/* 和纸 (浮世绘): warm rice paper, the grid in indigo */
+.pt-washi{--paper:#f4ecd8;--grid:rgba(40,70,110,.14);--grid-strong:rgba(40,70,110,.27);--pp-edge:#e9dec4}
+/* 新闻纸 (报纸): grey-yellow newsprint, the rules in ink */
+.pt-newsprint{--paper:#ece7da;--grid:rgba(43,41,37,.13);--grid-strong:rgba(43,41,37,.26);--pp-edge:#ddd6c4}
 
 /* 夜间书页 (手帐设置 → 纸张): with the system in dark mode the paper goes dark too, like paper under a desk lamp.
    Techo.nightTheme puts data-theme="dark" on the page only then (and not when switched off), and the 3D book's
@@ -23,6 +29,9 @@
 [data-theme="dark"] :is(.page.pt-white:not(.cover):not(.backcover):not(.inside),.pt-white .tl-card){--paper:#1f2125;--grid:rgba(205,218,235,.07);--grid-strong:rgba(205,218,235,.15);--pp-edge:#36393e}
 [data-theme="dark"] :is(.page.pt-aged:not(.cover):not(.backcover):not(.inside),.pt-aged .tl-card){--paper:#2a251b;--grid:rgba(235,205,150,.08);--grid-strong:rgba(235,205,150,.17);--pp-edge:#41392b}
 [data-theme="dark"] :is(.page.pt-mint:not(.cover):not(.backcover):not(.inside),.pt-mint .tl-card){--paper:#1d2521;--grid:rgba(190,230,210,.07);--grid-strong:rgba(190,230,210,.15);--pp-edge:#323d37}
+[data-theme="dark"] :is(.page.pt-lily:not(.cover):not(.backcover):not(.inside),.pt-lily .tl-card){--paper:#20222b;--grid:rgba(190,185,240,.08);--grid-strong:rgba(190,185,240,.17);--pp-edge:#363847}
+[data-theme="dark"] :is(.page.pt-washi:not(.cover):not(.backcover):not(.inside),.pt-washi .tl-card){--paper:#26231d;--grid:rgba(170,195,230,.08);--grid-strong:rgba(170,195,230,.17);--pp-edge:#3c372d}
+[data-theme="dark"] :is(.page.pt-newsprint:not(.cover):not(.backcover):not(.inside),.pt-newsprint .tl-card){--paper:#242320;--grid:rgba(235,228,210,.08);--grid-strong:rgba(235,228,210,.17);--pp-edge:#3a3833}
 [data-theme="dark"] :is(.page.pt-sunflower:not(.cover):not(.backcover):not(.inside),.pt-sunflower .tl-card){--paper:#2e2914;--grid:rgba(240,200,90,.1);--grid-strong:rgba(240,200,90,.2);--pp-edge:#463d1f}
 /* line drawings inked in the day's ink (the doodles, the sample pages' sketches) take the evening's; shapes
    filled with the paper's own colour stay the paper's */
@@ -44,5 +53,8 @@
 [data-theme="dark"] .page.inside.cv-linen{--end:#292823;--end-dot:rgba(215,210,185,.16)}
 [data-theme="dark"] .page.inside.cv-wine{--end:#2c2224;--end-dot:rgba(230,185,190,.16)}
 [data-theme="dark"] .page.inside.cv-starry{--end:#1c2233;--end-dot:rgba(170,195,240,.18)}
+[data-theme="dark"] .page.inside.cv-monet{--end:#20232c;--end-dot:rgba(185,180,235,.17)}
+[data-theme="dark"] .page.inside.cv-ukiyoe{--end:#1b2230;--end-dot:rgba(170,195,230,.17)}
+[data-theme="dark"] .page.inside.cv-news{--end:#262420;--end-dot:rgba(235,228,210,.16)}
 /* the envelope on 写信给我: its 复制 button is on the envelope's paper, not the page's */
 [data-theme="dark"] .page .envelope{--paper:#fffdf6}

@@ -573,7 +573,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=54c5930d87';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=5608c6b969';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -673,7 +673,10 @@
   /* 主题: a set of looks in one click (the cover, the paper and the font, each of which can also be picked on its own below) */
   const THEMES=[
     {id:'default',name:'默认 · 石板青布面',cover:'slate',paperStyle:'grid',paperTone:'cream',bookFont:'default'},
-    {id:'vangogh',name:'梵高 · 星夜',cover:'starry',paperStyle:'strokes',paperTone:'sunflower',bookFont:'vangogh'}
+    {id:'vangogh',name:'梵高 · 星夜',cover:'starry',paperStyle:'strokes',paperTone:'sunflower',bookFont:'vangogh'},
+    {id:'monet',name:'莫奈 · 睡莲',cover:'monet',paperStyle:'dabs',paperTone:'lily',bookFont:'xiaowei'},
+    {id:'ukiyoe',name:'浮世绘 · 神奈川',cover:'ukiyoe',paperStyle:'waves',paperTone:'washi',bookFont:'zhimang'},
+    {id:'news',name:'复古报纸',cover:'news',paperStyle:'columns',paperTone:'newsprint',bookFont:'songti'}
   ];
   const themeIs=t=>(draft.coverStyle||'slate')===t.cover&&(draft.paperStyle||'grid')===t.paperStyle&&(draft.paperTone||'cream')===t.paperTone&&(draft.bookFont||'default')===t.bookFont;
   function themeField(){

@@ -128,6 +128,12 @@ html{scrollbar-gutter:stable}
 .page.pp-dots{background-image:radial-gradient(circle,var(--grid-strong) 1.1px,transparent 1.5px);background-size:14px 14px;background-position:-8px -1px}
 .page.pp-plain{background-image:none}
 /* 笔触 (梵高): short brush hatching in two directions, in the paper's grid colour */
+/* 涟漪 (莫奈): small dabs of the grid colour, as light on water */
+.page.pp-dabs{background-image:radial-gradient(ellipse 3px 1.6px,var(--grid-strong) 60%,transparent 70%),radial-gradient(ellipse 2.4px 1.2px,var(--grid) 60%,transparent 70%);background-size:23px 17px,17px 13px;background-position:3px 5px,12px 9px}
+/* 青海波 (浮世绘): the waves' overlapping arcs */
+.page.pp-waves{background-image:radial-gradient(circle at 50% 100%,transparent 0 8px,var(--grid) 8px 9px,transparent 9px 12px,var(--grid) 12px 13px,transparent 13px 16px,var(--grid-strong) 16px 17px,transparent 17px),radial-gradient(circle at 50% 100%,transparent 0 8px,var(--grid) 8px 9px,transparent 9px 12px,var(--grid) 12px 13px,transparent 13px 16px,var(--grid-strong) 16px 17px,transparent 17px);background-size:34px 17px;background-position:0 0,17px 8.5px}
+/* 分栏 (报纸): the column rules of a broadsheet, and a fine rule every line */
+.page.pp-columns{background-image:linear-gradient(90deg,transparent calc(50% - .5px),var(--grid-strong) calc(50% - .5px) calc(50% + .5px),transparent calc(50% + .5px)),linear-gradient(var(--grid) 1px,transparent 1px);background-size:100% 100%,100% 28px;background-position:0 0,0 6px}
 .page.pp-strokes{background-image:repeating-linear-gradient(-22deg,color-mix(in srgb,var(--grid) 70%,transparent) 0 1.1px,transparent 1.1px 7px),repeating-linear-gradient(38deg,color-mix(in srgb,var(--grid) 60%,transparent) 0 .8px,transparent .8px 12px);background-size:auto}
 
 
@@ -203,6 +209,61 @@ html{scrollbar-gutter:stable}
   --cv-dot:#fff2a8;--cv-sub:#adc4f0;--cv-strong:#f4ecd2;--cv-imprint:#8fa8dc;
   --end:#e6ecf7;--end-dot:rgba(31,62,140,.22);--end-shade:rgba(20,36,96,.3);
 }
+/* 睡莲 (莫奈): still water in blues and lilacs, dabs of light on it, lily pads with pink flowers; the title in deep
+   violet. All gradients: the pads and flowers lie over the dabs, the dabs over the water. */
+.page.cv-monet{
+  --cv-tex:radial-gradient(ellipse 22px 16px at 66% 70%,#f6c3d6 0 45%,#e48fb3 46% 70%,transparent 72%),
+    radial-gradient(ellipse 17px 13px at 30% 44%,#f9d3e1 0 45%,#e997b9 46% 70%,transparent 72%),
+    radial-gradient(ellipse 70px 29px at 66% 72%,#7fa36a 0 60%,#5d8650 61% 98%,transparent 100%),
+    radial-gradient(ellipse 58px 23px at 30% 46%,#86aa70 0 60%,#628b55 61% 98%,transparent 100%),
+    radial-gradient(ellipse 49px 19px at 78% 34%,#8bb076 0 60%,#668f58 61% 98%,transparent 100%),
+    radial-gradient(ellipse 44px 17px at 18% 80%,#7ea56b 0 60%,#5b844e 61% 98%,transparent 100%),
+    radial-gradient(ellipse 38px 14px at 48% 18%,#8ab277 0 60%,#668f58 61% 98%,transparent 100%),
+    repeating-linear-gradient(8deg,rgba(255,255,255,.12) 0 2px,transparent 2px 9px),
+    repeating-radial-gradient(ellipse 120% 40% at 40% 60%,rgba(190,170,225,.18) 0 3px,transparent 3px 10px),
+    linear-gradient(180deg,rgba(230,215,240,.35),transparent 30%,transparent 70%,rgba(40,70,90,.25));
+  --cv-grad:linear-gradient(160deg,#9fc3d0,#7aa8b9 45%,#6b8fb0 75%,#7c84b5);
+  --cv:#7fa6b9;--cv-rim:#5f86a0;--cv-edge:#7097ae;
+  --cv-spine:repeating-radial-gradient(circle at 30% 40%,rgba(255,255,255,.1) 0 2px,transparent 2px 7px),linear-gradient(90deg,#4f7590,#6a92ab 70%,#5a8098);
+  --cv-ink:#3a3466;--cv-press:0 1px 0 rgba(255,255,255,.35);
+  --cv-dot:#e8739f;--cv-sub:#2f4a62;--cv-strong:#1f2f45;--cv-imprint:#2f4a62;
+  --end:#e9eef4;--end-dot:rgba(110,120,180,.24);--end-shade:rgba(60,80,110,.25);
+}
+/* 浮世绘: Prussian blue with the waves' scales (seigaiha) in lighter blue, a red sun, a cream band at the foot;
+   the title in cream, a red seal of a dot */
+.page.cv-ukiyoe{
+  --cv-tex:radial-gradient(circle at 76% 20%,#d4482f 0 42px,rgba(212,72,47,.25) 43px 46px,transparent 47px),
+    linear-gradient(180deg,transparent 84%,#efe4c8 84% 88%,transparent 88%),
+    radial-gradient(circle at 50% 100%,transparent 0 9px,rgba(236,228,205,.32) 9px 10.5px,transparent 10.5px 14px,rgba(236,228,205,.22) 14px 15.5px,transparent 15.5px 19px,rgba(236,228,205,.14) 19px 20.5px,transparent 20.5px),
+    radial-gradient(circle at 50% 100%,transparent 0 9px,rgba(236,228,205,.32) 9px 10.5px,transparent 10.5px 14px,rgba(236,228,205,.22) 14px 15.5px,transparent 15.5px 19px,rgba(236,228,205,.14) 19px 20.5px,transparent 20.5px);
+  --cv-grad:linear-gradient(170deg,#24476e,#1b3a5e 55%,#142c4a);
+  --cv:#1e3f63;--cv-rim:#17334f;--cv-edge:#1c3a5b;
+  --cv-spine:repeating-linear-gradient(0deg,transparent 0 40px,rgba(212,72,47,.6) 40px 44px) 50px 0/2px 100% no-repeat,linear-gradient(90deg,#10233b,#1c3b5d 70%,#15304d);
+  --cv-ink:#f1e7cc;--cv-press:0 1px 0 rgba(0,0,0,.45);
+  --cv-dot:#d4482f;--cv-sub:#b9c7d6;--cv-strong:#f4ecd6;--cv-imprint:#a9b9cb;
+  --end:#f1e9d6;--end-dot:rgba(30,63,99,.22);--end-shade:rgba(20,40,70,.28);
+}
+/* (the waves' scales repeat in a small tile, two layers offset by half of it) */
+.page:is(.cover,.backcover).cv-ukiyoe{background-size:auto,auto,40px 20px,40px 20px,auto;background-position:0 0,0 0,0 0,20px 10px,0 0}
+[data-theme="dark"] .page:is(.cover,.backcover).cv-ukiyoe{background-size:auto,auto,auto,40px 20px,40px 20px,auto;background-position:0 0,0 0,0 0,0 0,20px 10px,0 0}
+/* 复古报纸: yellowed newsprint, a halftone of dots, the masthead's double rule at the top and column rules down
+   the page; the title in black ink, a red dot */
+.page.cv-news{
+  --cv-tex:linear-gradient(180deg,transparent 64px,#2b2925 64px 67px,transparent 67px 71px,#2b2925 71px 72px,transparent 72px),
+    linear-gradient(90deg,transparent calc(33.3% - .5px),rgba(43,41,37,.22) calc(33.3% - .5px) calc(33.3% + .5px),transparent calc(33.3% + .5px) calc(66.6% - .5px),rgba(43,41,37,.22) calc(66.6% - .5px) calc(66.6% + .5px),transparent calc(66.6% + .5px)),
+    repeating-linear-gradient(0deg,rgba(43,41,37,.07) 0 1px,transparent 1px 9px),
+    radial-gradient(circle,rgba(43,41,37,.13) .9px,transparent 1.3px),
+    radial-gradient(120% 90% at 50% 30%,transparent 55%,rgba(150,110,50,.18));
+  --cv-grad:linear-gradient(160deg,#f1e7cf,#e9dcbe 60%,#dfd0ac);
+  --cv:#ebdfc3;--cv-rim:#c9b78f;--cv-edge:#e3d5b5;
+  --cv-spine:repeating-linear-gradient(0deg,rgba(43,41,37,.06) 0 1px,transparent 1px 4px),linear-gradient(90deg,#c9b890,#dccdaa 70%,#d1c19c);
+  --cv-ink:#1f1d1a;--cv-press:0 1px 0 rgba(255,255,255,.4);
+  --cv-dot:#b3261e;--cv-sub:#4b443a;--cv-strong:#1f1d1a;--cv-imprint:#5b5346;
+  --end:#ece5d3;--end-dot:rgba(43,41,37,.2);--end-shade:rgba(60,50,30,.24);
+}
+/* (the columns and their rules start below the masthead; the halftone repeats in a small tile) */
+.page:is(.cover,.backcover).cv-news{background-size:auto,100% calc(100% - 260px),100% calc(100% - 300px),5px 5px,auto,auto;background-position:0 0,0 260px,0 260px,0 0,0 0,0 0;background-repeat:no-repeat,no-repeat,no-repeat,repeat,no-repeat,no-repeat}
+[data-theme="dark"] .page:is(.cover,.backcover).cv-news{background-size:auto,auto,100% calc(100% - 260px),100% calc(100% - 300px),5px 5px,auto,auto;background-position:0 0,0 0,0 260px,0 260px,0 0,0 0,0 0;background-repeat:no-repeat,no-repeat,no-repeat,no-repeat,repeat,no-repeat,no-repeat}
 /* (the insides of the covers have the covers' corners: in the 3D book they fill the same boards) */
 /* flyleaf: README in a terminal-ish hand */
 .flyleaf .body{display:flex;flex-direction:column;justify-content:center;gap:0;padding-inline:26px}
