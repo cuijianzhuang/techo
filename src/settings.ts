@@ -38,6 +38,7 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // admin asks Open-Meteo.
   qweatherKey: "", qweatherHost: "",
   // the cover's look: slate / kraft / leather / linen / wine (book-extra.css, cv-<style>)
+  deskWeather: "on",    // 桌面天气: the desk around the book takes the weather of the page open ("on" / "off")
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
   // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
@@ -103,6 +104,7 @@ export function cleanSettings(o: Record<string, unknown>): { ok: true; value: Re
   if (v.mapOnPage !== undefined && v.mapOnPage !== "show" && v.mapOnPage !== "hide") return { ok: false, error: "mapOnPage 只能是 show / hide" };
   if (v.coverStyle !== undefined && !COVER_STYLES.includes(v.coverStyle)) return { ok: false, error: "coverStyle 只能是 " + COVER_STYLES.join(" / ") };
   if (v.bookFont !== undefined && !validFont(v.bookFont)) return { ok: false, error: "bookFont 是不认识的字体" };
+  if (v.deskWeather !== undefined && v.deskWeather !== "on" && v.deskWeather !== "off") return { ok: false, error: "deskWeather 只能是 on / off" };
   if (v.bookMode !== undefined && !["auto", "3d", "flip"].includes(v.bookMode)) return { ok: false, error: "bookMode 只能是 auto / 3d / flip" };
   if (v.aiFormat !== undefined && !["anthropic", "openai"].includes(v.aiFormat)) return { ok: false, error: "aiFormat 只能是 anthropic / openai" };
   if (v.aiBaseUrl) {

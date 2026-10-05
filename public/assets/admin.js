@@ -40,7 +40,7 @@
      the services it's plugged into. The parts are the sections (SECTS, in drawForm) */
   const SET_PAGES=[
     {key:'look',title:'外观',sum:'主题 · 封面 · 纸张 · 字体 · 扉页 · 封底',parts:['theme','cover','paper','font','readme','back']},
-    {key:'read',title:'阅读',sum:'翻页方式 · 示例页 · 加密',parts:['mode','samples','lock']},
+    {key:'read',title:'阅读',sum:'翻页方式 · 桌面天气 · 示例页 · 加密',parts:['mode','weatherdesk','samples','lock']},
     {key:'site',title:'站点',sum:'标题和介绍 · 联系方式',parts:['site','contact']},
     {key:'svc',title:'接入服务',sum:'网易云音乐 · 天气 · 地图 · AI · 照片文件夹',parts:['music','weather','map','ai','photos']}];
   const isSet=v=>typeof v==='string'&&v.startsWith('set:');
@@ -258,6 +258,7 @@
           field('封底下方小字','backImprint','textarea',{rows:2,max:80,hint:'可以换行'})]],
         lock:()=>['加密','给整本手帐设一个口令（马上生效，不用点保存）。',[lockField('book')]],
         mode:()=>['翻页方式','首页的书怎么翻。',[bookModeField()]],
+        weatherdesk:()=>['桌面天气','翻到一页时，书下面的桌面跟着那一页写的天气变。',[deskWeatherField()]],
         samples:()=>['示例页',null,[samplesField()]],
         music:()=>['网易云音乐','日记里的网易云歌曲：正文里单独一行贴歌曲链接，或 ```音乐 卡片里写「网易云: 链接」，就是一个能播的播放器。歌名、封面、歌词和声音从 Meting API 取。',[musicField()]],
         photos:()=>['照片文件夹','新上传的照片放在 R2 的 p/年/月/日/ 里（日期是这一页的日期）。以前传的在 p/ 根下，可以在这里搬进日期文件夹：先预览，再复制，最后清理旧文件。三步都要你点了才会动，复制不会删旧文件，页面在新文件到位之后才改用新地址。',[photoFolderField()]],
@@ -583,7 +584,7 @@
   async function refreshCard(en){
     if(!en||en.status!=='published'||en.locked||bookLocked||dayLocks.has(en.date))return;
     try{
-      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=5608c6b969';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
+      if(!cardLib)cardLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='/assets/card.js?v=8092454ab7';s.onload=()=>res(window.TechoCard);s.onerror=()=>{cardLib=null;rej(new Error('card.js'));};document.head.appendChild(s);});
       const lib=await cardLib,page=T.entryPages(en,'r')[0];
       const blob=await lib.make(page,en,settings);page.remove();
       await api('/api/admin/entries/'+encodeURIComponent(en.id)+'/card',{method:'PUT',headers:{'content-type':'image/jpeg',accept:'application/json'},body:blob});
@@ -1119,6 +1120,14 @@
     cb.onchange=()=>{draft.mapOnPage=cb.checked?'show':'hide';changed();};
     l.append(cb,el('span',null,'有坐标的日记页上贴一张小地图'));
     w.appendChild(l);
+    return w;
+  }
+  function deskWeatherField(){
+    const l=el('label','check1');
+    const cb=el('input');cb.type='checkbox';cb.id='f-deskWeather';cb.checked=draft.deskWeather!=='off';
+    cb.onchange=()=>{draft.deskWeather=cb.checked?'on':'off';changed();};
+    l.append(cb,el('span',null,'桌面跟着天气变'));
+    const w=el('div');w.append(l,el('div','hintx','翻到写了天气的页时：下雨就有雨丝，下雪有雪花，晴天有一束暖光，多云有云影飘过，雾天一层薄雾，雷雨偶尔一闪；夜间书页里晴天换成星光。都很淡，在书的后面；系统开了「减少动态效果」时只留颜色，不动。没写天气的页和封面是平常的桌面。'));
     return w;
   }
   function samplesField(){

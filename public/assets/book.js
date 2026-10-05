@@ -9,7 +9,10 @@
   const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* data, settings and the page list (shared with the 3D book): see Techo.loadBook in render.js */
-  const {pages,entries}=await T.loadBook(src);
+  const {pages,entries,settings}=await T.loadBook(src);
+  // 桌面天气: the desk takes the weather of the diary page open (the left one first)
+  const wx=T.deskWeather(settings);
+  const weatherOf=ks=>(ks.map(k=>pages[k]&&pages[k].weather).find(Boolean))||'';
 
   // lay pages out once off-screen (a page is prepared for the draw-in, Techo.prepOnce, when it is first come near)
   const meas=T.measure();
@@ -92,6 +95,7 @@
     });
     $('prev').disabled=i===0;
     $('next').disabled=i>=last;
+    wx.set(weatherOf(visible(i)));
   }
   // the nav: 封面 and 时间线 between the arrows (any day is a line on the 时间线)
   const isTimeline=k=>!!(pages[k]&&pages[k].node.classList.contains('tlp'));
