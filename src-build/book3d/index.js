@@ -184,7 +184,9 @@ export async function start() {
   stage.appendChild(host);
 
   /* ---------- the book's content (shared with the page-flip book) ---------- */
-  const { pages, entries } = await T.loadBook(src);
+  const { pages, entries, settings } = await T.loadBook(src);
+  // 桌面天气: the desk takes the weather of the diary page open (the left one first)
+  const wx = T.deskWeather(settings);
   const N = pages.length, S = N / 2, P = Math.max(0, S - 2);
   const meas = T.measure();
   // a page joins the document (the measuring box, or the slot it is open in) when it is first come near, not all of
@@ -769,6 +771,7 @@ const LIFT = 0.25 * H, CREASE = 2.5;
       if (on && dots.scrollWidth > dots.clientWidth) dots.scrollLeft = b.offsetLeft - dots.clientWidth / 2 + b.offsetWidth / 2;
     });
     $('prev').disabled = cur === 0; $('next').disabled = cur >= S;
+    wx.set(shown.map((k) => pages[k] && pages[k].weather).find(Boolean) || '');
     syncLink();
   }
   // 放大看: the page(s) open now, big enough to read on a phone

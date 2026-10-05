@@ -861,6 +861,48 @@ html.reading{overflow:hidden}
 @media (max-width:430px){.nav{gap:0}.nav button{padding:8px 7px}#dots{gap:0!important}#dots .chip{padding:7px 9px}}
 @media (max-width:350px){.nav button{padding:8px 4px}#dots .chip{padding:7px 5px}}
 
+/* ================= the desk's weather (Techo.deskWeather) =================
+   One layer behind everything (under the book, over the desk), its part for the weather of the page open faded
+   in, the others out. Faint: it's the room the book lies in, not a picture. */
+.wx{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.wx>div{position:absolute;inset:0;opacity:0;transition:opacity 1.2s ease}
+.wx[data-wx="rain"] .wx-rain,.wx[data-wx="storm"] .wx-rain,.wx[data-wx="storm"] .wx-storm,.wx[data-wx="snow"] .wx-snow,
+.wx[data-wx="fog"] .wx-fog,.wx[data-wx="cloud"] .wx-cloud,.wx[data-wx="sun"] .wx-sun{opacity:1}
+/* rain: thin slanted streaks falling; a storm has more of them and a flash now and then */
+.wx-rain{inset:-200px 0 0 -100px!important;
+  background-image:repeating-linear-gradient(104deg,transparent 0 38px,rgba(90,110,135,.16) 38px 39px,transparent 39px 83px),
+    repeating-linear-gradient(100deg,transparent 0 61px,rgba(90,110,135,.11) 61px 62px,transparent 62px 129px);
+  background-size:140px 120px,210px 180px;animation:wx-fall .9s linear infinite}
+.wx[data-wx="storm"] .wx-rain{filter:contrast(1.4);animation-duration:.6s}
+@keyframes wx-fall{to{background-position:-28px 120px,-38px 180px}}
+.wx-storm{background:rgba(255,255,255,.0);animation:wx-flash 9s ease-out infinite}
+@keyframes wx-flash{0%,91%,100%{background:rgba(255,255,255,0)}92%{background:rgba(255,255,255,.45)}93.5%{background:rgba(255,255,255,0)}95%{background:rgba(255,255,255,.25)}97%{background:rgba(255,255,255,0)}}
+/* snow: soft flakes, two drifts of them at different speeds */
+.wx-snow{inset:-260px 0 0 0!important;
+  background-image:radial-gradient(circle,rgba(255,255,255,.95) 0 2px,transparent 2.6px),radial-gradient(circle,rgba(255,255,255,.8) 0 1.4px,transparent 2px),radial-gradient(circle,rgba(255,255,255,.7) 0 2.6px,transparent 3.2px);
+  background-size:120px 130px,80px 90px,190px 210px;background-position:0 0,40px 30px,90px 60px;
+  filter:drop-shadow(0 0 1px rgba(120,130,150,.35));animation:wx-snow 14s linear infinite}
+@keyframes wx-snow{to{background-position:30px 130px,10px 270px,150px 270px}}
+/* fog: bands of haze drifting across */
+.wx-fog{background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.34) 45%,rgba(255,255,255,.12));}
+.wx-fog::before{content:"";position:absolute;inset:0 -50%;background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 12%,rgba(255,255,255,.28) 20%,rgba(255,255,255,0) 30%);filter:blur(30px);animation:wx-drift 40s linear infinite}
+/* cloud: big soft shadows passing over the desk */
+.wx-cloud::before{content:"";position:absolute;inset:-20% -60%;
+  background:radial-gradient(ellipse 22% 16% at 20% 30%,rgba(60,70,90,.10),transparent 70%),radial-gradient(ellipse 30% 20% at 62% 62%,rgba(60,70,90,.09),transparent 70%),radial-gradient(ellipse 18% 14% at 85% 20%,rgba(60,70,90,.08),transparent 70%);
+  filter:blur(8px);animation:wx-drift 60s linear infinite}
+@keyframes wx-drift{from{transform:translateX(-12%)}to{transform:translateX(12%)}}
+/* sun: warm light from the top right, breathing slowly */
+.wx-sun{background:radial-gradient(ellipse 70% 60% at 92% -5%,rgba(255,214,120,.36),rgba(255,214,120,.12) 40%,transparent 70%),linear-gradient(200deg,rgba(255,236,190,.16),transparent 55%);animation:wx-warm 8s ease-in-out infinite alternate}
+@keyframes wx-warm{to{filter:brightness(1.12)}}
+/* at night: the rain catches the light, the snow stays white, the sun is the moon's cool light */
+[data-theme="dark"] .wx-rain{background-image:repeating-linear-gradient(104deg,transparent 0 38px,rgba(190,205,225,.13) 38px 39px,transparent 39px 83px),repeating-linear-gradient(100deg,transparent 0 61px,rgba(190,205,225,.09) 61px 62px,transparent 62px 129px)}
+[data-theme="dark"] .wx-sun{background:radial-gradient(ellipse 60% 50% at 92% -5%,rgba(190,205,255,.16),transparent 70%),radial-gradient(circle,rgba(255,255,255,.55) 0 1px,transparent 1.5px) 0 0/97px 89px,radial-gradient(circle,rgba(255,255,255,.35) 0 .8px,transparent 1.2px) 30px 40px/61px 67px}
+[data-theme="dark"] .wx-cloud::before{filter:blur(8px) invert(1) brightness(.7)}
+[data-theme="dark"] :is(.wx-fog,.wx-fog::before){opacity:.5}
+[data-theme="dark"] .wx-storm{animation-name:wx-flash-night}
+@keyframes wx-flash-night{0%,91%,100%{background:rgba(200,215,255,0)}92%{background:rgba(200,215,255,.22)}93.5%{background:rgba(200,215,255,0)}95%{background:rgba(200,215,255,.12)}97%{background:rgba(200,215,255,0)}}
+@media (prefers-reduced-motion:reduce){.wx>div,.wx>div::before{animation:none!important}.wx>div{transition:none}}
+
 /* The paper's colours (手帐设置 → 纸张 → 纸色): a pt-<tone> class sets the paper and its grid lines. 米白 is
    the built-in one (no class). --pp-edge: the 3D book's page edges (book3d reads it).
    The single source for both the book (build.py puts it in techo.css) and the timeline page

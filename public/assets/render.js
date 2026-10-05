@@ -1321,6 +1321,43 @@
     return {longest:best,current:cur};
   }
 
+  /* ---------- the desk's weather (手帐设置 → 阅读 → 桌面天气) ----------
+     The desk around the book takes the weather of the diary page open on it, as written on that page (多云转小雨
+     15~25°): rain falls, snow drifts, a warm light for sun, cloud shadows passing, a haze of fog; a storm flashes
+     now and then. Faint, behind the book; still when the system asks for less motion. */
+  /** what a page's weather is, as one of storm / snow / rain / fog / cloud / sun (the worst of a day that changes:
+      多云转小雨 is rain), or '' */
+  function weatherKind(text){
+    const s=String(text||'');
+    if(!s.trim())return '';
+    if(/雪|冰雹|霰|snow|sleet/i.test(s))return 'snow';
+    if(/雷|暴雨|大暴雨|台风|storm|thunder/i.test(s))return 'storm';
+    if(/雨|drizzle|rain|shower/i.test(s))return 'rain';
+    if(/雾|霾|沙|尘|fog|haze|mist|dust/i.test(s))return 'fog';
+    if(/多云|阴|云|overcast|cloud/i.test(s))return 'cloud';
+    if(/晴|sun|clear/i.test(s))return 'sun';
+    return '';
+  }
+  /** the layer behind the book; .set(text) changes it (crossfading), .set('') clears it. Off: does nothing. */
+  function deskWeather(S){
+    const on=!S||S.deskWeather!=='off';
+    let layer=null,now='';
+    const make=()=>{
+      layer=el('div','wx');layer.setAttribute('aria-hidden','true');
+      ['storm','snow','rain','fog','cloud','sun'].forEach(k=>layer.appendChild(el('div','wx-'+k)));
+      document.body.appendChild(layer);
+    };
+    return {
+      set(text){
+        if(!on)return;
+        const k=weatherKind(text);
+        if(k===now)return;
+        now=k;if(!layer)make();
+        layer.dataset.wx=k;
+      },
+      kind:()=>now,
+    };
+  }
   /* ---------- page sounds, for both books ----------
      Synthesised with WebAudio (no files to load): a paper rustle as a sheet turns and a soft flap as it lands;
      a heavier swing and a low thump for a cover. Silent until the reader first touches the page (browsers
@@ -1818,7 +1855,7 @@
       // id: the diary page's own link (#e-<id>), for a day with more than one page. A page written on over
       // several (cont: the ones after its first) links, and is on the 时间线, by its first.
       entryPages(en,leftNext()?'l':'r').forEach((node,k)=>{
-        push(node,{label:k===0&&leftNext()&&d?(d.mo+'/'+d.d):null,date:d?en.date:null,id:en.id,cont:k>0});
+        push(node,{label:k===0&&leftNext()&&d?(d.mo+'/'+d.d):null,date:d?en.date:null,id:en.id,cont:k>0,weather:en.locked?'':(en.weather||'')});
       });
     });
     // the timeline, after the flyleaf: its pages come in pairs, so every page after it keeps its side
@@ -1864,5 +1901,5 @@
     if(show){el.hidden=false;el.dataset.shown='1';requestAnimationFrame(()=>el.classList.remove('gone'));}
     else if(!el.hidden){el.classList.add('gone');el.__t=setTimeout(()=>{el.hidden=true;},600);}
   }
-  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,onThisDay,searchEntries,findButton,todayChip,dayGrid,dayRuns,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
+  window.Techo={askUnlock,relock,keys,dragNote,loadBook,stickerList,stickerSvg,el,parseDate,todayStr,sortEntries,makeCal,mugSvg,entryPage,entryPages,blankPage,fitText,measure,prepDraw,prepOnce,playDraw,reader,readerButton,shareButton,mapChip,themeButton,chipButton,useSite,nightTheme,mapbox,geoOf,COVERS,coverStyle,PAPERS,TONES,paperStyle,FONTS,fontVars,useFont,fontStyle,applyBookFont,registerFonts,customFontList,dayPicker,onThisDay,searchEntries,findButton,todayChip,weatherKind,deskWeather,dayGrid,dayRuns,sound,soundButton,bodyBlocks,plainText,meting,neteaseId,cardsOf,cardNode,ticketFields,kvOf,hueOf,imgSrc};
 })();
