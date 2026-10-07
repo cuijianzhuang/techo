@@ -15,7 +15,7 @@ export type Env = {
   /** 🔍 NeoDB: another NeoDB instance than neodb.social (NeoDB is federated) */
   NEODB_URL?: string;
   /** secret: the key for the AI set in 手帐设置 → AI (`wrangler secret put AI_API_KEY`); ANTHROPIC_API_KEY is read
-      when it isn't set. Without either the AI features are off. */
+      when it isn't set. A key pasted into the admin wins over both (env.ts currentAiKey). */
   AI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   /** secret: the token for a Meting API that asks for one, when 手帐设置 has none (`wrangler secret put METING_TOKEN`) */
@@ -47,5 +47,21 @@ export function localDay(timeZone: string, now = Date.now()) {
   return { date: `${p.year}-${p.month}-${p.day}`, start, end: start + 86_400_000 };
 }
 
-/** the key the AI is asked with (a Worker secret); without one the AI features are off */
+/** the AI's key as a Worker secret */
 export const aiKey = (env: Env) => env.AI_API_KEY || env.ANTHROPIC_API_KEY || "";
+
+/* The AI's key can also be pasted into the admin (手帐设置 → AI). It sits in the settings table under its own
+   row, outside SETTING_DEFAULTS, so loadSettings, /api/settings and the admin's settings never carry it:
+   it is written by PUT /api/admin/ai/key and read only here. Pasted wins over the Worker secret. */
+export const AI_KEY_ROW = "aiApiKey";
+export async function savedAiKey(env: Env): Promise<string> {
+  const r = await env.DB.prepare("SELECT value FROM settings WHERE key=?").bind(AI_KEY_ROW).first<{ value: string }>();
+  return r?.value || "";
+}
+/** the key the AI is asked with; "" = the AI features are off */
+export const currentAiKey = async (env: Env) => (await savedAiKey(env)) || aiKey(env);
+/** what the admin is told about the key: whether there is one, where it's from, and its last 4 characters */
+export async function aiKeyStatus(env: Env): Promise<{ keySet: boolean; source: "admin" | "secret" | ""; tail: string }> {
+  const saved = await savedAiKey(env), key = saved || aiKey(env);
+  return { keySet: !!key, source: saved ? "admin" : key ? "secret" : "", tail: key.length > 12 ? key.slice(-4) : "" };
+}
