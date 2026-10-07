@@ -958,6 +958,8 @@
   }
   /* 手帐设置 → AI: the format the endpoint speaks, the endpoint (empty: Anthropic's own / OpenAI's own), a model,
      whether the Worker has its key, and 测试连接 (with what's typed, before saving) */
+  // the last 获取模型 answer, kept while the form is drawn again (for the format and address it was for)
+  let aiModels=null;
   const AI_FORMATS={
     anthropic:{ph:'https://api.anthropic.com',hint:'留空就是 Claude 官方接口。中转或其他厂商的 Anthropic 兼容地址填到 /v1 之前，比如 https://api.deepseek.com/anthropic',model:'claude-opus-5'},
     openai:{ph:'https://api.openai.com/v1',hint:'填到 /v1（不用加 /chat/completions），比如 https://api.deepseek.com、https://dashscope.aliyuncs.com/compatible-mode/v1；留空是 OpenAI 官方',model:'gpt-5 / deepseek-chat / qwen-plus …'},
@@ -968,12 +970,36 @@
     const pick=field('接口格式','aiFormat','select',{options:[['anthropic','Anthropic（Claude 官方、中转、各家 /anthropic 地址）'],['openai','OpenAI（/chat/completions：OpenAI、DeepSeek、通义、Kimi、中转…）']]});
     pick.querySelector('select').addEventListener('change',()=>drawForm());   // the hints follow the format
     const row=el('div','row');
-    row.append(field('接口地址（可空）','aiBaseUrl','url',{ph:fmt.ph,max:200,hint:fmt.hint}),
-      field('模型','aiModel','text',{ph:fmt.model,max:80,hint:draft.aiFormat==='openai'?'填那边的模型名':'留空是 claude-opus-5'}));
+    const mf=field('模型','aiModel','text',{ph:fmt.model,max:80,hint:(draft.aiFormat==='openai'?'填那边的模型名':'留空是 claude-opus-5')+'；点「获取模型」可以从列表里选'});
+    row.append(field('接口地址（可空）','aiBaseUrl','url',{ph:fmt.ph,max:200,hint:fmt.hint}),mf);
     const key=el('div','hintx',aiKeySet?'✓ 已配置 key（Worker 密钥 AI_API_KEY 或 ANTHROPIC_API_KEY）':'✗ 还没有 key：运行 npx wrangler secret put AI_API_KEY，填这个接口的 key');
     key.style.color=aiKeySet?'var(--olive)':'var(--red)';
-    const acts=el('div','photo-actions'),t=el('button','b small','测试连接'),out=el('span','hintx');
-    t.type='button';acts.append(t,out);
+    // 获取模型: what the key can use at the address as typed; the list also drops down under the model box
+    const minp=mf.querySelector('input'),dl=el('datalist');dl.id='ai-models';minp.setAttribute('list',dl.id);mf.appendChild(dl);
+    const pickWrap=el('div');
+    const showModels=list=>{
+      dl.textContent='';pickWrap.textContent='';
+      list.forEach(m=>{const o=el('option');o.value=m.id;if(m.name)o.label=m.name;dl.appendChild(o);});
+      const l=el('label'),sel=el('select');l.append('可用模型（'+list.length+' 个）',sel);
+      const o0=el('option',null,'从列表里选一个…');o0.value='';sel.appendChild(o0);
+      list.forEach(m=>{const o=el('option',null,m.name&&m.name!==m.id?m.id+'　'+m.name:m.id);o.value=m.id;sel.appendChild(o);});
+      sel.value=list.some(m=>m.id===minp.value)?minp.value:'';
+      sel.onchange=()=>{if(!sel.value)return;minp.value=sel.value;draft.aiModel=sel.value;changed();};
+      pickWrap.appendChild(l);
+    };
+    const where=()=>(draft.aiFormat||'anthropic')+' '+(draft.aiBaseUrl||'');
+    if(aiModels&&aiModels.where===where())showModels(aiModels.list);
+    const acts=el('div','photo-actions'),g=el('button','b small','获取模型'),t=el('button','b small','测试连接'),out=el('span','hintx');
+    g.type=t.type='button';acts.append(g,t,out);
+    g.onclick=async()=>{
+      g.disabled=true;out.textContent='正在取模型列表……';out.style.color='';
+      try{
+        const at=where(),r=await sendJson('POST','/api/admin/ai/models',{aiFormat:draft.aiFormat||'anthropic',aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||''});
+        aiModels={where:at,list:r.models||[]};showModels(aiModels.list);
+        out.textContent='✓ 取到 '+aiModels.list.length+' 个模型';out.style.color='var(--olive)';
+      }catch(e){out.textContent='✗ '+(e.message||'没取到');out.style.color='var(--red)';}
+      finally{g.disabled=false;}
+    };
     t.onclick=async()=>{
       t.disabled=true;out.textContent='正在问……';out.style.color='';
       try{
@@ -982,7 +1008,7 @@
       }catch(e){out.textContent='✗ '+(e.message||'没连上');out.style.color='var(--red)';}
       finally{t.disabled=false;}
     };
-    w.append(pick,row,key,acts);
+    w.append(pick,row,pickWrap,key,acts);
     return w;
   }
   /* 手帐设置 → 接入服务 → 网易云音乐: the journal's own Meting API (the public ones have all stopped answering), a token for it if it wants one, and a song to try it on */

@@ -147,7 +147,7 @@
 - **接口地址**：见上。
 - **模型**：Anthropic 格式留空是 `claude-opus-5`；换别的接口时填那边的模型名。
 
-key 是 Worker 密钥 `AI_API_KEY`（没有时读 `ANTHROPIC_API_KEY`），换接口时换成那个接口的 key。改完先点「测试连接」：它用输入框里的设置问一句话，显示实际用的模型和回复；不对时会说是 key 错（401）、地址或模型不存在（404）、额度用完（429）还是连不上。
+key 是 Worker 密钥 `AI_API_KEY`（没有时读 `ANTHROPIC_API_KEY`），换接口时换成那个接口的 key。不知道模型名时点「获取模型」：用输入框里的格式和地址、Worker 的 key 去问那个接口有哪些模型（Anthropic 的 `/v1/models`，OpenAI 格式的 `/models`），列出来从下拉里选；有的中转不提供模型列表，这时手动填。改完先点「测试连接」：它用输入框里的设置问一句话，显示实际用的模型和回复；不对时会说是 key 错（401）、地址或模型不存在（404）、额度用完（429）还是连不上。
 
 怎么问取决于接口：
 - Claude 官方接口加 `claude-opus-5` / `claude-fable-5-1`：结构化输出（JSON schema）、`effort`，拒答时自动换模型（server-side fallbacks）。
