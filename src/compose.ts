@@ -287,3 +287,42 @@ export async function pingAi(ai: AiConfig): Promise<{ model: string; reply: stri
     throw explain(e, ai);
   }
 }
+
+/* ---------- 获取模型: every model the key can use there, for the admin to pick from ---------- */
+
+export type ModelChoice = { id: string; name: string };
+/** at most this many (a relay can list hundreds) */
+const MAX_MODELS = 300;
+
+export async function listModels(ai: AiConfig): Promise<ModelChoice[]> {
+  try {
+    const out: ModelChoice[] = [];
+    if (ai.format === "openai") {
+      const base = (ai.baseURL || "https://api.openai.com/v1").replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
+      let r: Response;
+      try {
+        r = await fetch(base + "/models", { headers: { authorization: "Bearer " + ai.apiKey } });
+      } catch {
+        throw new ComposeError(`连不上 ${base}`);
+      }
+      const j = (await r.json().catch(() => null)) as { data?: Array<{ id?: unknown }>; error?: { message?: string } | string } | null;
+      if (!r.ok) throw new OpenAIError(r.status, (typeof j?.error === "string" ? j.error : j?.error?.message) || r.statusText);
+      for (const m of Array.isArray(j?.data) ? j.data : []) if (typeof m?.id === "string" && m.id) out.push({ id: m.id, name: "" });
+      out.sort((a, b) => a.id.localeCompare(b.id));
+    } else {
+      // newest first, as Anthropic lists them; the SDK walks the pages
+      for await (const m of anthropic(ai).models.list({ limit: 100 })) {
+        out.push({ id: m.id, name: m.display_name || "" });
+        if (out.length >= MAX_MODELS) break;
+      }
+    }
+    if (!out.length) throw new ComposeError(`${where(ai)}没有列出模型，手动填模型名`);
+    return [...new Map(out.map((m) => [m.id, m])).values()].slice(0, MAX_MODELS);
+  } catch (e) {
+    if (e instanceof ComposeError) throw e;
+    // a relay that doesn't do /models answers 404: say that rather than "the model is wrong"
+    if ((e instanceof Anthropic.NotFoundError) || (e instanceof OpenAIError && e.status === 404))
+      throw new ComposeError(`${where(ai)}不提供模型列表（404），手动填模型名`);
+    throw explain(e, ai);
+  }
+}

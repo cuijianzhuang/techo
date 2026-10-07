@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ComposeError, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
+import { ComposeError, listModels, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
 import { LIMITS, MAX_STICKERS, STICKERS, STICKER_LABELS } from "./entries";
 import { type Env, type HonoEnv, aiKey, bad } from "./env";
 import { cleanSettings, loadSettings } from "./settings";
@@ -13,20 +13,38 @@ export async function aiConfig(env: Env): Promise<AiConfig> {
   return { apiKey: aiKey(env), baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL, format: s.aiFormat === "openai" ? "openai" : "anthropic" };
 }
 
-/* 测试连接: one short question with the AI as configured (or as about to be saved: format / base / model in the body) */
-admin.post("/api/admin/ai/test", async (c) => {
-  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+/** the AI as about to be saved: format / base / model from the body, the Worker's key */
+async function typedConfig(env: Env, o: Record<string, unknown>): Promise<AiConfig | string> {
   const s = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
   const parsed = cleanSettings({ aiFormat: s("aiFormat") || "anthropic", aiBaseUrl: s("aiBaseUrl"), aiModel: s("aiModel") });
-  if (!parsed.ok) return bad(c, 400, parsed.error);
+  if (!parsed.ok) return parsed.error;
+  return {
+    ...(await aiConfig(env)), format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
+    baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL,
+  };
+}
+
+/* 测试连接: one short question with the AI as configured (or as about to be saved) */
+admin.post("/api/admin/ai/test", async (c) => {
+  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   try {
-    const ai = await aiConfig(c.env);
-    return c.json(await pingAi({
-      ...ai, format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
-      baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL,
-    }));
+    const ai = await typedConfig(c.env, o);
+    if (typeof ai === "string") return bad(c, 400, ai);
+    return c.json(await pingAi(ai));
   } catch (err) {
     return bad(c, 500, err instanceof ComposeError ? err.message : "没连上，稍后再试");
+  }
+});
+
+/* 获取模型: what the key can use at that address (the format and address as typed, saved or not) */
+admin.post("/api/admin/ai/models", async (c) => {
+  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  try {
+    const ai = await typedConfig(c.env, o);
+    if (typeof ai === "string") return bad(c, 400, ai);
+    return c.json({ models: await listModels(ai) });
+  } catch (err) {
+    return bad(c, 500, err instanceof ComposeError ? err.message : "没取到模型列表，稍后再试");
   }
 });
 
