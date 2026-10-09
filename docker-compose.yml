@@ -1,0 +1,27 @@
+# techo on a VPS: `cp .env.example .env`, fill it in, then `docker compose up -d` (docs/deploy-vps.md).
+services:
+  techo:
+    build: .
+    image: techo
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - techo-data:/data    # the database (techo.db) and the photos (photos/): back this up
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [techo]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?在 .env 里写上 DOMAIN（你的域名）}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  techo-data:
+  caddy-data:
+  caddy-config:
