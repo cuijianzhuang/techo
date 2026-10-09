@@ -24,6 +24,7 @@ public/                 静态文件（部署的就是这个目录）
     admin.js / admin.css 后台
     techo.css           样式（生成）
   vendor/               StPageFlip
+server/                 VPS 版（docs/deploy-vps.md）：同一个 Worker 跑在 Node 上，main.mjs 是入口，d1.mjs（D1 → SQLite 文件，启动时自动建表、补列）、bucket.mjs（R2 → 文件夹）、assets.mjs（public/ 和 _headers）、request.mjs（代理传来的地址和 IP）、limit.mjs、cron.mjs；npm run build:server 打包成 dist/server.mjs
 src/index.ts            Worker 入口：把下面各部分的路由接起来（先是读者能访问的，再是 /api/admin/* 的登录关卡，再是后台的），每晚的定时任务
 src/env.ts              环境类型、bad()、localDay()、aiKey()
 src/entries.ts          日记页的字段、校验、读写、照片和卡片在 R2 里的键（`selectEntries`：各种视图和分段直接在 SQL 里挑，只读要的列、要的行，分段走日期索引）

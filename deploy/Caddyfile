@@ -1,0 +1,11 @@
+# In front of techo on a VPS: HTTPS (a certificate from Let's Encrypt, renewed by itself) and compression.
+# DOMAIN comes from .env (docker-compose.yml). Caddy sets X-Forwarded-For / -Proto / -Host, which the server
+# trusts (TRUST_PROXY, on by default).
+{$DOMAIN} {
+	encode zstd gzip
+	# photos and pages can be up to 10MB
+	request_body {
+		max_size 20MB
+	}
+	reverse_proxy techo:8787
+}
