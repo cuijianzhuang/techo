@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { bumpVersion } from "./cache";
 import { DEFAULT_MODEL } from "./compose";
 import { PHOTO_KEY, validFont } from "./entries";
-import { type Env, type HonoEnv, aiKey, bad } from "./env";
+import { type Env, type HonoEnv, aiKeyStatus, bad } from "./env";
 
 export const pub = new Hono<HonoEnv>();
 export const admin = new Hono<HonoEnv>();
@@ -41,7 +41,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   deskWeather: "on",    // 桌面天气: the desk around the book takes the weather of the page open ("on" / "off")
   bookMode: "auto",     // how the home page turns: "auto" (phones flip, bigger screens 3D), "3d" (the three.js book) or "flip" (the flat page-flip book)
   // the AI: the format its endpoint speaks ("anthropic" Messages API or "openai" chat completions), the
-  // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is a Worker secret, never a setting.
+  // endpoint ("" = Anthropic's own / OpenAI's own) and a model. The key is not a setting: a Worker secret, or
+  // pasted into the admin and kept in a row of its own (env.ts AI_KEY_ROW).
   // Admin only (PRIVATE_SETTINGS).
   aiFormat: "anthropic", aiBaseUrl: "", aiModel: DEFAULT_MODEL,
 };
@@ -127,7 +128,7 @@ pub.get("/api/settings", async (c) => {
 });
 
 /* the admin's view of the settings: all of them, and whether the AI has its key */
-const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: { keySet: !!aiKey(env) }, meting: { secretSet: !!env.METING_TOKEN } });
+const adminSettings = async (env: Env) => ({ settings: await loadSettings(env), ai: await aiKeyStatus(env), meting: { secretSet: !!env.METING_TOKEN } });
 admin.get("/api/admin/settings", async (c) => c.json(await adminSettings(c.env)));
 
 admin.put("/api/admin/settings", async (c) => {
