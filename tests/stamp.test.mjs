@@ -29,7 +29,7 @@ test('the versions are the ones stamp.py gives now (run `python3 src-build/stamp
 test('the book page still names boot.js in the way the Worker looks for it', () => {
   // src/home.ts puts the book's data in front of the script that starts with /assets/boot.js
   assert.match(readFileSync(join(pub, 'index.html'), 'utf8'), /<script src="\/assets\/boot\.js\?v=[0-9a-f]{10}"><\/script>/);
-  assert.match(readFileSync(new URL('../src/home.ts', import.meta.url), 'utf8'), /script\[src\^="\/assets\/boot\.js"\]/);
+  assert.ok(readFileSync(new URL('../src/home.ts', import.meta.url), 'utf8').includes('/<script src="\\/assets\\/boot\\.js/'));
 });
 
 test('/assets and /vendor are kept for a year, immutable', () => {

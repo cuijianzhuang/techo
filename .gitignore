@@ -2,3 +2,8 @@ node_modules/
 .wrangler/
 .dev.vars
 .DS_Store
+
+# the VPS build (npm run build:server), its data and settings
+dist/
+data/
+.env

@@ -24,6 +24,23 @@ jobs:
       - run: npm test
       # generated pages must match their sources in src-build/
       - run: python3 src-build/build.py && npm run build:3d && git diff --exit-code -- public
+      # the VPS server (server/, docs/deploy-vps.md) still builds from the same src/
+      - run: npm run build:server
+
+  # the VPS image: built, started, and asked for the book (it doesn't hold up the Cloudflare deploy)
+  vps-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t techo .
+      - run: |
+          docker run -d --name techo -p 8787:8787 -e GITHUB_CLIENT_ID=x -e GITHUB_CLIENT_SECRET=y -e ADMIN_GITHUB_LOGIN=me techo
+          for i in $(seq 1 30); do curl -sf http://localhost:8787/api/settings >/dev/null && break; sleep 1; done
+          curl -sf http://localhost:8787/ | grep -q 'window.TECHO_DATA='
+          curl -sf http://localhost:8787/timeline/ >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8787/api/admin/me)" = 401
+      - if: failure()
+        run: docker logs techo
 
   deploy:
     needs: check

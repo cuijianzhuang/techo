@@ -1,6 +1,6 @@
 # 部署
 
-> 这份文档讲怎么把手帐部署到 Cloudflare。功能和用法见 [使用说明](guide.md)，开发和接口见 [开发文档](development.md)。
+> 这份文档讲怎么把手帐部署到 Cloudflare。想放在自己的服务器上，见 [部署到 VPS](deploy-vps.md)，两种方式用的是同一份代码。功能和用法见 [使用说明](guide.md)，开发和接口见 [开发文档](development.md)。
 
 ## 换到新账号（fork）要改什么
 

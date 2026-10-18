@@ -1,0 +1,11 @@
+node_modules
+.wrangler
+.git
+dist
+data
+.env
+.dev.vars
+tests
+src-build
+docs
+*.md
