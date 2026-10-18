@@ -193,8 +193,9 @@ test('every file that writes pages, locks or settings bumps the data version', (
   const dir = fileURLToPath(new URL('../src/', import.meta.url));
   const writes = /(INSERT\s+(OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+(entries|locks|settings)\b/i;
   // entries.ts: writeEntry runs the SQL its callers give it (admin-entries.ts, which bumps); drafts.ts writes drafts
-  // and jots, which a reader never sees; cache.ts writes the version itself
-  const exempt = new Set(['entries.ts', 'drafts.ts', 'cache.ts']);
+  // and jots, which a reader never sees; cache.ts writes the version itself; ai.ts writes only the AI's key (a row of
+  // its own that no reader's answer is made from)
+  const exempt = new Set(['entries.ts', 'drafts.ts', 'cache.ts', 'ai.ts']);
   const bad = readdirSync(dir).filter((f) => f.endsWith('.ts') && !exempt.has(f) && writes.test(readFileSync(dir + f, 'utf8')) && !/bumpVersion\(/.test(readFileSync(dir + f, 'utf8')));
   assert.deepEqual(bad, []);
   // and where it does, one bump per write path: locks (2), entries (3: new, edited, taken down), settings (1)

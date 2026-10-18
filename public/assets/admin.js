@@ -4,7 +4,7 @@
   const T=window.Techo,{el}=T;
   const $=id=>document.getElementById(id);
   const main=$('main'),list=$('list');
-  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKeySet=false,metingSecret=false;
+  let entries=[],settings={},jots=[],bookLocked=false,newLock=null,aiKey={},metingSecret=false;
   const dayLocks=new Set();      // dates locked as a whole day (from 随手记)
   let sel=null;            // entry id | 'new' | 'set:<part>' (SET_PAGES) | 'jots' | 'pages' (文章管理) | null (今天)
   let backTo=null;         // 'pages' | 'jots': the page open was picked there, its back button goes back
@@ -964,6 +964,38 @@
     anthropic:{ph:'https://api.anthropic.com',hint:'留空就是 Claude 官方接口。中转或其他厂商的 Anthropic 兼容地址填到 /v1 之前，比如 https://api.deepseek.com/anthropic',model:'claude-opus-5'},
     openai:{ph:'https://api.openai.com/v1',hint:'填到 /v1（不用加 /chat/completions），比如 https://api.deepseek.com、https://dashscope.aliyuncs.com/compatible-mode/v1；留空是 OpenAI 官方',model:'gpt-5 / deepseek-chat / qwen-plus …'},
   };
+  // the key as being pasted (not saved yet): kept while the form is drawn again, and tried by 获取模型 / 测试连接
+  let aiKeyTyped='';
+  const aiAsk=()=>({aiFormat:draft.aiFormat||'anthropic',aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||'',aiApiKey:aiKeyTyped.trim()});
+  /* the key: pasted here and saved on its own (not with 保存设置), never shown again (only its last 4 characters),
+     or a Worker secret; one pasted here wins over the secret */
+  function aiKeyBox(){
+    const w=el('div');w.style.cssText='display:grid;gap:6px';
+    const now=el('div','hintx');
+    const say=()=>{
+      const tail=aiKey.tail?'（…'+aiKey.tail+'）':'';
+      now.textContent=aiKey.source==='admin'?'✓ 正在用后台保存的 key'+tail:aiKey.source==='secret'?'✓ 正在用 Worker 密钥 AI_API_KEY'+tail+'；在这里保存一个会优先用它':'✗ 还没有 key：把这个接口的 key 粘贴到下面，点「保存 key」';
+      now.style.color=aiKey.keySet?'var(--olive)':'var(--red)';
+      del.hidden=aiKey.source!=='admin';
+    };
+    const l=el('label'),inp=el('input');inp.type='password';inp.id='f-aiApiKey';inp.autocomplete='off';inp.spellcheck=false;
+    inp.placeholder=aiKey.keySet?'换一个：粘贴新的 key':'粘贴 key（sk-ant-… / sk-…）';inp.value=aiKeyTyped;inp.maxLength=400;
+    inp.oninput=()=>{aiKeyTyped=inp.value;};
+    l.append('API key',inp,el('span','hintx','只存在你的数据库里，只有后台用得到，保存后不会再显示出来。填好可以先点「获取模型」或「测试连接」试，再保存。'));
+    const acts=el('div','photo-actions'),save=el('button','b small','保存 key'),del=el('button','b small','删除'),out=el('span','hintx');
+    save.type=del.type='button';acts.append(save,del,out);
+    const send=async(method,body,done)=>{
+      save.disabled=del.disabled=true;out.textContent='';out.style.color='';
+      try{const r=await sendJson(method,'/api/admin/ai/key',body);aiKey=r.ai||{};aiKeyTyped='';inp.value='';inp.placeholder='换一个：粘贴新的 key';say();out.textContent=done;out.style.color='var(--olive)';}
+      catch(e){out.textContent='✗ '+(e.message||'没保存上');out.style.color='var(--red)';}
+      finally{save.disabled=del.disabled=false;}
+    };
+    save.onclick=()=>send('PUT',{key:inp.value},'✓ 已保存');
+    del.onclick=()=>{if(confirm('删掉后台保存的 key？'+(aiKey.tail?'（…'+aiKey.tail+'）':'')))send('DELETE',null,'已删除');};
+    say();
+    w.append(now,l,acts);
+    return w;
+  }
   function aiField(){
     const w=el('div');w.style.cssText='display:grid;gap:10px';
     const fmt=AI_FORMATS[draft.aiFormat==='openai'?'openai':'anthropic'];
@@ -972,8 +1004,7 @@
     const row=el('div','row');
     const mf=field('模型','aiModel','text',{ph:fmt.model,max:80,hint:(draft.aiFormat==='openai'?'填那边的模型名':'留空是 claude-opus-5')+'；点「获取模型」可以从列表里选'});
     row.append(field('接口地址（可空）','aiBaseUrl','url',{ph:fmt.ph,max:200,hint:fmt.hint}),mf);
-    const key=el('div','hintx',aiKeySet?'✓ 已配置 key（Worker 密钥 AI_API_KEY 或 ANTHROPIC_API_KEY）':'✗ 还没有 key：运行 npx wrangler secret put AI_API_KEY，填这个接口的 key');
-    key.style.color=aiKeySet?'var(--olive)':'var(--red)';
+    const key=aiKeyBox();
     // 获取模型: what the key can use at the address as typed; the list also drops down under the model box
     const minp=mf.querySelector('input'),dl=el('datalist');dl.id='ai-models';minp.setAttribute('list',dl.id);mf.appendChild(dl);
     const pickWrap=el('div');
@@ -987,14 +1018,14 @@
       sel.onchange=()=>{if(!sel.value)return;minp.value=sel.value;draft.aiModel=sel.value;changed();};
       pickWrap.appendChild(l);
     };
-    const where=()=>(draft.aiFormat||'anthropic')+' '+(draft.aiBaseUrl||'');
+    const where=()=>(draft.aiFormat||'anthropic')+' '+(draft.aiBaseUrl||'')+' '+aiKeyTyped.slice(-6);
     if(aiModels&&aiModels.where===where())showModels(aiModels.list);
     const acts=el('div','photo-actions'),g=el('button','b small','获取模型'),t=el('button','b small','测试连接'),out=el('span','hintx');
     g.type=t.type='button';acts.append(g,t,out);
     g.onclick=async()=>{
       g.disabled=true;out.textContent='正在取模型列表……';out.style.color='';
       try{
-        const at=where(),r=await sendJson('POST','/api/admin/ai/models',{aiFormat:draft.aiFormat||'anthropic',aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||''});
+        const at=where(),r=await sendJson('POST','/api/admin/ai/models',aiAsk());
         aiModels={where:at,list:r.models||[]};showModels(aiModels.list);
         out.textContent='✓ 取到 '+aiModels.list.length+' 个模型';out.style.color='var(--olive)';
       }catch(e){out.textContent='✗ '+(e.message||'没取到');out.style.color='var(--red)';}
@@ -1003,7 +1034,7 @@
     t.onclick=async()=>{
       t.disabled=true;out.textContent='正在问……';out.style.color='';
       try{
-        const r=await sendJson('POST','/api/admin/ai/test',{aiFormat:draft.aiFormat||'anthropic',aiBaseUrl:draft.aiBaseUrl||'',aiModel:draft.aiModel||''});
+        const r=await sendJson('POST','/api/admin/ai/test',aiAsk());
         out.textContent='✓ 连上了：'+r.model+' 回复「'+(r.reply||'（空）')+'」';out.style.color='var(--olive)';
       }catch(e){out.textContent='✗ '+(e.message||'没连上');out.style.color='var(--red)';}
       finally{t.disabled=false;}
@@ -1891,7 +1922,7 @@
     try{
       if(isSet(sel)){
         const r=await sendJson('PUT','/api/admin/settings',stripLocal(draft));
-        settings=r.settings;aiKeySet=!!(r.ai&&r.ai.keySet);metingSecret=!!(r.meting&&r.meting.secretSet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
+        settings=r.settings;aiKey=r.ai||{};metingSecret=!!(r.meting&&r.meting.secretSet);draft=Object.assign({},settings);base=JSON.stringify(draft);T.useSite(settings);
         drawForm();status('已保存，刷新主页就能看到。','ok');
       }else{
         const body=stripLocal(draft);
@@ -1940,7 +1971,7 @@
       $('who').textContent='已登录'+(me.login?' @'+me.login:'');$('logout').hidden=false;
       // all the settings, the AI's too (the public /api/settings leaves those out)
       const [e,s]=await Promise.all([api('/api/admin/entries'),api('/api/admin/settings')]);
-      entries=e.entries||[];settings=s.settings||{};aiKeySet=!!(s.ai&&s.ai.keySet);metingSecret=!!(s.meting&&s.meting.secretSet);bookLocked=!!e.bookLocked;
+      entries=e.entries||[];settings=s.settings||{};aiKey=s.ai||{};metingSecret=!!(s.meting&&s.meting.secretSet);bookLocked=!!e.bookLocked;
       T.useSite(settings);   // the preview draws pages as the book does (the little map needs the Mapbox token)
       entries.forEach(en=>{if(en.dayLocked)dayLocks.add(en.date);});
       drawList();drawForm();

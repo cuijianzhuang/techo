@@ -135,7 +135,7 @@
   - 后台「随手记」里的「现在就用今天的随手记写一页」随时生成一页草稿。
   - 每天 23:30（Asia/Shanghai，`wrangler.jsonc` 的 `triggers`）Worker 检查今天还没有页、又有随手记，就自动写一页草稿，电脑没开的日子靠它兜底。
   - 只读随手记，读不到 Claude 聊天；当天已经有一页就不写。
-  - 开启：拿到接口的 key 后运行 `npx wrangler secret put AI_API_KEY` 粘贴进去（只存在 Worker 密钥里，不进数据库；以前设过的 `ANTHROPIC_API_KEY` 也照样能用）。用 Claude 官方接口时在 [console.anthropic.com](https://console.anthropic.com) 建 key，按量计费，一页大约 $0.03。
+  - 开启：拿到接口的 key 后，在「手帐设置 → 接入服务 → AI」里粘贴，点「保存 key」。key 存在你自己的 D1 数据库里（单独一行，不在手帐设置里），只有后台和每晚写草稿时用；保存后后台只显示最后 4 位，不会再把整个 key 发回浏览器。也可以照旧用 Worker 密钥：`npx wrangler secret put AI_API_KEY`（以前设过的 `ANTHROPIC_API_KEY` 也照样能用）；两个都有时用后台保存的那个，点「删除」就回到 Worker 密钥。用 Claude 官方接口时在 [console.anthropic.com](https://console.anthropic.com) 建 key，按量计费，一页大约 $0.03。
 
 ### 接哪个 AI
 
@@ -147,7 +147,7 @@
 - **接口地址**：见上。
 - **模型**：Anthropic 格式留空是 `claude-opus-5`；换别的接口时填那边的模型名。
 
-key 是 Worker 密钥 `AI_API_KEY`（没有时读 `ANTHROPIC_API_KEY`），换接口时换成那个接口的 key。不知道模型名时点「获取模型」：用输入框里的格式和地址、Worker 的 key 去问那个接口有哪些模型（Anthropic 的 `/v1/models`，OpenAI 格式的 `/models`），列出来从下拉里选；有的中转不提供模型列表，这时手动填。改完先点「测试连接」：它用输入框里的设置问一句话，显示实际用的模型和回复；不对时会说是 key 错（401）、地址或模型不存在（404）、额度用完（429）还是连不上。
+换接口时 key 也要换成那个接口的。key 框里粘贴了还没保存时，「获取模型」和「测试连接」先用它试，试好了再保存。不知道模型名时点「获取模型」：用输入框里的格式、地址和 key 去问那个接口有哪些模型（Anthropic 的 `/v1/models`，OpenAI 格式的 `/models`），列出来从下拉里选；有的中转不提供模型列表，这时手动填。改完先点「测试连接」：它用输入框里的设置问一句话，显示实际用的模型和回复；不对时会说是 key 错（401）、地址或模型不存在（404）、额度用完（429）还是连不上。
 
 怎么问取决于接口：
 - Claude 官方接口加 `claude-opus-5` / `claude-fable-5-1`：结构化输出（JSON schema）、`effort`，拒答时自动换模型（server-side fallbacks）。

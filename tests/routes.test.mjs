@@ -8,7 +8,7 @@ const app = await loadApp();
 // a database that must not be touched (a route that reaches it without the login has got past the gate), or that
 // holds the settings given
 const noDb = { prepare() { throw new Error('the database was touched'); } };
-const settingsDb = (rows) => ({ prepare: () => ({ all: async () => ({ results: rows }), bind() { return this; } }) });
+const settingsDb = (rows) => ({ prepare: () => ({ all: async () => ({ results: rows }), first: async () => null, bind() { return this; } }) });
 const env = (o = {}) => ({ GITHUB_CLIENT_ID: 'id', ADMIN_GITHUB_LOGIN: 'me', GITHUB_CLIENT_SECRET: 'secret', TIMEZONE: 'Asia/Shanghai', DB: noDb, ...o });
 const call = (path, o = {}, e = env(), base = 'https://journal.example') => app.fetch(new Request(base + path, o), e);
 

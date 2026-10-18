@@ -1,28 +1,58 @@
 import { Hono } from "hono";
 import { ComposeError, listModels, pingAi, suggestFields, DEFAULT_MODEL, type AiConfig } from "./compose";
 import { LIMITS, MAX_STICKERS, STICKERS, STICKER_LABELS } from "./entries";
-import { type Env, type HonoEnv, aiKey, bad } from "./env";
+import { type Env, type HonoEnv, AI_KEY_ROW, aiKeyStatus, bad, currentAiKey } from "./env";
 import { cleanSettings, loadSettings } from "./settings";
 
 export const admin = new Hono<HonoEnv>();
 
 /** the AI as configured (the admin's settings, the Worker's key) */
-export async function aiConfig(env: Env): Promise<AiConfig> {
-  if (!aiKey(env)) throw new ComposeError("Worker 还没有 AI 的 key（运行 npx wrangler secret put AI_API_KEY）");
+export async function aiConfig(env: Env, key?: string): Promise<AiConfig> {
+  const apiKey = key || (await currentAiKey(env));
+  if (!apiKey) throw new ComposeError("还没有 AI 的 key：在「手帐设置 → 接入服务 → AI」里粘贴保存");
   const s = await loadSettings(env);
-  return { apiKey: aiKey(env), baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL, format: s.aiFormat === "openai" ? "openai" : "anthropic" };
+  return { apiKey, baseURL: s.aiBaseUrl || "", model: s.aiModel || DEFAULT_MODEL, format: s.aiFormat === "openai" ? "openai" : "anthropic" };
 }
 
-/** the AI as about to be saved: format / base / model from the body, the Worker's key */
+/** a key as pasted: no spaces, printable, of a sensible length; an error to show, or the key */
+function cleanKey(v: unknown): { key: string } | { error: string } {
+  const key = typeof v === "string" ? v.trim() : "";
+  if (!key) return { error: "先粘贴 key" };
+  if (!/^[\x21-\x7e]+$/.test(key)) return { error: "key 里不能有空格、换行或中文" };
+  if (key.length < 8 || key.length > 400) return { error: "这不像一个 key（长度不对）" };
+  return { key };
+}
+
+/** the AI as about to be saved: format / base / model (and a key not saved yet, if one's typed) from the body */
 async function typedConfig(env: Env, o: Record<string, unknown>): Promise<AiConfig | string> {
   const s = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
   const parsed = cleanSettings({ aiFormat: s("aiFormat") || "anthropic", aiBaseUrl: s("aiBaseUrl"), aiModel: s("aiModel") });
   if (!parsed.ok) return parsed.error;
+  let key = "";
+  if (s("aiApiKey").trim()) {
+    const k = cleanKey(o.aiApiKey);
+    if ("error" in k) return k.error;
+    key = k.key;
+  }
   return {
-    ...(await aiConfig(env)), format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
+    ...(await aiConfig(env, key)), format: parsed.value.aiFormat === "openai" ? "openai" : "anthropic",
     baseURL: parsed.value.aiBaseUrl || "", model: parsed.value.aiModel || DEFAULT_MODEL,
   };
 }
+
+/* the key, pasted into the admin: saved (PUT) or taken away (DELETE, back to the Worker secret if there is one).
+   Never sent back: the admin is told only whether there is one, from where, and its last 4 characters. */
+admin.put("/api/admin/ai/key", async (c) => {
+  const o = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const k = cleanKey(o.key);
+  if ("error" in k) return bad(c, 400, k.error);
+  await c.env.DB.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(AI_KEY_ROW, k.key).run();
+  return c.json({ ai: await aiKeyStatus(c.env) });
+});
+admin.delete("/api/admin/ai/key", async (c) => {
+  await c.env.DB.prepare("DELETE FROM settings WHERE key=?").bind(AI_KEY_ROW).run();
+  return c.json({ ai: await aiKeyStatus(c.env) });
+});
 
 /* 测试连接: one short question with the AI as configured (or as about to be saved) */
 admin.post("/api/admin/ai/test", async (c) => {

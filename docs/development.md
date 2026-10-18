@@ -167,8 +167,9 @@ npx wrangler d1 execute techo-db --remote --file=migrations/0004_font.sql
 | PUT | `/api/admin/locks/:scope` | 设口令（`{"password": "…"}`，至少 4 个字符）；`{"password": null}` 去掉。`scope`：`book`、`d-YYYY-MM-DD` 或页的 id |
 | GET | `/api/admin/settings` | 全部手帐设置（含 AI 三项）和是否配置了 AI 的 key |
 | PUT | `/api/admin/settings` | 更新手帐设置（只改传了的项） |
-| POST | `/api/admin/ai/test` | 测试连接（`{"aiFormat", "aiBaseUrl", "aiModel"}`，用给的设置问一句话） |
+| POST | `/api/admin/ai/test` | 测试连接（`{"aiFormat", "aiBaseUrl", "aiModel", "aiApiKey"?}`，用给的设置问一句话；`aiApiKey` 是还没保存的 key） |
 | POST | `/api/admin/ai/models` | 获取模型（同上的设置，返回 `{"models": [{"id", "name"}]}`：Anthropic 的 `/v1/models` 全部分页，或 OpenAI 格式的 `/models`） |
+| PUT / DELETE | `/api/admin/ai/key` | 保存（`{"key"}`）或删除后台粘贴的 AI key；只返回 `{"ai": {"keySet", "source", "tail"}}`，不返回 key 本身 |
 | POST | `/api/admin/ai/suggest` | AI 补全：按一页的内容（JSON，要有 `body`）建议标题、英文小注、页眉小字、印章、页脚引文和插画，不保存 |
 | GET | `/api/admin/jots` | 随手记，新的在前：`?q=` 搜，`?state=unused\|used` 筛，`?limit=`（默认 100，最多 200），`?before=<createdAt>.<id>` 取下一页；还返回总数、没用过的数目、`more` |
 | POST | `/api/admin/jots` | 记一句（`{"text": "..."}`，≤1000 字） |
