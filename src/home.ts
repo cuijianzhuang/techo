@@ -19,19 +19,21 @@ pub.get("/", (c) => cached(c, "home", "", async () => {
   if (!page.ok) return page;   // (sent as it is, not kept)
   // "<" escaped so nothing in a journal page can close the script tag
   const data = JSON.stringify({ entries: reader.entries, lock: reader.lock, settings: publicSettings(settings) }).replace(/</g, "\\u003c");
-  const res = new HTMLRewriter()
-    .on("title", { element: (e) => { e.setInnerContent(settings.siteTitle || SETTING_DEFAULTS.siteTitle); } })
-    .on('meta[name="description"]', { element: (e) => {
-      e.setAttribute("content", settings.siteDesc);
-      // shared as it is: the journal's name, its line, the default picture (a page is shared as /p/<id>)
-      const o = new URL(c.req.url).origin, m = (k: string, v: string) => `<meta property="${k}" content="${escHtml(v)}">`;
-      e.after(m("og:type", "website") + m("og:title", settings.siteTitle || SETTING_DEFAULTS.siteTitle) + m("og:description", settings.siteDesc) +
-        m("og:image", o + "/og.png") + m("og:image:width", "1200") + m("og:image:height", "630") + '<meta name="twitter:card" content="summary_large_image">', { html: true });
-    } })
-    .on('script[src^="/assets/boot.js"]', { element: (e) => { e.before(`<script>window.TECHO_DATA=${data}</script>`, { html: true }); } })
-    .transform(page);
+  const title = settings.siteTitle || SETTING_DEFAULTS.siteTitle;
+  // shared as it is: the journal's name, its line, the default picture (a page is shared as /p/<id>)
+  const o = new URL(c.req.url).origin, m = (k: string, v: string) => `<meta property="${k}" content="${escHtml(v)}">`;
+  const og = m("og:type", "website") + m("og:title", title) + m("og:description", settings.siteDesc) +
+    m("og:image", o + "/og.png") + m("og:image:width", "1200") + m("og:image:height", "630") + '<meta name="twitter:card" content="summary_large_image">';
+  // the page is our own (src-build/index.tpl.html): its <title>, description and boot.js are found by plain text,
+  // which the Workers runtime and Node (the VPS server) both have
+  const html = (await page.text())
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${escHtml(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${escHtml(settings.siteDesc)}">` + og)
+    .replace(/<script src="\/assets\/boot\.js/, (s) => `<script>window.TECHO_DATA=${data}</script>` + s);
   // no-cache: a browser keeps it and asks first; unchanged (no page written, nothing set), it gets a 304
-  const h = new Headers(res.headers);
+  const h = new Headers(page.headers);
   h.set("Cache-Control", "no-cache");
-  return { body: await res.arrayBuffer(), headers: h, status: res.status };
+  h.set("Content-Type", "text/html; charset=utf-8");
+  h.delete("content-length");
+  return { body: html, headers: h, status: page.status };
 }));
