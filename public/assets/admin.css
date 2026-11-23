@@ -259,6 +259,19 @@ body.admin.gated>.top,body.admin.gated>.wrap{visibility:hidden}
 .admin .actbar.dirty .status::before{content:"";display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:var(--red);vertical-align:1px}
 .admin .actbar .confirm{flex-wrap:wrap}
 .admin .pvbtn{display:none}
+/* settings: no preview sits beside the form (drawPreview skips settings), so the 620px + preview grid left the
+   whole right half of a wide screen empty. The form takes the full row instead, and its cards go two abreast;
+   the pickers and the long service forms (cover, paper, font, music, AI, photos) keep the full width. */
+.admin .main:has(>.setform){grid-template-columns:minmax(0,1fr)}
+.admin .setform{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.admin .setform>.fhead,.admin .setform>.hintx,.admin .setform>.secnav,.admin .setform>.actbar,.admin .setform>.unsaved{grid-column:1/-1}
+.admin .setform>#set-theme,.admin .setform>#set-cover,.admin .setform>#set-paper,.admin .setform>#set-font,
+.admin .setform>#set-music,.admin .setform>#set-ai,.admin .setform>#set-photos{grid-column:1/-1}
+@media (max-width:1240px){
+  .admin .setform{grid-template-columns:minmax(0,1fr)}
+  .admin .setform>#set-theme,.admin .setform>#set-cover,.admin .setform>#set-paper,.admin .setform>#set-font,
+  .admin .setform>#set-music,.admin .setform>#set-ai,.admin .setform>#set-photos{grid-column:auto}
+}
 /* settings: chips that go to a section */
 .admin .secnav{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:0;z-index:5;padding:8px 0;background:var(--desk)}
 .admin .secnav .chip{text-decoration:none;color:var(--teal-deep);background:rgba(120,100,60,.1);padding:7px 13px}

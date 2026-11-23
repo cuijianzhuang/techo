@@ -231,6 +231,7 @@
     const f=el('form','form');f.noValidate=true;
     f.addEventListener('submit',e=>{e.preventDefault();save();});
     if(isSet(sel)){
+      f.classList.add('setform');   // settings have no preview beside them: admin.css lays their cards out wide
       const pg=SET_PAGES.find(p=>'set:'+p.key===sel)||SET_PAGES[0];
       // each section a card; the chips at the top go straight to one
       const nav=el('nav','secnav');nav.setAttribute('aria-label','这一部分的设置');
